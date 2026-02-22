@@ -10,107 +10,160 @@ const STORAGE_BASE_URL =
   `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/cards-images`
 
 export default function CollectionSetPage() {
-  const { code } = useParams()
-  const { user, loading } = useAuth()
+  const { user } = useAuth()
+  const params = useParams()
+  const code = Array.isArray(params.code)
+    ? params.code[0]
+    : params.code
 
-  const [prints, setPrints] = useState<any[]>([])
-  const [loadingData, setLoadingData] = useState(true)
+  const [items, setItems] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (!user || !code) return
+    const fetchData = async () => {
+      if (!user) return
 
-    const fetchCollection = async () => {
-      const { data } = await supabase
+      setLoading(true)
+
+      // 1️⃣ récupérer le set
+      const { data: setData } = await supabase
+        .from('sets')
+        .select('id')
+        .eq('code', code)
+        .single()
+
+      if (!setData) {
+        setLoading(false)
+        return
+      }
+
+      // 2️⃣ récupérer la collection user
+      const { data: collectionData } = await supabase
         .from('collections')
+        .select('*')
+        .eq('user_id', user.id)
+
+      if (!collectionData || collectionData.length === 0) {
+        setItems([])
+        setLoading(false)
+        return
+      }
+
+      // 3️⃣ récupérer les prints du set
+      const { data: printsData } = await supabase
+        .from('card_prints')
+        .select('*')
+        .eq('distribution_set_id', setData.id)
+
+      const printIds = collectionData.map(c => c.card_print_id)
+
+      const filteredPrints = printsData?.filter(p =>
+        printIds.includes(p.id)
+      )
+
+      // 4️⃣ récupérer cartes
+      const { data: cardsData } = await supabase
+        .from('cards')
         .select(`
-          quantity,
-          card_prints!inner (
-            id,
-            print_code,
-            variant_type,
-            image_path,
-            distribution_set_id,
-            cards (
-              rarity,
-              type,
-              card_translations (
-                name,
-                locale
-              )
-            ),
-            sets!card_prints_distribution_set_id_fkey (
-              code
-            )
+          id,
+          rarity,
+          type,
+          card_translations (
+            name,
+            locale
           )
         `)
-        .eq('user_id', user.id)
-        .eq('card_prints.sets.code', code)
 
-      setPrints(data || [])
-      setLoadingData(false)
+      const cardsMap = new Map(
+        cardsData?.map(c => [c.id, c])
+      )
+
+      const merged = filteredPrints?.map(print => {
+        const col = collectionData.find(
+          c => c.card_print_id === print.id
+        )
+
+        return {
+          ...print,
+          card: cardsMap.get(print.card_id),
+          quantity: col?.quantity || 0
+        }
+      }) || []
+
+      setItems(merged)
+      setLoading(false)
     }
 
-    fetchCollection()
+    fetchData()
   }, [user, code])
 
-  if (loading || loadingData)
+  if (loading) {
     return <div style={{ padding: 40 }}>Chargement...</div>
-
-  if (!user)
-    return <div style={{ padding: 40 }}>Non connecté</div>
+  }
 
   return (
     <div style={{ padding: 40 }}>
-      <h1 style={{ fontSize: 24, fontWeight: 'bold' }}>
+      <h1 style={{ fontSize: 24, fontWeight: 'bold', marginBottom: 30 }}>
         Ma Collection - {code}
       </h1>
 
-      {prints.map((entry, index) => {
-        const print = entry.card_prints
-        const card = print.cards
+      {items.length === 0 && (
+        <p>Aucune carte dans ce set.</p>
+      )}
 
-        const translation = card.card_translations.find(
-          (t: any) => t.locale === DEFAULT_LOCALE
-        )
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+          gap: 20
+        }}
+      >
+        {items.map((item) => {
+          const translation = item.card?.card_translations?.find(
+            (t: any) => t.locale === DEFAULT_LOCALE
+          )
 
-        const imageUrl =
-          `${STORAGE_BASE_URL}/${code}/${print.image_path}`
+          const imageUrl =
+            `${STORAGE_BASE_URL}/${code}/${item.image_path}`
 
-        return (
-          <div
-            key={index}
-            style={{
-              border: '1px solid #ccc',
-              padding: 15,
-              marginTop: 15,
-              display: 'flex',
-              gap: 20,
-              alignItems: 'center',
-            }}
-          >
-            <img
-              src={imageUrl}
-              alt={translation?.name}
-              style={{ width: 120 }}
-            />
+          return (
+            <div
+              key={item.id}
+              style={{
+                border: '1px solid #ddd',
+                borderRadius: 8,
+                padding: 10,
+                textAlign: 'center',
+                background: '#fff'
+              }}
+            >
+              <img
+                src={imageUrl}
+                alt={translation?.name}
+                style={{
+                  width: '100%',
+                  height: 'auto',
+                  marginBottom: 10
+                }}
+              />
 
-            <div>
-              <strong>{print.print_code}</strong>
-
-              {print.variant_type !== 'normal' && (
-                <div style={{ color: 'orange' }}>
-                  Variante : {print.variant_type}
-                </div>
-              )}
+              <div style={{ fontWeight: 'bold' }}>
+                {item.print_code}
+              </div>
 
               <div>{translation?.name}</div>
-              <div>Rareté : {card.rarity}</div>
-              <div>Type : {card.type}</div>
-              <div>Quantité : {entry.quantity}</div>
+
+              <div style={{ fontSize: 12 }}>
+                {item.card?.rarity} • {item.card?.type}
+              </div>
+
+              <div style={{ marginTop: 8 }}>
+                Quantité : {item.quantity}
+              </div>
             </div>
-          </div>
-        )
-      })}
+          )
+        })}
+      </div>
     </div>
   )
 }
