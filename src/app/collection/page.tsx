@@ -1,104 +1,63 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { supabase } from '@/lib/supabaseClient'
 import { useAuth } from '@/lib/auth'
-import { DEFAULT_LOCALE } from '@/lib/locale'
-
-const STORAGE_BASE_URL =
-  `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/cards-images`
 
 export default function CollectionPage() {
   const { user } = useAuth()
-  const [items, setItems] = useState<any[]>([])
+  const [sets, setSets] = useState<any[]>([])
+  const [stats, setStats] = useState<Record<string, any>>({})
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const fetchCollection = async () => {
+    const fetchData = async () => {
       if (!user) return
 
       setLoading(true)
 
-      const { data: collectionData } = await supabase
-        .from('collections')
+      const { data: setsData } = await supabase
+        .from('sets')
         .select('*')
-        .eq('user_id', user.id)
-
-      if (!collectionData || collectionData.length === 0) {
-        setItems([])
-        setLoading(false)
-        return
-      }
-
-      const printIds = collectionData.map(c => c.card_print_id)
+        .order('code')
 
       const { data: printsData } = await supabase
         .from('card_prints')
-        .select('*')
-        .in('id', printIds)
+        .select('id, distribution_set_id')
 
-      const { data: cardsData } = await supabase
-        .from('cards')
-        .select(`
-          id,
-          rarity,
-          type,
-          card_translations (
-            name,
-            locale
-          )
-        `)
+      const { data: collectionData } = await supabase
+        .from('collections')
+        .select('card_print_id')
+        .eq('user_id', user.id)
 
-      const cardsMap = new Map(
-        cardsData?.map(c => [c.id, c])
-      )
+      const ownedIds = new Set(collectionData?.map((c) => c.card_print_id))
 
-      const merged = printsData?.map(print => {
-        const collectionItem = collectionData.find(
-          c => c.card_print_id === print.id
-        )
+      const result: Record<string, any> = {}
 
-        return {
-          ...print,
-          card: cardsMap.get(print.card_id),
-          quantity: collectionItem?.quantity || 0
+      setsData?.forEach((set) => {
+        const prints =
+          printsData?.filter((p) => p.distribution_set_id === set.id) || []
+
+        const total = prints.length
+        const owned = prints.filter((p) => ownedIds.has(p.id)).length
+
+        const percent = total > 0 ? Math.round((owned / total) * 100) : 0
+
+        result[set.code] = {
+          total,
+          owned,
+          percent
         }
-      }) || []
+      })
 
-      setItems(merged)
+      setSets(setsData || [])
+      setStats(result)
       setLoading(false)
     }
 
-    fetchCollection()
+    fetchData()
   }, [user])
-
-  const updateQuantity = async (printId: string, delta: number) => {
-    const current = items.find(i => i.id === printId)
-    if (!current) return
-
-    const newQty = current.quantity + delta
-
-    if (newQty <= 0) {
-      await supabase
-        .from('collections')
-        .delete()
-        .eq('user_id', user?.id)
-        .eq('card_print_id', printId)
-
-      setItems(items.filter(i => i.id !== printId))
-      return
-    }
-
-    await supabase
-      .from('collections')
-      .update({ quantity: newQty })
-      .eq('user_id', user?.id)
-      .eq('card_print_id', printId)
-
-    setItems(items.map(i =>
-      i.id === printId ? { ...i, quantity: newQty } : i
-    ))
-  }
 
   if (loading) {
     return <div style={{ padding: 40 }}>Chargement...</div>
@@ -110,68 +69,62 @@ export default function CollectionPage() {
         Ma Collection
       </h1>
 
-      {items.length === 0 && <p>Aucune carte dans la collection.</p>}
-
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-          gap: 20
+          gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+          gap: 25
         }}
       >
-        {items.map((item) => {
-          const translation = item.card?.card_translations?.find(
-            (t: any) => t.locale === DEFAULT_LOCALE
-          )
-
-          const imageUrl =
-            `${STORAGE_BASE_URL}/${item.print_code.split('-')[0]}/${item.image_path}`
+        {sets.map((set) => {
+          const stat = stats[set.code]
 
           return (
-            <div
-              key={item.id}
-              style={{
-                border: '1px solid #ddd',
-                borderRadius: 8,
-                padding: 10,
-                textAlign: 'center',
-                background: '#fff'
-              }}
+            <Link
+              key={set.id}
+              href={`/collection/${set.code}`}
+              style={{ textDecoration: 'none', color: 'inherit' }}
             >
-              <img
-                src={imageUrl}
-                alt={translation?.name}
-                style={{ width: '100%', marginBottom: 10 }}
-              />
+              <div
+                style={{
+                  border: '1px solid #ddd',
+                  borderRadius: 10,
+                  padding: 15,
+                  background: '#fff',
+                  cursor: 'pointer'
+                }}
+              >
+                <div style={{ fontWeight: 'bold', fontSize: 18 }}>
+                  {set.code}
+                </div>
 
-              <div style={{ fontWeight: 'bold' }}>
-                {item.print_code}
-              </div>
+                <div style={{ marginTop: 10 }}>
+                  {stat?.owned} / {stat?.total}
+                </div>
 
-              <div>{translation?.name}</div>
-
-              <div style={{ fontSize: 12 }}>
-                {item.card?.rarity} • {item.card?.type}
-              </div>
-
-              <div style={{ marginTop: 8 }}>
-                <button
-                  onClick={() => updateQuantity(item.id, -1)}
-                  style={{ marginRight: 5 }}
+                <div
+                  style={{
+                    marginTop: 8,
+                    height: 8,
+                    background: '#eee',
+                    borderRadius: 4
+                  }}
                 >
-                  ➖
-                </button>
+                  <div
+                    style={{
+                      width: `${stat?.percent || 0}%`,
+                      height: '100%',
+                      background: '#0070f3',
+                      borderRadius: 4
+                    }}
+                  />
+                </div>
 
-                {item.quantity}
-
-                <button
-                  onClick={() => updateQuantity(item.id, 1)}
-                  style={{ marginLeft: 5 }}
-                >
-                  ➕
-                </button>
+                <div style={{ marginTop: 5, fontSize: 12 }}>
+                  {stat?.percent}% complété
+                </div>
               </div>
-            </div>
+            </Link>
           )
         })}
       </div>

@@ -4,28 +4,23 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabaseClient'
 
-type Set = {
-  id: string
-  code: string
-  name: string
-  release_date: string
-}
+const STORAGE_BASE_URL =
+  `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/cards-images`
 
 export default function CataloguePage() {
-  const [sets, setSets] = useState<Set[]>([])
+  const [sets, setSets] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     const fetchSets = async () => {
-      const { data, error } = await supabase
+      setLoading(true)
+
+      const { data } = await supabase
         .from('sets')
         .select('*')
-        .order('release_date', { ascending: false })
+        .order('code', { ascending: true })
 
-      if (!error && data) {
-        setSets(data)
-      }
-
+      setSets(data || [])
       setLoading(false)
     }
 
@@ -38,29 +33,61 @@ export default function CataloguePage() {
 
   return (
     <div style={{ padding: 40 }}>
-      <h1 style={{ fontSize: 24, fontWeight: 'bold' }}>
-        Catalogue - Extensions
+      <h1 style={{ fontSize: 24, fontWeight: 'bold', marginBottom: 30 }}>
+        Catalogue des Sets
       </h1>
 
-      {sets.length === 0 && <p>Aucun set disponible.</p>}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+          gap: 25
+        }}
+      >
+        {sets.map((set) => {
+          const imageUrl =
+            `${STORAGE_BASE_URL}/sets/${set.code}.png`
 
-      {sets.map((set) => (
-        <div
-          key={set.id}
-          style={{
-            border: '1px solid #ccc',
-            padding: 20,
-            marginTop: 15,
-          }}
-        >
-          <h2>{set.code}</h2>
-          <p>{set.name}</p>
+          return (
+            <Link
+              key={set.id}
+              href={`/catalogue/${set.code}`}
+              style={{ textDecoration: 'none', color: 'inherit' }}
+            >
+              <div
+                style={{
+                  border: '1px solid #ddd',
+                  borderRadius: 10,
+                  padding: 15,
+                  background: '#fff',
+                  transition: 'transform 0.2s',
+                  cursor: 'pointer'
+                }}
+              >
+                <img
+                  src={imageUrl}
+                  alt={set.code}
+                  style={{
+                    width: '100%',
+                    height: 'auto',
+                    marginBottom: 15
+                  }}
+                />
 
-          <Link href={`/catalogue/${set.code}`}>
-            Voir les cartes
-          </Link>
-        </div>
-      ))}
+                <div
+                  style={{
+                    fontWeight: 'bold',
+                    fontSize: 18,
+                    textAlign: 'center'
+                  }}
+                >
+                  {set.code}
+                </div>
+              </div>
+            </Link>
+          )
+        })}
+      </div>
     </div>
   )
 }
