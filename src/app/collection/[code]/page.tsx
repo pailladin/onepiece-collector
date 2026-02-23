@@ -8,8 +8,6 @@ import { DEFAULT_LOCALE } from '@/lib/locale'
 
 const STORAGE_BASE_URL = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/cards-images`
 
-type VariantType = 'normal' | 'AA' | 'SP' | 'TR'
-
 export default function CollectionSetPage() {
   const { user } = useAuth()
   const params = useParams()
@@ -17,7 +15,7 @@ export default function CollectionSetPage() {
 
   const [items, setItems] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState<'ALL' | VariantType>('ALL')
+  const [filter, setFilter] = useState<string>('ALL')
 
   useEffect(() => {
     const fetchData = async () => {
@@ -77,6 +75,7 @@ export default function CollectionSetPage() {
     fetchData()
   }, [user, code])
 
+  // 🔹 TRI SANS INDEX DYNAMIQUE
   const sortedItems = useMemo(() => {
     return [...items].sort((a, b) => {
       const numA = parseInt(a.card?.number || '0')
@@ -84,17 +83,15 @@ export default function CollectionSetPage() {
 
       if (numA !== numB) return numA - numB
 
-      const order: Record<VariantType, number> = {
-        normal: 0,
-        AA: 1,
-        SP: 2,
-        TR: 3
+      const getOrder = (variant: string) => {
+        if (variant === 'normal') return 0
+        if (variant === 'AA') return 1
+        if (variant === 'SP') return 2
+        if (variant === 'TR') return 3
+        return 99
       }
 
-      const va = a.variant_type as VariantType
-      const vb = b.variant_type as VariantType
-
-      return (order[va] ?? 99) - (order[vb] ?? 99)
+      return getOrder(a.variant_type) - getOrder(b.variant_type)
     })
   }, [items])
 
@@ -203,7 +200,7 @@ export default function CollectionSetPage() {
       </h1>
 
       <div style={{ marginBottom: 20 }}>
-        {(['ALL', 'normal', 'AA', 'SP', 'TR'] as const).map((f) => (
+        {['ALL', 'normal', 'AA', 'SP', 'TR'].map((f) => (
           <button
             key={f}
             onClick={() => setFilter(f)}
