@@ -15,7 +15,6 @@ export default function CollectionSetPage() {
 
   const [items, setItems] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState<string>('ALL')
 
   useEffect(() => {
     const fetchData = async () => {
@@ -23,6 +22,7 @@ export default function CollectionSetPage() {
 
       setLoading(true)
 
+      // 🔹 1. Récupération du set courant
       const { data: setData } = await supabase
         .from('sets')
         .select('id')
@@ -30,16 +30,30 @@ export default function CollectionSetPage() {
         .single()
 
       if (!setData) {
+        setItems([])
         setLoading(false)
         return
       }
 
+      // 🔹 2. Uniquement les impressions du set
       const { data: printsData } = await supabase
         .from('card_prints')
         .select('*')
         .eq('distribution_set_id', setData.id)
 
-      const { data: cardsData } = await supabase.from('cards').select(`
+      if (!printsData || printsData.length === 0) {
+        setItems([])
+        setLoading(false)
+        return
+      }
+
+      // 🔹 3. Cartes liées à ces impressions uniquement
+      const cardIds = printsData.map((p) => p.card_id)
+
+      const { data: cardsData } = await supabase
+        .from('cards')
+        .select(
+          `
           id,
           number,
           rarity,
@@ -48,8 +62,13 @@ export default function CollectionSetPage() {
             name,
             locale
           )
-        `)
+        `
+        )
+        .in('id', cardIds)
 
+      const cardsMap = new Map(cardsData?.map((c) => [c.id, c]))
+
+      // 🔹 4. Collection utilisateur
       const { data: collectionData } = await supabase
         .from('collections')
         .select('*')
@@ -59,14 +78,11 @@ export default function CollectionSetPage() {
         collectionData?.map((c) => [c.card_print_id, c.quantity])
       )
 
-      const cardsMap = new Map(cardsData?.map((c) => [c.id, c]))
-
-      const merged =
-        printsData?.map((print) => ({
-          ...print,
-          card: cardsMap.get(print.card_id),
-          quantity: ownedMap.get(print.id) || 0
-        })) || []
+      const merged = printsData.map((print) => ({
+        ...print,
+        card: cardsMap.get(print.card_id),
+        quantity: ownedMap.get(print.id) || 0
+      }))
 
       setItems(merged)
       setLoading(false)
@@ -75,7 +91,6 @@ export default function CollectionSetPage() {
     fetchData()
   }, [user, code])
 
-  // 🔹 TRI SANS INDEX DYNAMIQUE
   const sortedItems = useMemo(() => {
     return [...items].sort((a, b) => {
       const numA = parseInt(a.card?.number || '0')
@@ -95,13 +110,8 @@ export default function CollectionSetPage() {
     })
   }, [items])
 
-  const filteredItems = useMemo(() => {
-    if (filter === 'ALL') return sortedItems
-    return sortedItems.filter((i) => i.variant_type === filter)
-  }, [sortedItems, filter])
-
-  const owned = filteredItems.filter((i) => i.quantity > 0)
-  const missing = filteredItems.filter((i) => i.quantity === 0)
+  const owned = sortedItems.filter((i) => i.quantity > 0)
+  const missing = sortedItems.filter((i) => i.quantity === 0)
 
   const updateQuantity = async (printId: string, delta: number) => {
     const current = items.find((i) => i.id === printId)
@@ -198,25 +208,6 @@ export default function CollectionSetPage() {
       <h1 style={{ fontSize: 24, fontWeight: 'bold', marginBottom: 20 }}>
         Collection - {code}
       </h1>
-
-      <div style={{ marginBottom: 20 }}>
-        {['ALL', 'normal', 'AA', 'SP', 'TR'].map((f) => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            style={{
-              marginRight: 10,
-              background: filter === f ? '#0070f3' : '#eee',
-              color: filter === f ? '#fff' : '#000',
-              padding: '5px 10px',
-              borderRadius: 4,
-              border: 'none'
-            }}
-          >
-            {f}
-          </button>
-        ))}
-      </div>
 
       <h2>Cartes possédées</h2>
       <Grid data={owned} />

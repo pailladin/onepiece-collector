@@ -1,23 +1,19 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 import { useAuth } from '@/lib/auth'
 import { DEFAULT_LOCALE } from '@/lib/locale'
 
-const STORAGE_BASE_URL =
-  `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/cards-images`
+const STORAGE_BASE_URL = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/cards-images`
 
-export default function SetPage() {
+export default function CatalogueSetPage() {
   const { user } = useAuth()
   const params = useParams()
-  const code = Array.isArray(params.code)
-    ? params.code[0]
-    : params.code
+  const code = Array.isArray(params.code) ? params.code[0] : params.code
 
-  const [prints, setPrints] = useState<any[]>([])
-  const [collectionMap, setCollectionMap] = useState<Record<string, number>>({})
+  const [items, setItems] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -31,6 +27,7 @@ export default function SetPage() {
         .single()
 
       if (!setData) {
+        setItems([])
         setLoading(false)
         return
       }
@@ -40,56 +37,92 @@ export default function SetPage() {
         .select('*')
         .eq('distribution_set_id', setData.id)
 
+      if (!printsData || printsData.length === 0) {
+        setItems([])
+        setLoading(false)
+        return
+      }
+
+      const cardIds = printsData.map((p) => p.card_id)
+
       const { data: cardsData } = await supabase
         .from('cards')
-        .select(`
+        .select(
+          `
           id,
+          number,
           rarity,
           type,
           card_translations (
             name,
             locale
           )
-        `)
+        `
+        )
+        .in('id', cardIds)
 
-      const cardsMap = new Map(
-        cardsData?.map(c => [c.id, c])
-      )
+      let ownedMap = new Map<string, number>()
 
-      const merged = printsData?.map(print => ({
-        ...print,
-        card: cardsMap.get(print.card_id)
-      })) || []
-
-      setPrints(merged)
-
-      // 🔹 Charger collection utilisateur
       if (user) {
         const { data: collectionData } = await supabase
           .from('collections')
-          .select('card_print_id, quantity')
+          .select('*')
           .eq('user_id', user.id)
 
-        const map: Record<string, number> = {}
-        collectionData?.forEach(item => {
-          map[item.card_print_id] = item.quantity
-        })
-
-        setCollectionMap(map)
+        ownedMap = new Map(
+          collectionData?.map((c) => [c.card_print_id, c.quantity])
+        )
       }
 
+      const cardsMap = new Map(cardsData?.map((c) => [c.id, c]))
+
+      const merged = printsData.map((print) => ({
+        ...print,
+        card: cardsMap.get(print.card_id),
+        quantity: ownedMap.get(print.id) || 0
+      }))
+
+      setItems(merged)
       setLoading(false)
     }
 
-    if (code) fetchData()
+    fetchData()
   }, [code, user])
 
-  const addToCollection = async (printId: string) => {
+  const sortedItems = useMemo(() => {
+    return [...items].sort((a, b) => {
+      const numA = parseInt(a.card?.number || '0')
+      const numB = parseInt(b.card?.number || '0')
+
+      if (numA !== numB) return numA - numB
+
+      const getOrder = (variant: string) => {
+        if (variant === 'normal') return 0
+        if (variant === 'AA') return 1
+        if (variant === 'SP') return 2
+        if (variant === 'TR') return 3
+        return 99
+      }
+
+      return getOrder(a.variant_type) - getOrder(b.variant_type)
+    })
+  }, [items])
+
+  const updateQuantity = async (printId: string, delta: number) => {
     if (!user) return
 
-    const currentQty = collectionMap[printId] || 0
+    const current = items.find((i) => i.id === printId)
+    if (!current) return
 
-    if (currentQty === 0) {
+    const newQty = current.quantity + delta
+
+    if (newQty <= 0) {
+      await supabase
+        .from('collections')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('card_print_id', printId)
+    } else if (current.quantity === 0) {
       await supabase.from('collections').insert({
         user_id: user.id,
         card_print_id: printId,
@@ -98,15 +131,16 @@ export default function SetPage() {
     } else {
       await supabase
         .from('collections')
-        .update({ quantity: currentQty + 1 })
+        .update({ quantity: newQty })
         .eq('user_id', user.id)
         .eq('card_print_id', printId)
     }
 
-    setCollectionMap({
-      ...collectionMap,
-      [printId]: currentQty + 1
-    })
+    setItems(
+      items.map((i) =>
+        i.id === printId ? { ...i, quantity: Math.max(newQty, 0) } : i
+      )
+    )
   }
 
   if (loading) {
@@ -116,7 +150,7 @@ export default function SetPage() {
   return (
     <div style={{ padding: 40 }}>
       <h1 style={{ fontSize: 24, fontWeight: 'bold', marginBottom: 30 }}>
-        Set {code}
+        Catalogue - {code}
       </h1>
 
       <div
@@ -126,25 +160,22 @@ export default function SetPage() {
           gap: 20
         }}
       >
-        {prints.map((print) => {
-          const translation = print.card?.card_translations?.find(
+        {sortedItems.map((item) => {
+          const translation = item.card?.card_translations?.find(
             (t: any) => t.locale === DEFAULT_LOCALE
           )
 
-          const imageUrl =
-            `${STORAGE_BASE_URL}/${code}/${print.image_path}`
-
-          const quantity = collectionMap[print.id] || 0
+          const imageUrl = `${STORAGE_BASE_URL}/${code}/${item.image_path}`
 
           return (
             <div
-              key={print.id}
+              key={item.id}
               style={{
                 border: '1px solid #ddd',
                 borderRadius: 8,
                 padding: 10,
-                textAlign: 'center',
-                background: '#fff'
+                background: '#fff',
+                textAlign: 'center'
               }}
             >
               <img
@@ -153,42 +184,23 @@ export default function SetPage() {
                 style={{ width: '100%', marginBottom: 10 }}
               />
 
-              <div style={{ fontWeight: 'bold' }}>
-                {print.print_code}
-              </div>
-
-              {print.variant_type !== 'normal' && (
-                <div style={{ color: '#ff6600', fontSize: 12 }}>
-                  {print.variant_type}
-                </div>
-              )}
+              <div style={{ fontWeight: 'bold' }}>{item.print_code}</div>
 
               <div>{translation?.name}</div>
+
               <div style={{ fontSize: 12 }}>
-                {print.card?.rarity} • {print.card?.type}
+                {item.card?.rarity} • {item.card?.type}
               </div>
 
               {user && (
                 <div style={{ marginTop: 10 }}>
-                  <button
-                    onClick={() => addToCollection(print.id)}
-                    style={{
-                      padding: '5px 10px',
-                      background: '#0070f3',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: 4,
-                      cursor: 'pointer'
-                    }}
-                  >
-                    ➕ Ajouter
+                  <button onClick={() => updateQuantity(item.id, -1)}>
+                    ➖
                   </button>
 
-                  {quantity > 0 && (
-                    <div style={{ marginTop: 5 }}>
-                      Quantité : {quantity}
-                    </div>
-                  )}
+                  <span style={{ margin: '0 8px' }}>{item.quantity}</span>
+
+                  <button onClick={() => updateQuantity(item.id, 1)}>➕</button>
                 </div>
               )}
             </div>
