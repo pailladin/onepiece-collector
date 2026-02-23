@@ -8,7 +8,7 @@ import { DEFAULT_LOCALE } from '@/lib/locale'
 
 const STORAGE_BASE_URL = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/cards-images`
 
-type FilterType = 'ALL' | 'normal' | 'AA' | 'SP' | 'TR'
+type VariantType = 'normal' | 'AA' | 'SP' | 'TR'
 
 export default function CollectionSetPage() {
   const { user } = useAuth()
@@ -17,7 +17,7 @@ export default function CollectionSetPage() {
 
   const [items, setItems] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState<FilterType>('ALL')
+  const [filter, setFilter] = useState<'ALL' | VariantType>('ALL')
 
   useEffect(() => {
     const fetchData = async () => {
@@ -84,8 +84,17 @@ export default function CollectionSetPage() {
 
       if (numA !== numB) return numA - numB
 
-      const order = { normal: 0, AA: 1, SP: 2, TR: 3 }
-      return (order[a.variant_type] ?? 99) - (order[b.variant_type] ?? 99)
+      const order: Record<VariantType, number> = {
+        normal: 0,
+        AA: 1,
+        SP: 2,
+        TR: 3
+      }
+
+      const va = a.variant_type as VariantType
+      const vb = b.variant_type as VariantType
+
+      return (order[va] ?? 99) - (order[vb] ?? 99)
     })
   }, [items])
 
@@ -194,10 +203,10 @@ export default function CollectionSetPage() {
       </h1>
 
       <div style={{ marginBottom: 20 }}>
-        {['ALL', 'normal', 'AA', 'SP', 'TR'].map((f) => (
+        {(['ALL', 'normal', 'AA', 'SP', 'TR'] as const).map((f) => (
           <button
             key={f}
-            onClick={() => setFilter(f as FilterType)}
+            onClick={() => setFilter(f)}
             style={{
               marginRight: 10,
               background: filter === f ? '#0070f3' : '#eee',
