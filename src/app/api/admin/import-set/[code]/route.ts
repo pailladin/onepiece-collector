@@ -18,11 +18,31 @@ function extractNumber(cardSetId: string) {
   return cardSetId.split('-')[1]
 }
 
+function parseCardName(cardName: string) {
+  const match = cardName.match(/\((.*?)\)$/)
+
+  let variant = 'normal'
+  let cleanName = cardName
+
+  if (match) {
+    const tag = match[1].toLowerCase()
+
+    if (tag.includes('alternate')) variant = 'AA'
+    else if (tag.includes('parallel')) variant = 'AA'
+    else if (tag.includes('manga')) variant = 'SP'
+    else if (tag.includes('sp')) variant = 'SP'
+
+    cleanName = cardName.replace(match[0], '').trim()
+  }
+
+  return { variant, cleanName }
+}
+
 async function uploadImageToSupabase(imageUrl: string, fileName: string) {
   const imageResponse = await fetch(imageUrl)
 
   if (!imageResponse.ok) {
-    throw new Error(`Erreur téléchargement image`)
+    throw new Error('Erreur téléchargement image')
   }
 
   const arrayBuffer = await imageResponse.arrayBuffer()
@@ -44,10 +64,10 @@ export async function POST(
   request: Request,
   context: { params: Promise<{ code: string }> }
 ) {
+  const { code } = await context.params
   const logs: string[] = []
 
   try {
-    const { code } = await context.params
     logs.push(`Import du set ${code}`)
 
     const apiCode = formatApiCode(code)
@@ -69,7 +89,7 @@ export async function POST(
 
     const setName = apiCards[0]?.set_name || code
 
-    // 🔹 Vérifier si set existe
+    // Vérifier si set existe
     let { data: setData } = await supabase
       .from('sets')
       .select('*')
@@ -100,15 +120,15 @@ export async function POST(
     const setId = setData.id
 
     for (const card of apiCards) {
-      // 🔒 Filtrage strict du set
-      if (!card.card_set_id.startsWith(code)) {
-        continue
-      }
+      // 🔒 Filtrage strict
+      if (!card.card_set_id.startsWith(code)) continue
 
       const baseCode = card.card_set_id
       const number = extractNumber(baseCode)
 
-      // 🔹 Vérifier si carte existe
+      const { variant, cleanName } = parseCardName(card.card_name)
+
+      // Vérifier si carte conceptuelle existe
       let { data: existingCard } = await supabase
         .from('cards')
         .select('*')
@@ -135,38 +155,40 @@ export async function POST(
 
         existingCard = newCard
 
-        await supabase.from('card_translations').insert({
-          card_id: newCard.id,
-          locale: 'fr',
-          name: card.card_name
-        })
+        await supabase.from('card_translations').upsert(
+          {
+            card_id: newCard.id,
+            locale: 'fr',
+            name: cleanName
+          },
+          { onConflict: 'card_id,locale' }
+        )
       }
 
-      // 🔹 Upload image
-      const fileName = `${code}/${baseCode}.jpg`
+      const printCode = card.card_image_id
+      const fileName = `${code}/${printCode}.jpg`
 
       logs.push(`Upload image ${fileName}`)
 
       try {
         await uploadImageToSupabase(card.card_image, fileName)
       } catch (imgError: any) {
-        logs.push(`Erreur image ${baseCode}: ${imgError.message}`)
+        logs.push(`Erreur image ${printCode}: ${imgError.message}`)
       }
 
-      // 🔹 Upsert impression
       const { error: printError } = await supabase.from('card_prints').upsert(
         {
-          print_code: baseCode,
+          print_code: printCode,
           card_id: existingCard.id,
           distribution_set_id: setId,
-          variant_type: 'normal',
-          image_path: `${baseCode}.jpg`
+          variant_type: variant,
+          image_path: `${printCode}.jpg`
         },
         { onConflict: 'print_code' }
       )
 
       if (printError) {
-        logs.push(`Erreur print ${baseCode}: ${printError.message}`)
+        logs.push(`Erreur print ${printCode}: ${printError.message}`)
       }
     }
 

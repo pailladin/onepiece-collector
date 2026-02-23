@@ -15,6 +15,7 @@ export default function CatalogueSetPage() {
 
   const [items, setItems] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [selectedImage, setSelectedImage] = useState<string | null>(null)
 
   useEffect(() => {
     const fetchData = async () => {
@@ -181,7 +182,12 @@ export default function CatalogueSetPage() {
               <img
                 src={imageUrl}
                 alt={translation?.name}
-                style={{ width: '100%', marginBottom: 10 }}
+                style={{
+                  width: '100%',
+                  marginBottom: 10,
+                  cursor: 'pointer'
+                }}
+                onClick={() => setSelectedImage(imageUrl)}
               />
 
               <div style={{ fontWeight: 'bold' }}>{item.print_code}</div>
@@ -207,6 +213,30 @@ export default function CatalogueSetPage() {
           )
         })}
       </div>
+
+      {selectedImage && (
+        <div
+          onClick={() => setSelectedImage(null)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.8)',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            zIndex: 1000
+          }}
+        >
+          <img
+            src={selectedImage}
+            style={{
+              maxHeight: '90%',
+              maxWidth: '90%',
+              borderRadius: 8
+            }}
+          />
+        </div>
+      )}
     </div>
   )
 }
