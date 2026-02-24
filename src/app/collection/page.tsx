@@ -5,6 +5,9 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabaseClient'
 import { useAuth } from '@/lib/auth'
 
+const STORAGE_BASE_URL =
+  `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/cards-images`
+
 export default function CollectionPage() {
   const { user } = useAuth()
   const [sets, setSets] = useState<any[]>([])
@@ -78,6 +81,8 @@ export default function CollectionPage() {
       >
         {sets.map((set) => {
           const stat = stats[set.code]
+          const imageUrl =
+            `${STORAGE_BASE_URL}/sets/${set.code}.png`
 
           return (
             <Link
@@ -94,6 +99,16 @@ export default function CollectionPage() {
                   cursor: 'pointer'
                 }}
               >
+                <img
+                  src={imageUrl}
+                  alt={set.code}
+                  style={{
+                    width: '100%',
+                    height: 'auto',
+                    marginBottom: 12
+                  }}
+                />
+
                 <div style={{ fontWeight: 'bold', fontSize: 18 }}>
                   {set.code}
                 </div>

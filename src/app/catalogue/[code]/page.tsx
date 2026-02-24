@@ -5,8 +5,43 @@ import { useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 import { useAuth } from '@/lib/auth'
 import { DEFAULT_LOCALE } from '@/lib/locale'
+import { parseCardCode } from '@/lib/sorting/parseCardCode'
+import {
+  filterCardPrints,
+  getFilterOptions,
+  isAltVersion,
+  type AltFilter
+} from '@/lib/filtering/filterCardPrints'
 
 const STORAGE_BASE_URL = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/cards-images`
+
+type SortKey = 'number' | 'name' | 'rarity' | 'type'
+type SortDirection = 'asc' | 'desc'
+
+const RARITY_PRIORITY: Record<string, number> = {
+  C: 1,
+  UC: 2,
+  R: 3,
+  SR: 4,
+  SEC: 5,
+  L: 6
+}
+
+const VARIANT_PRIORITY: Record<string, number> = {
+  normal: 0,
+  AA: 1,
+  SP: 2,
+  TR: 3
+}
+
+const ALT_RARITY_THEME: Record<string, { background: string; border: string }> = {
+  C: { background: 'linear-gradient(145deg, #f2f4f7, #e5e7eb)', border: '#9ca3af' },
+  UC: { background: 'linear-gradient(145deg, #eafff4, #bbf7d0)', border: '#22c55e' },
+  R: { background: 'linear-gradient(145deg, #ecf5ff, #bfdbfe)', border: '#3b82f6' },
+  SR: { background: 'linear-gradient(145deg, #fff7e8, #fed7aa)', border: '#f97316' },
+  SEC: { background: 'linear-gradient(145deg, #fff0f5, #fbcfe8)', border: '#ec4899' },
+  L: { background: 'linear-gradient(145deg, #fff9db, #fde68a)', border: '#eab308' }
+}
 
 export default function CatalogueSetPage() {
   const { user } = useAuth()
@@ -16,6 +51,13 @@ export default function CatalogueSetPage() {
   const [items, setItems] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedImage, setSelectedImage] = useState<string | null>(null)
+
+  const [sortKey, setSortKey] = useState<SortKey>('number')
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [rarityFilter, setRarityFilter] = useState('all')
+  const [typeFilter, setTypeFilter] = useState('all')
+  const [altFilter, setAltFilter] = useState<AltFilter>('all')
 
   useEffect(() => {
     const fetchData = async () => {
@@ -90,24 +132,69 @@ export default function CatalogueSetPage() {
     fetchData()
   }, [code, user])
 
+  const filterOptions = useMemo(() => getFilterOptions(items), [items])
+
+  const filteredItems = useMemo(
+    () =>
+      filterCardPrints(items, {
+        query: searchQuery,
+        rarity: rarityFilter,
+        type: typeFilter,
+        alt: altFilter
+      }),
+    [items, searchQuery, rarityFilter, typeFilter, altFilter]
+  )
+
   const sortedItems = useMemo(() => {
-    return [...items].sort((a, b) => {
-      const numA = parseInt(a.card?.number || '0')
-      const numB = parseInt(b.card?.number || '0')
+    const multiplier = sortDirection === 'asc' ? 1 : -1
 
-      if (numA !== numB) return numA - numB
+    return [...filteredItems].sort((a, b) => {
+      const nameA =
+        a.card?.card_translations?.find((t: any) => t.locale === DEFAULT_LOCALE)
+          ?.name || ''
 
-      const getOrder = (variant: string) => {
-        if (variant === 'normal') return 0
-        if (variant === 'AA') return 1
-        if (variant === 'SP') return 2
-        if (variant === 'TR') return 3
-        return 99
+      const nameB =
+        b.card?.card_translations?.find((t: any) => t.locale === DEFAULT_LOCALE)
+          ?.name || ''
+
+      switch (sortKey) {
+        case 'number': {
+          const parsedA = parseCardCode(a.print_code || `${code}-0`)
+          const parsedB = parseCardCode(b.print_code || `${code}-0`)
+
+          if (parsedA.number !== parsedB.number) {
+            return (parsedA.number - parsedB.number) * multiplier
+          }
+
+          if (parsedA.variant !== parsedB.variant) {
+            return (parsedA.variant - parsedB.variant) * multiplier
+          }
+
+          const varA = VARIANT_PRIORITY[a.variant_type] ?? 99
+          const varB = VARIANT_PRIORITY[b.variant_type] ?? 99
+
+          return (varA - varB) * multiplier
+        }
+
+        case 'name':
+          return nameA.localeCompare(nameB) * multiplier
+
+        case 'rarity': {
+          const rA = RARITY_PRIORITY[a.card?.rarity] ?? 99
+          const rB = RARITY_PRIORITY[b.card?.rarity] ?? 99
+          return (rA - rB) * multiplier
+        }
+
+        case 'type':
+          return (
+            (a.card?.type || '').localeCompare(b.card?.type || '') * multiplier
+          )
+
+        default:
+          return 0
       }
-
-      return getOrder(a.variant_type) - getOrder(b.variant_type)
     })
-  }, [items])
+  }, [filteredItems, sortKey, sortDirection, code])
 
   const updateQuantity = async (printId: string, delta: number) => {
     if (!user) return
@@ -149,10 +236,98 @@ export default function CatalogueSetPage() {
   }
 
   return (
-    <div style={{ padding: 40 }}>
-      <h1 style={{ fontSize: 24, fontWeight: 'bold', marginBottom: 30 }}>
+    <div
+      style={{
+        padding: 40,
+        background:
+          'radial-gradient(circle at 10% 20%, #f0f9ff 0%, #eef2ff 35%, #fff7ed 100%)',
+        minHeight: '100vh'
+      }}
+    >
+      <h1
+        style={{
+          fontSize: 24,
+          fontWeight: 'bold',
+          marginBottom: 20,
+          color: '#111827'
+        }}
+      >
         Catalogue - {code}
       </h1>
+
+      <div
+        style={{
+          marginBottom: 20,
+          display: 'flex',
+          gap: 12,
+          flexWrap: 'wrap',
+          alignItems: 'center'
+        }}
+      >
+        <input
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Recherche nom ou code"
+          style={{
+            minWidth: 220,
+            padding: '8px 10px',
+            borderRadius: 8,
+            border: '1px solid #cbd5e1'
+          }}
+        />
+
+        <select
+          value={rarityFilter}
+          onChange={(e) => setRarityFilter(e.target.value)}
+        >
+          <option value="all">Toutes raretes</option>
+          {filterOptions.rarities.map((rarity) => (
+            <option key={rarity} value={rarity}>
+              {rarity}
+            </option>
+          ))}
+        </select>
+
+        <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+          <option value="all">Tous types</option>
+          {filterOptions.types.map((cardType) => (
+            <option key={cardType} value={cardType}>
+              {cardType}
+            </option>
+          ))}
+        </select>
+
+        <select
+          value={altFilter}
+          onChange={(e) => setAltFilter(e.target.value as AltFilter)}
+        >
+          <option value="all">Toutes versions</option>
+          <option value="normal">Normales</option>
+          <option value="alt">Alternatives</option>
+        </select>
+
+        <select
+          value={sortKey}
+          onChange={(e) => setSortKey(e.target.value as SortKey)}
+        >
+          <option value="number">Numéro</option>
+          <option value="name">Nom</option>
+          <option value="rarity">Rareté</option>
+          <option value="type">Type</option>
+        </select>
+
+        <select
+          value={sortDirection}
+          onChange={(e) => setSortDirection(e.target.value as SortDirection)}
+        >
+          <option value="asc">Ascendant</option>
+          <option value="desc">Descendant</option>
+        </select>
+
+        <div style={{ fontSize: 12, color: '#334155' }}>
+          {sortedItems.length} / {items.length}
+        </div>
+      </div>
 
       <div
         style={{
@@ -167,25 +342,55 @@ export default function CatalogueSetPage() {
           )
 
           const imageUrl = `${STORAGE_BASE_URL}/${code}/${item.image_path}`
+          const isAlt = isAltVersion(item)
+          const rarityTheme = ALT_RARITY_THEME[item.card?.rarity] || {
+            background: 'linear-gradient(145deg, #f3f4f6, #e5e7eb)',
+            border: '#9ca3af'
+          }
 
           return (
             <div
               key={item.id}
               style={{
-                border: '1px solid #ddd',
-                borderRadius: 8,
+                border: `2px solid ${isAlt ? rarityTheme.border : '#d1d5db'}`,
+                borderRadius: 12,
                 padding: 10,
-                background: '#fff',
-                textAlign: 'center'
+                background: isAlt
+                  ? rarityTheme.background
+                  : 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)',
+                textAlign: 'center',
+                position: 'relative',
+                boxShadow: isAlt
+                  ? `0 10px 24px -14px ${rarityTheme.border}`
+                  : '0 8px 20px -18px #374151'
               }}
             >
+              {isAlt && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: 8,
+                    right: 8,
+                    fontSize: 10,
+                    fontWeight: 700,
+                    letterSpacing: 0.5,
+                    background: '#111827',
+                    color: '#fff',
+                    borderRadius: 999,
+                    padding: '3px 8px'
+                  }}
+                >
+                  ALT
+                </div>
+              )}
               <img
                 src={imageUrl}
                 alt={translation?.name}
                 style={{
                   width: '100%',
                   marginBottom: 10,
-                  cursor: 'pointer'
+                  cursor: 'pointer',
+                  borderRadius: 8
                 }}
                 onClick={() => setSelectedImage(imageUrl)}
               />
@@ -195,7 +400,7 @@ export default function CatalogueSetPage() {
               <div>{translation?.name}</div>
 
               <div style={{ fontSize: 12 }}>
-                {item.card?.rarity} • {item.card?.type}
+                <strong>{item.card?.rarity}</strong> • {item.card?.type}
               </div>
 
               {user && (
