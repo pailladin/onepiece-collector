@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import * as XLSX from 'xlsx'
 import { supabase } from '@/lib/supabaseClient'
+import { normalizeVariantType } from '@/lib/cards/printDisplay'
 
 export default function ImportPage() {
   const [report, setReport] = useState('')
@@ -26,23 +27,14 @@ export default function ImportPage() {
     variantFromFile: string | undefined,
     imageFileName: string | undefined
   ) => {
-    let variant = variantFromFile?.toString().trim()
+    let variant = normalizeVariantType(variantFromFile)
 
-    if (!variant || variant === '') {
-      variant = 'normal'
-    }
-
-    variant = variant.toUpperCase()
-
-    if (variant !== 'AA' && variant !== 'SP' && variant !== 'TR') {
-      variant = 'normal'
-    }
-
-    // Security: infer variant from image filename as fallback.
-    if (imageFileName) {
-      if (imageFileName.includes('_AA')) variant = 'AA'
-      if (imageFileName.includes('_SP')) variant = 'SP'
-      if (imageFileName.includes('_TR')) variant = 'TR'
+    // Fallback from filename when variant is missing.
+    if (variant === 'normal' && imageFileName) {
+      if (/_p\d+/i.test(imageFileName)) variant = 'Parallel'
+      if (/_SP/i.test(imageFileName)) variant = 'SP'
+      if (/_MANGA/i.test(imageFileName)) variant = 'Manga'
+      if (/_TR/i.test(imageFileName)) variant = 'Treasure Rare'
     }
 
     return variant
@@ -105,8 +97,8 @@ export default function ImportPage() {
       }
 
       const baseCode = `${base_set_code}-${card_number}`
-      const printCode =
-        variant_type !== 'normal' ? `${baseCode}_${variant_type}` : baseCode
+      const filenameStem = image_filename?.toString().replace(/\.[^/.]+$/, '')
+      const printCode = filenameStem || baseCode
 
       await logStep(`baseCode = ${baseCode}`)
       await logStep(`printCode = ${printCode}`)

@@ -1,4 +1,5 @@
 import { DEFAULT_LOCALE } from '@/lib/locale'
+import { getDisplayPrintCode, normalizeVariantType } from '@/lib/cards/printDisplay'
 import { parseCardCode } from '@/lib/sorting/parseCardCode'
 
 export type AltFilter = 'all' | 'normal' | 'alt'
@@ -15,7 +16,8 @@ export function isAltVersion(print: {
   variant_type?: string
 }): boolean {
   const parsed = parseCardCode(print.print_code || 'OP00-000')
-  return parsed.variant > 0 || print.variant_type !== 'normal'
+  const variant = normalizeVariantType(print.variant_type)
+  return parsed.variant > 0 || variant !== 'normal'
 }
 
 export function filterCardPrints<T extends any[]>(
@@ -33,7 +35,9 @@ export function filterCardPrints<T extends any[]>(
         ?.name || ''
 
     if (query) {
-      const searchable = `${item.print_code || ''} ${name}`.toLowerCase()
+      const displayCode = getDisplayPrintCode(item)
+      const searchable =
+        `${item.print_code || ''} ${displayCode} ${name} ${item.variant_type || ''}`.toLowerCase()
       if (!searchable.includes(query)) return false
     }
 

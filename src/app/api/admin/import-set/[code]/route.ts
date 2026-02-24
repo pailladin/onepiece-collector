@@ -24,20 +24,33 @@ function normalizeSetCode(value: string | null | undefined) {
 }
 
 function parseCardName(cardName: string) {
-  const match = cardName.match(/\((.*?)\)$/)
-
   let variant = 'normal'
   let cleanName = cardName
 
-  if (match) {
-    const tag = match[1].toLowerCase()
+  const groups = Array.from(cardName.matchAll(/\(([^()]*)\)/g)).map((m) =>
+    (m[1] || '').trim()
+  )
+  const tagRaw =
+    [...groups].reverse().find((value) => value && !/^\d+$/.test(value)) || null
 
-    if (tag.includes('alternate')) variant = 'AA'
-    else if (tag.includes('parallel')) variant = 'AA'
-    else if (tag.includes('manga')) variant = 'SP'
-    else if (tag.includes('sp')) variant = 'SP'
+  if (tagRaw) {
+    const tag = tagRaw.toLowerCase()
 
-    cleanName = cardName.replace(match[0], '').trim()
+    if (tag.includes('parallel') || tag.includes('alternate') || tag === 'aa') {
+      variant = 'Parallel'
+    } else if (tag.includes('wanted poster')) {
+      variant = 'Wanted Poster'
+    } else if (tag.includes('manga')) {
+      variant = 'Manga'
+    } else if (tag === 'sp' || tag.includes(' sp')) {
+      variant = 'SP'
+    } else if (tag === 'tr' || tag.includes('treasure')) {
+      variant = 'Treasure Rare'
+    } else {
+      variant = tagRaw
+    }
+
+    cleanName = cardName.replace(/\([^()]*\)\s*$/g, '').trim()
   }
 
   return { variant, cleanName }
@@ -142,7 +155,9 @@ export async function POST(
 
           const baseCode = card.card_set_id
           const number = extractNumber(baseCode)
-          const { variant, cleanName } = parseCardName(card.card_name)
+          const { variant: variantFromName, cleanName } = parseCardName(
+            card.card_name || ''
+          )
 
           let { data: existingCard } = await supabase
             .from('cards')
@@ -182,6 +197,13 @@ export async function POST(
 
           const printCode = card.card_image_id?.toString().trim()
           const imageUrl = card.card_image?.toString().trim()
+          const suffix = (printCode || '').split('_')[1] || ''
+          const variant =
+            variantFromName !== 'normal'
+              ? variantFromName
+              : /^p\d+$/i.test(suffix)
+                ? 'Parallel'
+                : 'normal'
 
           if (!printCode) {
             skippedInvalidPrints += 1

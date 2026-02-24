@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 import { useAuth } from '@/lib/auth'
 import { DEFAULT_LOCALE } from '@/lib/locale'
+import { getDisplayPrintCode } from '@/lib/cards/printDisplay'
 import { parseCardCode } from '@/lib/sorting/parseCardCode'
 import {
   filterCardPrints,
@@ -29,9 +30,20 @@ const RARITY_PRIORITY: Record<string, number> = {
 
 const VARIANT_PRIORITY: Record<string, number> = {
   normal: 0,
+  parallel: 1,
+  Parallel: 1,
+  aa: 1,
   AA: 1,
+  sp: 2,
   SP: 2,
-  TR: 3
+  manga: 3,
+  Manga: 3,
+  'wanted poster': 3,
+  'Wanted Poster': 3,
+  tr: 4,
+  TR: 4,
+  'treasure rare': 4,
+  'Treasure Rare': 4
 }
 
 const ALT_RARITY_THEME: Record<string, { background: string; border: string }> = {
@@ -312,7 +324,7 @@ export default function CollectionSetPage() {
               onClick={() => setSelectedImage(imageUrl)}
             />
 
-            <div style={{ fontWeight: 'bold' }}>{item.print_code}</div>
+            <div style={{ fontWeight: 'bold' }}>{getDisplayPrintCode(item)}</div>
             <div>{translation?.name}</div>
 
             <div style={{ fontSize: 12 }}>
