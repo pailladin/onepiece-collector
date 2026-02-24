@@ -3,12 +3,14 @@ import { getDisplayPrintCode, normalizeVariantType } from '@/lib/cards/printDisp
 import { parseCardCode } from '@/lib/sorting/parseCardCode'
 
 export type AltFilter = 'all' | 'normal' | 'alt'
+export type AltTypeFilter = 'all' | string
 
 export type CardPrintFilterOptions = {
   query?: string
   rarity?: string
   type?: string
   alt?: AltFilter
+  altType?: AltTypeFilter
 }
 
 export function isAltVersion(print: {
@@ -20,6 +22,38 @@ export function isAltVersion(print: {
   return parsed.variant > 0 || variant !== 'normal'
 }
 
+const ALT_TYPE_ORDER: Record<string, number> = {
+  parallel: 1,
+  sp: 2,
+  manga: 3,
+  'wanted poster': 4
+}
+
+const ALLOWED_ALT_TYPES = new Set(['parallel', 'sp', 'manga', 'wanted poster'])
+
+export function getAltTypeKey(print: {
+  print_code?: string
+  variant_type?: string
+}): string {
+  const parsed = parseCardCode(print.print_code || 'OP00-000')
+  const variant = normalizeVariantType(print.variant_type)
+  const normalizedVariant = variant.toLowerCase()
+
+  if (ALLOWED_ALT_TYPES.has(normalizedVariant)) return normalizedVariant
+  if (parsed.variant > 0) return 'parallel'
+  return 'normal'
+}
+
+export function getAltTypeLabel(value: string): string {
+  const key = (value || '').trim().toLowerCase()
+  if (key === 'parallel') return 'Parallel'
+  if (key === 'sp') return 'SP'
+  if (key === 'manga') return 'Manga'
+  if (key === 'wanted poster') return 'Wanted Poster'
+  if (!key) return 'Normal'
+  return value
+}
+
 export function filterCardPrints<T extends any[]>(
   items: T,
   options: CardPrintFilterOptions
@@ -28,6 +62,7 @@ export function filterCardPrints<T extends any[]>(
   const rarity = options.rarity || 'all'
   const type = options.type || 'all'
   const alt = options.alt || 'all'
+  const altType = (options.altType || 'all').toLowerCase()
 
   return items.filter((item: any) => {
     const name =
@@ -47,6 +82,7 @@ export function filterCardPrints<T extends any[]>(
     const altVersion = isAltVersion(item)
     if (alt === 'alt' && !altVersion) return false
     if (alt === 'normal' && altVersion) return false
+    if (altType !== 'all' && getAltTypeKey(item) !== altType) return false
 
     return true
   }) as T
@@ -61,5 +97,9 @@ export function getFilterOptions(items: any[]) {
     new Set(items.map((item) => item.card?.type).filter(Boolean))
   ).sort((a, b) => String(a).localeCompare(String(b)))
 
-  return { rarities, types }
+  const altTypes = Array.from(
+    new Set(items.map((item) => getAltTypeKey(item)).filter((v) => v !== 'normal'))
+  ).sort((a, b) => (ALT_TYPE_ORDER[a] ?? 99) - (ALT_TYPE_ORDER[b] ?? 99))
+
+  return { rarities, types, altTypes }
 }

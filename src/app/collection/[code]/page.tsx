@@ -10,6 +10,7 @@ import { parseCardCode } from '@/lib/sorting/parseCardCode'
 import {
   filterCardPrints,
   getFilterOptions,
+  getAltTypeLabel,
   isAltVersion,
   type AltFilter
 } from '@/lib/filtering/filterCardPrints'
@@ -18,6 +19,15 @@ const STORAGE_BASE_URL = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/obj
 
 type SortKey = 'number' | 'name' | 'rarity' | 'type'
 type SortDirection = 'asc' | 'desc'
+type PriceDetail = {
+  id: string
+  printCode: string
+  displayCode: string
+  name: string
+  quantity: number
+  unitPrice: number
+  totalPrice: number
+}
 
 const RARITY_PRIORITY: Record<string, number> = {
   C: 1,
@@ -70,8 +80,17 @@ export default function CollectionSetPage() {
   const [rarityFilter, setRarityFilter] = useState('all')
   const [typeFilter, setTypeFilter] = useState('all')
   const [altFilter, setAltFilter] = useState<AltFilter>('all')
+  const [altTypeFilter, setAltTypeFilter] = useState('all')
   const [showOwned, setShowOwned] = useState(true)
   const [showMissing, setShowMissing] = useState(true)
+  const [priceLoading, setPriceLoading] = useState(false)
+  const [priceError, setPriceError] = useState<string | null>(null)
+  const [ownedCollectionValue, setOwnedCollectionValue] = useState<number | null>(
+    null
+  )
+  const [pricedOwnedCount, setPricedOwnedCount] = useState(0)
+  const [priceDetails, setPriceDetails] = useState<PriceDetail[]>([])
+  const [showPriceDetails, setShowPriceDetails] = useState(false)
 
   useEffect(() => {
     const fetchData = async () => {
@@ -154,9 +173,10 @@ export default function CollectionSetPage() {
         query: searchQuery,
         rarity: rarityFilter,
         type: typeFilter,
-        alt: altFilter
+        alt: altFilter,
+        altType: altTypeFilter
       }),
-    [items, searchQuery, rarityFilter, typeFilter, altFilter]
+    [items, searchQuery, rarityFilter, typeFilter, altFilter, altTypeFilter]
   )
 
   const sortedItems = useMemo(() => {
@@ -217,6 +237,82 @@ export default function CollectionSetPage() {
     () => sortedItems.filter((item) => (item.quantity || 0) === 0),
     [sortedItems]
   )
+
+  const ownedItemsAll = useMemo(
+    () => items.filter((item) => (item.quantity || 0) > 0),
+    [items]
+  )
+
+  const formatCurrency = (value: number) =>
+    new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD'
+    }).format(value)
+
+  const calculateCollectionValue = async () => {
+    if (!code) return
+
+    setPriceLoading(true)
+    setPriceError(null)
+    setShowPriceDetails(false)
+
+    try {
+      const res = await fetch(`/api/optcg/prices/${code}`)
+      const data = await res.json()
+
+      if (!res.ok) {
+        setPriceError(data?.error || 'Erreur calcul prix')
+        setOwnedCollectionValue(null)
+        setPricedOwnedCount(0)
+        setPriceDetails([])
+        return
+      }
+
+      const prices: Record<string, number> = data?.prices || {}
+      let total = 0
+      let matched = 0
+      const details: PriceDetail[] = []
+
+      for (const item of ownedItemsAll) {
+        const printCode = (item.print_code || '').trim().toUpperCase()
+        const unitPrice = prices[printCode]
+        if (!Number.isFinite(unitPrice)) continue
+        const quantity = item.quantity || 0
+        const totalPrice = unitPrice * quantity
+        const name =
+          item.card?.card_translations?.find((t: any) => t.locale === DEFAULT_LOCALE)
+            ?.name || ''
+
+        total += totalPrice
+        matched += 1
+        details.push({
+          id: item.id,
+          printCode,
+          displayCode: getDisplayPrintCode(item),
+          name,
+          quantity,
+          unitPrice,
+          totalPrice
+        })
+      }
+
+      setOwnedCollectionValue(total)
+      setPricedOwnedCount(matched)
+      setPriceDetails(
+        details.sort(
+          (a, b) =>
+            b.totalPrice - a.totalPrice || b.unitPrice - a.unitPrice || a.name.localeCompare(b.name)
+        )
+      )
+    } catch {
+      setPriceError('Erreur serveur pendant le calcul')
+      setOwnedCollectionValue(null)
+      setPricedOwnedCount(0)
+      setPriceDetails([])
+    } finally {
+      setPriceLoading(false)
+    }
+  }
 
   const updateQuantity = async (printId: string, delta: number) => {
     if (!user) return
@@ -408,11 +504,28 @@ export default function CollectionSetPage() {
 
         <select
           value={altFilter}
-          onChange={(e) => setAltFilter(e.target.value as AltFilter)}
+          onChange={(e) => {
+            const value = e.target.value as AltFilter
+            setAltFilter(value)
+            if (value === 'normal') setAltTypeFilter('all')
+          }}
         >
           <option value="all">Toutes versions</option>
           <option value="normal">Normales</option>
           <option value="alt">Alternatives</option>
+        </select>
+
+        <select
+          value={altTypeFilter}
+          onChange={(e) => setAltTypeFilter(e.target.value)}
+          disabled={altFilter === 'normal'}
+        >
+          <option value="all">Tous types alternatives</option>
+          {filterOptions.altTypes.map((altType) => (
+            <option key={altType} value={altType}>
+              {getAltTypeLabel(altType)}
+            </option>
+          ))}
         </select>
 
         <select
@@ -436,6 +549,45 @@ export default function CollectionSetPage() {
         <div style={{ fontSize: 12, color: '#334155' }}>
           {sortedItems.length} / {items.length}
         </div>
+
+        <button
+          onClick={calculateCollectionValue}
+          disabled={priceLoading || ownedItemsAll.length === 0}
+          style={{
+            padding: '8px 12px',
+            borderRadius: 8,
+            border: '1px solid #cbd5e1',
+            background: '#ffffff',
+            cursor:
+              priceLoading || ownedItemsAll.length === 0 ? 'not-allowed' : 'pointer'
+          }}
+        >
+          {priceLoading ? 'Calcul en cours...' : 'Calculer valeur collection'}
+        </button>
+
+        {ownedCollectionValue !== null && (
+          <>
+            <div style={{ fontSize: 12, color: '#0f172a', fontWeight: 600 }}>
+              Valeur estimee: {formatCurrency(ownedCollectionValue)} ({pricedOwnedCount}/
+              {ownedItemsAll.length} cartes pricees)
+            </div>
+            <button
+              onClick={() => setShowPriceDetails(true)}
+              disabled={priceDetails.length === 0}
+              style={{
+                padding: '8px 12px',
+                borderRadius: 8,
+                border: '1px solid #cbd5e1',
+                background: '#ffffff',
+                cursor: priceDetails.length === 0 ? 'not-allowed' : 'pointer'
+              }}
+            >
+              Voir detail prix
+            </button>
+          </>
+        )}
+
+        {priceError && <div style={{ fontSize: 12, color: '#b91c1c' }}>{priceError}</div>}
       </div>
 
       <div style={{ marginBottom: 16 }}>
@@ -499,6 +651,70 @@ export default function CollectionSetPage() {
               borderRadius: 8
             }}
           />
+        </div>
+      )}
+
+      {showPriceDetails && (
+        <div
+          onClick={() => setShowPriceDetails(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.6)',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            zIndex: 1100
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: '#fff',
+              borderRadius: 10,
+              width: 'min(900px, 95vw)',
+              maxHeight: '80vh',
+              overflow: 'auto',
+              padding: 16
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: 12
+              }}
+            >
+              <h2 style={{ margin: 0, fontSize: 18 }}>
+                Detail des prix (plus chere a moins chere)
+              </h2>
+              <button onClick={() => setShowPriceDetails(false)}>Fermer</button>
+            </div>
+
+            {priceDetails.map((row) => (
+              <div
+                key={row.id}
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1.4fr 1fr 0.6fr 0.8fr 0.8fr',
+                  gap: 10,
+                  padding: '8px 0',
+                  borderBottom: '1px solid #e2e8f0',
+                  fontSize: 13
+                }}
+              >
+                <div>
+                  <div style={{ fontWeight: 700 }}>{row.displayCode}</div>
+                  <div>{row.name}</div>
+                </div>
+                <div>{row.printCode}</div>
+                <div>x{row.quantity}</div>
+                <div>{formatCurrency(row.unitPrice)}</div>
+                <div style={{ fontWeight: 700 }}>{formatCurrency(row.totalPrice)}</div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>

@@ -10,8 +10,16 @@ const supabase = createClient(
 const BUCKET = 'cards-images'
 
 function formatApiCode(code: string) {
-  const prefix = code.slice(0, -2)
-  const suffix = code.slice(-2)
+  const raw = (code || '').trim().toUpperCase().replace(/-/g, '')
+
+  // Special products like OP14-EB04 are stored as OP14EB04 in DB/UI.
+  const ebMatch = raw.match(/^(OP\d{2})(EB\d{2})$/)
+  if (ebMatch) return `${ebMatch[1]}-${ebMatch[2]}`
+
+  if (raw.length <= 2) return raw
+
+  const prefix = raw.slice(0, -2)
+  const suffix = raw.slice(-2)
   return `${prefix}-${suffix}`
 }
 
@@ -44,10 +52,6 @@ function parseCardName(cardName: string) {
       variant = 'Manga'
     } else if (tag === 'sp' || tag.includes(' sp')) {
       variant = 'SP'
-    } else if (tag === 'tr' || tag.includes('treasure')) {
-      variant = 'Treasure Rare'
-    } else {
-      variant = tagRaw
     }
 
     cleanName = cardName.replace(/\([^()]*\)\s*$/g, '').trim()

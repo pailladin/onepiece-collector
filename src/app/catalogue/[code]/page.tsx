@@ -10,6 +10,7 @@ import { parseCardCode } from '@/lib/sorting/parseCardCode'
 import {
   filterCardPrints,
   getFilterOptions,
+  getAltTypeLabel,
   isAltVersion,
   type AltFilter
 } from '@/lib/filtering/filterCardPrints'
@@ -70,6 +71,7 @@ export default function CatalogueSetPage() {
   const [rarityFilter, setRarityFilter] = useState('all')
   const [typeFilter, setTypeFilter] = useState('all')
   const [altFilter, setAltFilter] = useState<AltFilter>('all')
+  const [altTypeFilter, setAltTypeFilter] = useState('all')
 
   useEffect(() => {
     const fetchData = async () => {
@@ -152,9 +154,10 @@ export default function CatalogueSetPage() {
         query: searchQuery,
         rarity: rarityFilter,
         type: typeFilter,
-        alt: altFilter
+        alt: altFilter,
+        altType: altTypeFilter
       }),
-    [items, searchQuery, rarityFilter, typeFilter, altFilter]
+    [items, searchQuery, rarityFilter, typeFilter, altFilter, altTypeFilter]
   )
 
   const sortedItems = useMemo(() => {
@@ -311,11 +314,28 @@ export default function CatalogueSetPage() {
 
         <select
           value={altFilter}
-          onChange={(e) => setAltFilter(e.target.value as AltFilter)}
+          onChange={(e) => {
+            const value = e.target.value as AltFilter
+            setAltFilter(value)
+            if (value === 'normal') setAltTypeFilter('all')
+          }}
         >
           <option value="all">Toutes versions</option>
           <option value="normal">Normales</option>
           <option value="alt">Alternatives</option>
+        </select>
+
+        <select
+          value={altTypeFilter}
+          onChange={(e) => setAltTypeFilter(e.target.value)}
+          disabled={altFilter === 'normal'}
+        >
+          <option value="all">Tous types alternatives</option>
+          {filterOptions.altTypes.map((altType) => (
+            <option key={altType} value={altType}>
+              {getAltTypeLabel(altType)}
+            </option>
+          ))}
         </select>
 
         <select
