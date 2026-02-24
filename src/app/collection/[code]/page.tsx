@@ -58,6 +58,8 @@ export default function CollectionSetPage() {
   const [rarityFilter, setRarityFilter] = useState('all')
   const [typeFilter, setTypeFilter] = useState('all')
   const [altFilter, setAltFilter] = useState<AltFilter>('all')
+  const [showOwned, setShowOwned] = useState(true)
+  const [showMissing, setShowMissing] = useState(true)
 
   useEffect(() => {
     const fetchData = async () => {
@@ -194,6 +196,16 @@ export default function CollectionSetPage() {
     })
   }, [filteredItems, sortKey, sortDirection, code])
 
+  const ownedItems = useMemo(
+    () => sortedItems.filter((item) => (item.quantity || 0) > 0),
+    [sortedItems]
+  )
+
+  const missingItems = useMemo(
+    () => sortedItems.filter((item) => (item.quantity || 0) === 0),
+    [sortedItems]
+  )
+
   const updateQuantity = async (printId: string, delta: number) => {
     if (!user) return
 
@@ -232,6 +244,93 @@ export default function CollectionSetPage() {
   if (loading) {
     return <div style={{ padding: 40 }}>Chargement...</div>
   }
+
+  const renderGrid = (data: any[]) => (
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+        gap: 20
+      }}
+    >
+      {data.map((item) => {
+        const translation = item.card?.card_translations?.find(
+          (t: any) => t.locale === DEFAULT_LOCALE
+        )
+        const imageUrl = `${STORAGE_BASE_URL}/${code}/${item.image_path}`
+        const isAlt = isAltVersion(item)
+        const rarityTheme = ALT_RARITY_THEME[item.card?.rarity] || {
+          background: 'linear-gradient(145deg, #f3f4f6, #e5e7eb)',
+          border: '#9ca3af'
+        }
+
+        return (
+          <div
+            key={item.id}
+            style={{
+              border: `2px solid ${isAlt ? rarityTheme.border : '#d1d5db'}`,
+              borderRadius: 12,
+              padding: 10,
+              background: isAlt
+                ? rarityTheme.background
+                : 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)',
+              textAlign: 'center',
+              position: 'relative',
+              boxShadow: isAlt
+                ? `0 10px 24px -14px ${rarityTheme.border}`
+                : '0 8px 20px -18px #374151'
+            }}
+          >
+            {isAlt && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 8,
+                  right: 8,
+                  fontSize: 10,
+                  fontWeight: 700,
+                  letterSpacing: 0.5,
+                  background: '#111827',
+                  color: '#fff',
+                  borderRadius: 999,
+                  padding: '3px 8px'
+                }}
+              >
+                ALT
+              </div>
+            )}
+
+            <img
+              src={imageUrl}
+              alt={translation?.name}
+              style={{
+                width: '100%',
+                marginBottom: 10,
+                cursor: 'pointer',
+                borderRadius: 8
+              }}
+              onClick={() => setSelectedImage(imageUrl)}
+            />
+
+            <div style={{ fontWeight: 'bold' }}>{item.print_code}</div>
+            <div>{translation?.name}</div>
+
+            <div style={{ fontSize: 12 }}>
+              <strong>{item.card?.rarity}</strong> - {item.card?.type}
+            </div>
+
+            {user && (
+              <div style={{ marginTop: 10 }}>
+                <button onClick={() => updateQuantity(item.id, -1)}>-</button>
+                <span style={{ margin: '0 8px' }}>{item.quantity}</span>
+                <button onClick={() => updateQuantity(item.id, 1)}>+</button>
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
 
   return (
     <div
@@ -327,89 +426,44 @@ export default function CollectionSetPage() {
         </div>
       </div>
 
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-          gap: 20
-        }}
-      >
-        {sortedItems.map((item) => {
-          const translation = item.card?.card_translations?.find(
-            (t: any) => t.locale === DEFAULT_LOCALE
-          )
-          const imageUrl = `${STORAGE_BASE_URL}/${code}/${item.image_path}`
-          const isAlt = isAltVersion(item)
-          const rarityTheme = ALT_RARITY_THEME[item.card?.rarity] || {
-            background: 'linear-gradient(145deg, #f3f4f6, #e5e7eb)',
-            border: '#9ca3af'
-          }
+      <div style={{ marginBottom: 16 }}>
+        <button
+          onClick={() => setShowOwned((prev) => !prev)}
+          style={{
+            width: '100%',
+            textAlign: 'left',
+            padding: '10px 12px',
+            borderRadius: 10,
+            border: '1px solid #cbd5e1',
+            background: '#ffffff',
+            fontWeight: 700,
+            cursor: 'pointer'
+          }}
+        >
+          {showOwned ? '▼' : '▶'} Cartes possedees ({ownedItems.length})
+        </button>
+        {showOwned && <div style={{ marginTop: 12 }}>{renderGrid(ownedItems)}</div>}
+      </div>
 
-          return (
-            <div
-              key={item.id}
-              style={{
-                border: `2px solid ${isAlt ? rarityTheme.border : '#d1d5db'}`,
-                borderRadius: 12,
-                padding: 10,
-                background: isAlt
-                  ? rarityTheme.background
-                  : 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)',
-                textAlign: 'center',
-                position: 'relative',
-                boxShadow: isAlt
-                  ? `0 10px 24px -14px ${rarityTheme.border}`
-                  : '0 8px 20px -18px #374151'
-              }}
-            >
-              {isAlt && (
-                <div
-                  style={{
-                    position: 'absolute',
-                    top: 8,
-                    right: 8,
-                    fontSize: 10,
-                    fontWeight: 700,
-                    letterSpacing: 0.5,
-                    background: '#111827',
-                    color: '#fff',
-                    borderRadius: 999,
-                    padding: '3px 8px'
-                  }}
-                >
-                  ALT
-                </div>
-              )}
-
-              <img
-                src={imageUrl}
-                alt={translation?.name}
-                style={{
-                  width: '100%',
-                  marginBottom: 10,
-                  cursor: 'pointer',
-                  borderRadius: 8
-                }}
-                onClick={() => setSelectedImage(imageUrl)}
-              />
-
-              <div style={{ fontWeight: 'bold' }}>{item.print_code}</div>
-              <div>{translation?.name}</div>
-
-              <div style={{ fontSize: 12 }}>
-                <strong>{item.card?.rarity}</strong> - {item.card?.type}
-              </div>
-
-              {user && (
-                <div style={{ marginTop: 10 }}>
-                  <button onClick={() => updateQuantity(item.id, -1)}>-</button>
-                  <span style={{ margin: '0 8px' }}>{item.quantity}</span>
-                  <button onClick={() => updateQuantity(item.id, 1)}>+</button>
-                </div>
-              )}
-            </div>
-          )
-        })}
+      <div>
+        <button
+          onClick={() => setShowMissing((prev) => !prev)}
+          style={{
+            width: '100%',
+            textAlign: 'left',
+            padding: '10px 12px',
+            borderRadius: 10,
+            border: '1px solid #cbd5e1',
+            background: '#ffffff',
+            fontWeight: 700,
+            cursor: 'pointer'
+          }}
+        >
+          {showMissing ? '▼' : '▶'} Cartes non possedees ({missingItems.length})
+        </button>
+        {showMissing && (
+          <div style={{ marginTop: 12 }}>{renderGrid(missingItems)}</div>
+        )}
       </div>
 
       {selectedImage && (
