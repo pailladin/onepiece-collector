@@ -33,8 +33,47 @@ export default function AdminPage() {
       method: 'POST'
     })
 
-    const data = await res.json()
-    setLogs(data.logs || ['Erreur inconnue'])
+    if (!res.body) {
+      setLogs(['Erreur: flux de logs indisponible'])
+      await loadData()
+      return
+    }
+
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    while (true) {
+      const { value, done } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
+
+      for (const line of lines) {
+        if (!line.trim()) continue
+        try {
+          const parsed = JSON.parse(line)
+          if (parsed.log) {
+            setLogs((prev) => [...prev, parsed.log])
+          }
+        } catch {
+          setLogs((prev) => [...prev, line])
+        }
+      }
+    }
+
+    if (buffer.trim()) {
+      try {
+        const parsed = JSON.parse(buffer)
+        if (parsed.log) {
+          setLogs((prev) => [...prev, parsed.log])
+        }
+      } catch {
+        setLogs((prev) => [...prev, buffer])
+      }
+    }
 
     await loadData()
   }

@@ -12,6 +12,16 @@ export default function ImportPage() {
     setReport((prev) => prev + message + '\n')
   }
 
+  const flushUi = () =>
+    new Promise<void>((resolve) => {
+      requestAnimationFrame(() => resolve())
+    })
+
+  const logStep = async (message: string) => {
+    log(message)
+    await flushUi()
+  }
+
   const normalizeVariant = (
     variantFromFile: string | undefined,
     imageFileName: string | undefined
@@ -28,7 +38,7 @@ export default function ImportPage() {
       variant = 'normal'
     }
 
-    // Sécurité supplémentaire si fichier image contient _AA / _SP / _TR
+    // Security: infer variant from image filename as fallback.
     if (imageFileName) {
       if (imageFileName.includes('_AA')) variant = 'AA'
       if (imageFileName.includes('_SP')) variant = 'SP'
@@ -42,14 +52,15 @@ export default function ImportPage() {
     const file = e.target.files[0]
     if (!file) return
 
-    setReport('=== Début import ===\n')
+    setReport('=== Debut import ===\n')
+    await flushUi()
 
     const data = await file.arrayBuffer()
     const workbook = XLSX.read(data)
     const sheet = workbook.Sheets[workbook.SheetNames[0]]
     const rows: any[] = XLSX.utils.sheet_to_json(sheet)
 
-    log(`Nombre de lignes détectées : ${rows.length}`)
+    await logStep(`Nombre de lignes detectees : ${rows.length}`)
 
     for (const row of rows) {
       const set_code = row.set_code?.trim()
@@ -60,19 +71,17 @@ export default function ImportPage() {
       const rarity = row.rarity
       const type = row.type
       const image_filename = row.image_filename
-
       const variant_type = normalizeVariant(row.variant_type, image_filename)
 
-      log('---')
-      log(`Traitement : ${set_code} / ${base_set_code} / ${card_number}`)
-      log(`Variant détectée : ${variant_type}`)
+      await logStep('---')
+      await logStep(`Traitement : ${set_code} / ${base_set_code} / ${card_number}`)
+      await logStep(`Variant detectee : ${variant_type}`)
 
       if (!set_code || !base_set_code || !card_number) {
-        log('Ligne invalide (données manquantes)')
+        await logStep('Ligne invalide (donnees manquantes)')
         continue
       }
 
-      // 1️⃣ Récupération sets
       const { data: distributionSet, error: distErr } = await supabase
         .from('sets')
         .select('id')
@@ -80,7 +89,7 @@ export default function ImportPage() {
         .single()
 
       if (distErr || !distributionSet) {
-        log(`Erreur distributionSet: ${distErr?.message}`)
+        await logStep(`Erreur distributionSet: ${distErr?.message}`)
         continue
       }
 
@@ -91,19 +100,17 @@ export default function ImportPage() {
         .single()
 
       if (baseErr || !baseSet) {
-        log(`Erreur baseSet: ${baseErr?.message}`)
+        await logStep(`Erreur baseSet: ${baseErr?.message}`)
         continue
       }
 
       const baseCode = `${base_set_code}-${card_number}`
-
       const printCode =
         variant_type !== 'normal' ? `${baseCode}_${variant_type}` : baseCode
 
-      log(`baseCode = ${baseCode}`)
-      log(`printCode = ${printCode}`)
+      await logStep(`baseCode = ${baseCode}`)
+      await logStep(`printCode = ${printCode}`)
 
-      // 2️⃣ UPSERT carte conceptuelle
       const { data: card, error: cardErr } = await supabase
         .from('cards')
         .upsert(
@@ -120,13 +127,12 @@ export default function ImportPage() {
         .single()
 
       if (cardErr || !card) {
-        log(`Erreur création carte: ${cardErr?.message}`)
+        await logStep(`Erreur creation carte: ${cardErr?.message}`)
         continue
       }
 
-      log(`Carte OK id=${card.id}`)
+      await logStep(`Carte OK id=${card.id}`)
 
-      // 3️⃣ UPSERT traductions
       const translations = []
 
       if (name_fr) {
@@ -152,11 +158,10 @@ export default function ImportPage() {
             onConflict: 'card_id,locale'
           })
 
-        if (transErr) log(`Erreur traduction: ${transErr.message}`)
-        else log('Traductions OK')
+        if (transErr) await logStep(`Erreur traduction: ${transErr.message}`)
+        else await logStep('Traductions OK')
       }
 
-      // 4️⃣ UPSERT impression
       const { error: printErr } = await supabase.from('card_prints').upsert(
         {
           card_id: card.id,
@@ -168,16 +173,16 @@ export default function ImportPage() {
         { onConflict: 'print_code' }
       )
 
-      if (printErr) log(`Erreur impression: ${printErr.message}`)
-      else log('Impression OK')
+      if (printErr) await logStep(`Erreur impression: ${printErr.message}`)
+      else await logStep('Impression OK')
     }
 
-    log('=== Import terminé ===')
+    await logStep('=== Import termine ===')
   }
 
   return (
     <div style={{ padding: 40 }}>
-      <h1>Import (modèle final corrigé)</h1>
+      <h1>Import (modele final corrige)</h1>
 
       <input type="file" accept=".xlsx,.xls" onChange={handleFileUpload} />
 

@@ -1,5 +1,6 @@
-import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+
+export const runtime = 'nodejs'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -16,6 +17,10 @@ function formatApiCode(code: string) {
 
 function extractNumber(cardSetId: string) {
   return cardSetId.split('-')[1]
+}
+
+function normalizeSetCode(value: string | null | undefined) {
+  return (value || '').replace('-', '').toUpperCase()
 }
 
 function parseCardName(cardName: string) {
@@ -40,20 +45,17 @@ function parseCardName(cardName: string) {
 
 async function uploadImageToSupabase(imageUrl: string, fileName: string) {
   const imageResponse = await fetch(imageUrl)
-
   if (!imageResponse.ok) {
-    throw new Error('Erreur téléchargement image')
+    throw new Error('Erreur telechargement image')
   }
 
   const arrayBuffer = await imageResponse.arrayBuffer()
   const buffer = Buffer.from(arrayBuffer)
 
-  const { error } = await supabase.storage
-    .from(BUCKET)
-    .upload(fileName, buffer, {
-      contentType: 'image/jpeg',
-      upsert: true
-    })
+  const { error } = await supabase.storage.from(BUCKET).upload(fileName, buffer, {
+    contentType: 'image/jpeg',
+    upsert: true
+  })
 
   if (error) {
     throw new Error(error.message)
@@ -64,139 +66,180 @@ export async function POST(
   request: Request,
   context: { params: Promise<{ code: string }> }
 ) {
-  const { code } = await context.params
-  const logs: string[] = []
+  const encoder = new TextEncoder()
 
-  try {
-    logs.push(`Import du set ${code}`)
-
-    const apiCode = formatApiCode(code)
-    const res = await fetch(`https://www.optcgapi.com/api/sets/${apiCode}/`)
-
-    if (!res.ok) {
-      logs.push(`Erreur API ${res.status}`)
-      return NextResponse.json({ logs }, { status: 500 })
-    }
-
-    const apiCards = await res.json()
-
-    if (!Array.isArray(apiCards) || apiCards.length === 0) {
-      logs.push('Aucune carte reçue')
-      return NextResponse.json({ logs }, { status: 400 })
-    }
-
-    logs.push(`${apiCards.length} cartes reçues`)
-
-    const setName = apiCards[0]?.set_name || code
-
-    // Vérifier si set existe
-    let { data: setData } = await supabase
-      .from('sets')
-      .select('*')
-      .eq('code', code)
-      .single()
-
-    if (!setData) {
-      const { data: newSet, error } = await supabase
-        .from('sets')
-        .insert({
-          code,
-          name: setName
-        })
-        .select()
-        .single()
-
-      if (error || !newSet) {
-        logs.push(`Erreur création set: ${error?.message}`)
-        return NextResponse.json({ logs }, { status: 500 })
+  const stream = new ReadableStream({
+    async start(controller) {
+      const push = (message: string) => {
+        controller.enqueue(encoder.encode(`${JSON.stringify({ log: message })}\n`))
       }
-
-      setData = newSet
-      logs.push('Set créé')
-    } else {
-      logs.push('Set déjà existant')
-    }
-
-    const setId = setData.id
-
-    for (const card of apiCards) {
-      // 🔒 Filtrage strict
-      if (!card.card_set_id.startsWith(code)) continue
-
-      const baseCode = card.card_set_id
-      const number = extractNumber(baseCode)
-
-      const { variant, cleanName } = parseCardName(card.card_name)
-
-      // Vérifier si carte conceptuelle existe
-      let { data: existingCard } = await supabase
-        .from('cards')
-        .select('*')
-        .eq('base_code', baseCode)
-        .single()
-
-      if (!existingCard) {
-        const { data: newCard, error } = await supabase
-          .from('cards')
-          .insert({
-            base_code: baseCode,
-            base_set_id: setId,
-            number,
-            rarity: card.rarity,
-            type: card.card_type
-          })
-          .select()
-          .single()
-
-        if (error || !newCard) {
-          logs.push(`Erreur insertion card ${baseCode}: ${error?.message}`)
-          continue
-        }
-
-        existingCard = newCard
-
-        await supabase.from('card_translations').upsert(
-          {
-            card_id: newCard.id,
-            locale: 'fr',
-            name: cleanName
-          },
-          { onConflict: 'card_id,locale' }
-        )
-      }
-
-      const printCode = card.card_image_id
-      const fileName = `${code}/${printCode}.jpg`
-
-      logs.push(`Upload image ${fileName}`)
 
       try {
-        await uploadImageToSupabase(card.card_image, fileName)
-      } catch (imgError: any) {
-        logs.push(`Erreur image ${printCode}: ${imgError.message}`)
-      }
+        const { code } = await context.params
+        push(`Import du set ${code}`)
 
-      const { error: printError } = await supabase.from('card_prints').upsert(
-        {
-          print_code: printCode,
-          card_id: existingCard.id,
-          distribution_set_id: setId,
-          variant_type: variant,
-          image_path: `${printCode}.jpg`
-        },
-        { onConflict: 'print_code' }
-      )
+        const apiCode = formatApiCode(code)
+        const res = await fetch(`https://www.optcgapi.com/api/sets/${apiCode}/`)
 
-      if (printError) {
-        logs.push(`Erreur print ${printCode}: ${printError.message}`)
+        if (!res.ok) {
+          push(`Erreur API ${res.status}`)
+          return
+        }
+
+        const apiCards = await res.json()
+        if (!Array.isArray(apiCards) || apiCards.length === 0) {
+          push('Aucune carte recue')
+          return
+        }
+
+        push(`${apiCards.length} cartes recues`)
+
+        const setName = apiCards[0]?.set_name || code
+
+        let { data: setData } = await supabase
+          .from('sets')
+          .select('*')
+          .eq('code', code)
+          .single()
+
+        if (!setData) {
+          const { data: newSet, error } = await supabase
+            .from('sets')
+            .insert({ code, name: setName })
+            .select()
+            .single()
+
+          if (error || !newSet) {
+            push(`Erreur creation set: ${error?.message}`)
+            return
+          }
+
+          setData = newSet
+          push('Set cree')
+        } else {
+          push('Set deja existant')
+        }
+
+        const setId = setData.id
+        let skippedInvalidPrints = 0
+        let skippedWrongSet = 0
+
+        for (const card of apiCards) {
+          const apiSetCode = normalizeSetCode(card?.set_id)
+          if (apiSetCode && apiSetCode !== code.toUpperCase()) {
+            skippedWrongSet += 1
+            push(
+              `SKIP hors set ${code}: ${card?.card_image_id || card?.card_set_id || 'inconnu'} (set_id=${card?.set_id})`
+            )
+            continue
+          }
+
+          if (!card?.card_set_id) {
+            skippedInvalidPrints += 1
+            push('SKIP print invalide: card_set_id manquant')
+            continue
+          }
+
+          const baseCode = card.card_set_id
+          const number = extractNumber(baseCode)
+          const { variant, cleanName } = parseCardName(card.card_name)
+
+          let { data: existingCard } = await supabase
+            .from('cards')
+            .select('*')
+            .eq('base_code', baseCode)
+            .single()
+
+          if (!existingCard) {
+            const { data: newCard, error } = await supabase
+              .from('cards')
+              .insert({
+                base_code: baseCode,
+                base_set_id: setId,
+                number,
+                rarity: card.rarity,
+                type: card.card_type
+              })
+              .select()
+              .single()
+
+            if (error || !newCard) {
+              push(`Erreur insertion card ${baseCode}: ${error?.message}`)
+              continue
+            }
+
+            existingCard = newCard
+
+            await supabase.from('card_translations').upsert(
+              {
+                card_id: newCard.id,
+                locale: 'fr',
+                name: cleanName
+              },
+              { onConflict: 'card_id,locale' }
+            )
+          }
+
+          const printCode = card.card_image_id?.toString().trim()
+          const imageUrl = card.card_image?.toString().trim()
+
+          if (!printCode) {
+            skippedInvalidPrints += 1
+            push(`SKIP print invalide pour ${baseCode}: card_image_id manquant`)
+            continue
+          }
+
+          if (!imageUrl) {
+            skippedInvalidPrints += 1
+            push(`SKIP image manquante pour ${printCode}`)
+            continue
+          }
+
+          const fileName = `${code}/${printCode}.jpg`
+          push(`Upload image ${fileName}`)
+
+          try {
+            await uploadImageToSupabase(imageUrl, fileName)
+          } catch (imgError: any) {
+            push(`Erreur image ${printCode}: ${imgError.message}`)
+          }
+
+          const { error: printError } = await supabase.from('card_prints').upsert(
+            {
+              print_code: printCode,
+              card_id: existingCard.id,
+              distribution_set_id: setId,
+              variant_type: variant,
+              image_path: `${printCode}.jpg`
+            },
+            { onConflict: 'print_code' }
+          )
+
+          if (printError) {
+            push(`Erreur print ${printCode}: ${printError.message}`)
+          }
+        }
+
+        if (skippedInvalidPrints > 0) {
+          push(`Resume: ${skippedInvalidPrints} print(s) ignore(s) (donnees invalides)`)
+        }
+        if (skippedWrongSet > 0) {
+          push(`Resume: ${skippedWrongSet} print(s) ignore(s) (hors set ${code})`)
+        }
+        push('Import termine avec succes')
+      } catch (error: any) {
+        push(`Erreur serveur: ${error.message}`)
+      } finally {
+        controller.close()
       }
     }
+  })
 
-    logs.push('Import terminé avec succès')
-
-    return NextResponse.json({ logs })
-  } catch (error: any) {
-    logs.push(`Erreur serveur: ${error.message}`)
-    return NextResponse.json({ logs }, { status: 500 })
-  }
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'application/x-ndjson; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive'
+    }
+  })
 }
