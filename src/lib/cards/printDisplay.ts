@@ -8,6 +8,8 @@ export function normalizeVariantType(value: string | null | undefined): string {
   if (lower === 'aa') return 'Parallel'
   if (lower.includes('parallel')) return 'Parallel'
   if (lower.includes('alternate')) return 'Parallel'
+  if (lower.includes('pirate foil')) return 'Foil'
+  if (lower === 'foil' || lower.endsWith(' foil')) return 'Foil'
   if (lower === 'sp' || lower.includes(' sp')) return 'SP'
   if (lower.includes('manga')) return 'Manga'
   if (lower.includes('wanted poster')) return 'Wanted Poster'

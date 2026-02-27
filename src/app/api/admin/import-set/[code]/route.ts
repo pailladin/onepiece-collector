@@ -1,4 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
+import { getRequestUser } from '@/lib/server/authUser'
+import { isAdminEmail, parseAdminEmails } from '@/lib/admin'
 
 export const runtime = 'nodejs'
 
@@ -8,6 +10,7 @@ const supabase = createClient(
 )
 
 const BUCKET = 'cards-images'
+const MISSING_IMAGE_PATH = '__missing__'
 
 function formatApiCode(code: string) {
   const raw = (code || '').trim().toUpperCase().replace(/-/g, '')
@@ -44,7 +47,9 @@ function parseCardName(cardName: string) {
   if (tagRaw) {
     const tag = tagRaw.toLowerCase()
 
-    if (tag.includes('parallel') || tag.includes('alternate') || tag === 'aa') {
+    if (tag.includes('pirate foil') || tag === 'foil' || tag.endsWith(' foil')) {
+      variant = 'Foil'
+    } else if (tag.includes('parallel') || tag.includes('alternate') || tag === 'aa') {
       variant = 'Parallel'
     } else if (tag.includes('wanted poster')) {
       variant = 'Wanted Poster'
@@ -79,10 +84,35 @@ async function uploadImageToSupabase(imageUrl: string, fileName: string) {
   }
 }
 
+function extractPrintCodeFromImageUrl(imageUrl: string | null | undefined): string | null {
+  const value = (imageUrl || '').trim()
+  if (!value) return null
+
+  const match = value.match(/\/([^/?#]+)\.(?:jpg|jpeg|png|webp)(?:[?#].*)?$/i)
+  if (!match?.[1]) return null
+  return match[1].trim()
+}
+
 export async function POST(
   request: Request,
   context: { params: Promise<{ code: string }> }
 ) {
+  const userResult = await getRequestUser(request)
+  if (!userResult.user) {
+    return new Response(
+      JSON.stringify({ error: userResult.error || 'Unauthorized' }),
+      { status: 401, headers: { 'Content-Type': 'application/json' } }
+    )
+  }
+
+  const adminEmails = parseAdminEmails(process.env.ADMIN_EMAILS)
+  if (!isAdminEmail(userResult.user.email, adminEmails)) {
+    return new Response(
+      JSON.stringify({ error: 'Forbidden' }),
+      { status: 403, headers: { 'Content-Type': 'application/json' } }
+    )
+  }
+
   const encoder = new TextEncoder()
 
   const stream = new ReadableStream({
@@ -92,8 +122,14 @@ export async function POST(
       }
 
       try {
+        const body = await request.json().catch(() => ({}))
+        const skipImages = Boolean(body?.skipImages)
+
         const { code } = await context.params
         push(`Import du set ${code}`)
+        if (skipImages) {
+          push('Mode rechargement: sans upload d images')
+        }
 
         const apiCode = formatApiCode(code)
         const res = await fetch(`https://www.optcgapi.com/api/sets/${apiCode}/`)
@@ -140,6 +176,7 @@ export async function POST(
         const setId = setData.id
         let skippedInvalidPrints = 0
         let skippedWrongSet = 0
+        let skippedImageUploads = 0
 
         for (const card of apiCards) {
           const apiSetCode = normalizeSetCode(card?.set_id)
@@ -199,8 +236,17 @@ export async function POST(
             )
           }
 
-          const printCode = card.card_image_id?.toString().trim()
           const imageUrl = card.card_image?.toString().trim()
+          let printCode = card.card_image_id?.toString().trim()
+          if (!printCode) {
+            const fromImageUrl = extractPrintCodeFromImageUrl(imageUrl)
+            if (fromImageUrl) {
+              printCode = fromImageUrl
+              push(
+                `card_image_id manquant pour ${baseCode}: print_code deduit de l URL (${printCode})`
+              )
+            }
+          }
           const suffix = (printCode || '').split('_')[1] || ''
           const variant =
             variantFromName !== 'normal'
@@ -210,36 +256,51 @@ export async function POST(
                 : 'normal'
 
           if (!printCode) {
-            skippedInvalidPrints += 1
-            push(`SKIP print invalide pour ${baseCode}: card_image_id manquant`)
-            continue
+            // Keep importing even without image id by falling back to base code.
+            printCode = baseCode
+            push(
+              `card_image_id manquant pour ${baseCode}: fallback print_code=${printCode}`
+            )
           }
 
-          if (!imageUrl) {
-            skippedInvalidPrints += 1
-            push(`SKIP image manquante pour ${printCode}`)
-            continue
+          if (!skipImages && !imageUrl) {
+            push(`Image manquante pour ${printCode}: placeholder utilise`)
           }
 
-          const fileName = `${code}/${printCode}.jpg`
-          push(`Upload image ${fileName}`)
+          const imagePath = `${printCode}.jpg`
 
-          try {
-            await uploadImageToSupabase(imageUrl, fileName)
-          } catch (imgError: any) {
-            push(`Erreur image ${printCode}: ${imgError.message}`)
+          let finalImagePath: string | null = imagePath
+
+          if (!skipImages && imageUrl) {
+            const fileName = `${code}/${imagePath}`
+            push(`Upload image ${fileName}`)
+
+            try {
+              await uploadImageToSupabase(imageUrl, fileName)
+            } catch (imgError: any) {
+              push(`Erreur image ${printCode}: ${imgError.message}`)
+              finalImagePath = MISSING_IMAGE_PATH
+            }
+          } else if (!skipImages && !imageUrl) {
+            finalImagePath = MISSING_IMAGE_PATH
+          } else {
+            skippedImageUploads += 1
           }
 
-          const { error: printError } = await supabase.from('card_prints').upsert(
-            {
-              print_code: printCode,
-              card_id: existingCard.id,
-              distribution_set_id: setId,
-              variant_type: variant,
-              image_path: `${printCode}.jpg`
-            },
-            { onConflict: 'print_code' }
-          )
+          const printPayload: Record<string, unknown> = {
+            print_code: printCode,
+            card_id: existingCard.id,
+            distribution_set_id: setId,
+            variant_type: variant
+          }
+
+          if (!skipImages) {
+            printPayload.image_path = finalImagePath
+          }
+
+          const { error: printError } = await supabase
+            .from('card_prints')
+            .upsert(printPayload, { onConflict: 'print_code' })
 
           if (printError) {
             push(`Erreur print ${printCode}: ${printError.message}`)
@@ -251,6 +312,9 @@ export async function POST(
         }
         if (skippedWrongSet > 0) {
           push(`Resume: ${skippedWrongSet} print(s) ignore(s) (hors set ${code})`)
+        }
+        if (skipImages) {
+          push(`Resume: ${skippedImageUploads} image(s) non upload (mode sans images)`)
         }
         push('Import termine avec succes')
       } catch (error: any) {

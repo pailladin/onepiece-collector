@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useAuth } from '@/lib/auth'
 import { supabase } from '@/lib/supabaseClient'
+import { isAdminEmail, parseAdminEmails } from '@/lib/admin'
 
 export default function RootLayout({
   children,
@@ -10,6 +11,8 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   const { user } = useAuth()
+  const adminEmails = parseAdminEmails(process.env.NEXT_PUBLIC_ADMIN_EMAILS)
+  const canAccessAdmin = isAdminEmail(user?.email, adminEmails)
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
@@ -45,6 +48,12 @@ export default function RootLayout({
             )}
 
             {user && (
+              <Link href="/friends" style={{ color: 'white', marginRight: 20 }}>
+                Amis
+              </Link>
+            )}
+
+            {user && canAccessAdmin && (
               <Link href="/admin" style={{ color: 'white' }}>
                 Admin
               </Link>

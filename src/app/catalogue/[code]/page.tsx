@@ -10,12 +10,16 @@ import { parseCardCode } from '@/lib/sorting/parseCardCode'
 import {
   filterCardPrints,
   getFilterOptions,
+  getAltTypeKey,
   getAltTypeLabel,
   isAltVersion,
   type AltFilter
 } from '@/lib/filtering/filterCardPrints'
 
 const STORAGE_BASE_URL = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/cards-images`
+const MISSING_IMAGE_PATH = '__missing__'
+const CARD_PLACEHOLDER_IMAGE =
+  "data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 360 500'%3E%3Crect width='360' height='500' fill='%23e2e8f0'/%3E%3Crect x='16' y='16' width='328' height='468' rx='16' fill='%23f8fafc' stroke='%23cbd5e1' stroke-width='2'/%3E%3Ctext x='180' y='235' text-anchor='middle' font-family='Arial' font-size='24' fill='%23475569'%3EPhoto a venir%3C/text%3E%3C/svg%3E"
 
 type SortKey = 'number' | 'name' | 'rarity' | 'type'
 type SortDirection = 'asc' | 'desc'
@@ -33,6 +37,8 @@ const VARIANT_PRIORITY: Record<string, number> = {
   normal: 0,
   parallel: 1,
   Parallel: 1,
+  foil: 1,
+  Foil: 1,
   aa: 1,
   AA: 1,
   sp: 2,
@@ -176,6 +182,10 @@ export default function CatalogueSetPage() {
         case 'number': {
           const parsedA = parseCardCode(a.print_code || `${code}-0`)
           const parsedB = parseCardCode(b.print_code || `${code}-0`)
+
+          if (parsedA.set !== parsedB.set) {
+            return parsedA.set.localeCompare(parsedB.set) * multiplier
+          }
 
           if (parsedA.number !== parsedB.number) {
             return (parsedA.number - parsedB.number) * multiplier
@@ -373,8 +383,15 @@ export default function CatalogueSetPage() {
             (t: any) => t.locale === DEFAULT_LOCALE
           )
 
-          const imageUrl = `${STORAGE_BASE_URL}/${code}/${item.image_path}`
+          const hasImagePath =
+            Boolean(item.image_path) && item.image_path !== MISSING_IMAGE_PATH
+          const imageUrl = hasImagePath
+            ? `${STORAGE_BASE_URL}/${code}/${item.image_path}`
+            : CARD_PLACEHOLDER_IMAGE
           const isAlt = isAltVersion(item)
+          const altType = getAltTypeKey(item)
+          const isFoil = altType === 'foil'
+          const altBadgeLabel = altType === 'foil' ? 'FOIL' : 'ALT'
           const rarityTheme = ALT_RARITY_THEME[item.card?.rarity] || {
             background: 'linear-gradient(145deg, #f3f4f6, #e5e7eb)',
             border: '#9ca3af'
@@ -384,7 +401,9 @@ export default function CatalogueSetPage() {
             <div
               key={item.id}
               style={{
-                border: `2px solid ${isAlt ? rarityTheme.border : '#d1d5db'}`,
+                border: `2px solid ${
+                  isFoil ? '#f5c84c' : isAlt ? rarityTheme.border : '#d1d5db'
+                }`,
                 borderRadius: 12,
                 padding: 10,
                 background: isAlt
@@ -392,9 +411,11 @@ export default function CatalogueSetPage() {
                   : 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)',
                 textAlign: 'center',
                 position: 'relative',
-                boxShadow: isAlt
-                  ? `0 10px 24px -14px ${rarityTheme.border}`
-                  : '0 8px 20px -18px #374151'
+                boxShadow: isFoil
+                  ? '0 0 0 1px rgba(255,245,204,0.7) inset, 0 0 18px -6px rgba(251,191,36,0.95), 0 8px 24px -18px #374151'
+                  : isAlt
+                    ? `0 10px 24px -14px ${rarityTheme.border}`
+                    : '0 8px 20px -18px #374151'
               }}
             >
               {isAlt && (
@@ -410,9 +431,9 @@ export default function CatalogueSetPage() {
                     color: '#fff',
                     borderRadius: 999,
                     padding: '3px 8px'
-                  }}
-                >
-                  ALT
+                }}
+              >
+                  {altBadgeLabel}
                 </div>
               )}
               <img
@@ -424,7 +445,12 @@ export default function CatalogueSetPage() {
                   cursor: 'pointer',
                   borderRadius: 8
                 }}
-                onClick={() => setSelectedImage(imageUrl)}
+                onError={(e) => {
+                  e.currentTarget.src = CARD_PLACEHOLDER_IMAGE
+                }}
+                onClick={() => {
+                  if (hasImagePath) setSelectedImage(imageUrl)
+                }}
               />
 
               <div style={{ fontWeight: 'bold' }}>{getDisplayPrintCode(item)}</div>

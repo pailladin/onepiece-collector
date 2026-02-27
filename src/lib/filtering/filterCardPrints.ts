@@ -24,12 +24,13 @@ export function isAltVersion(print: {
 
 const ALT_TYPE_ORDER: Record<string, number> = {
   parallel: 1,
-  sp: 2,
-  manga: 3,
-  'wanted poster': 4
+  foil: 2,
+  sp: 3,
+  manga: 4,
+  'wanted poster': 5
 }
 
-const ALLOWED_ALT_TYPES = new Set(['parallel', 'sp', 'manga', 'wanted poster'])
+const ALLOWED_ALT_TYPES = new Set(['parallel', 'foil', 'sp', 'manga', 'wanted poster'])
 
 export function getAltTypeKey(print: {
   print_code?: string
@@ -47,6 +48,7 @@ export function getAltTypeKey(print: {
 export function getAltTypeLabel(value: string): string {
   const key = (value || '').trim().toLowerCase()
   if (key === 'parallel') return 'Parallel'
+  if (key === 'foil') return 'Foil'
   if (key === 'sp') return 'SP'
   if (key === 'manga') return 'Manga'
   if (key === 'wanted poster') return 'Wanted Poster'

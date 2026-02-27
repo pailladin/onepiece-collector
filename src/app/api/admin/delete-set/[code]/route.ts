@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getRequestUser } from '@/lib/server/authUser'
+import { isAdminEmail, parseAdminEmails } from '@/lib/admin'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -10,6 +12,19 @@ export async function POST(
   request: Request,
   context: { params: Promise<{ code: string }> }
 ) {
+  const userResult = await getRequestUser(request)
+  if (!userResult.user) {
+    return NextResponse.json(
+      { logs: [userResult.error || 'Unauthorized'] },
+      { status: 401 }
+    )
+  }
+
+  const adminEmails = parseAdminEmails(process.env.ADMIN_EMAILS)
+  if (!isAdminEmail(userResult.user.email, adminEmails)) {
+    return NextResponse.json({ logs: ['Forbidden'] }, { status: 403 })
+  }
+
   const { code } = await context.params
   const logs: string[] = []
 

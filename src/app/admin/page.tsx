@@ -2,13 +2,26 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
+import { useAuth } from '@/lib/auth'
+import { isAdminEmail, parseAdminEmails } from '@/lib/admin'
 
 export default function AdminPage() {
+  const { user, loading: authLoading } = useAuth()
+  const adminEmails = parseAdminEmails(process.env.NEXT_PUBLIC_ADMIN_EMAILS)
+  const canAccessAdmin = isAdminEmail(user?.email, adminEmails)
   const [apiSets, setApiSets] = useState<any[]>([])
   const [dbSets, setDbSets] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [logs, setLogs] = useState<string[]>([])
   const [showModal, setShowModal] = useState(false)
+
+  const getAuthHeader = async () => {
+    const { data } = await supabase.auth.getSession()
+    const accessToken = data.session?.access_token
+    return accessToken
+      ? ({ Authorization: `Bearer ${accessToken}` } as Record<string, string>)
+      : ({} as Record<string, string>)
+  }
 
   const loadData = async () => {
     const apiRes = await fetch('https://www.optcgapi.com/api/allSets/')
@@ -22,15 +35,27 @@ export default function AdminPage() {
   }
 
   useEffect(() => {
+    if (!canAccessAdmin) {
+      setLoading(false)
+      return
+    }
     loadData()
-  }, [])
+  }, [canAccessAdmin])
 
-  const importSet = async (code: string) => {
+  const importSet = async (code: string, options?: { skipImages?: boolean }) => {
     setLogs([])
     setShowModal(true)
 
+    const authHeaders = await getAuthHeader()
     const res = await fetch(`/api/admin/import-set/${code}`, {
-      method: 'POST'
+      method: 'POST',
+      headers: {
+        ...authHeaders,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        skipImages: Boolean(options?.skipImages)
+      })
     })
 
     if (!res.body) {
@@ -84,8 +109,10 @@ export default function AdminPage() {
     setLogs([])
     setShowModal(true)
 
+    const authHeaders = await getAuthHeader()
     const res = await fetch(`/api/admin/delete-set/${code}`, {
-      method: 'POST'
+      method: 'POST',
+      headers: authHeaders
     })
 
     const data = await res.json()
@@ -94,7 +121,8 @@ export default function AdminPage() {
     await loadData()
   }
 
-  if (loading) return <div style={{ padding: 40 }}>Chargement...</div>
+  if (authLoading || loading) return <div style={{ padding: 40 }}>Chargement...</div>
+  if (!canAccessAdmin) return <div style={{ padding: 40 }}>Acces refuse.</div>
 
   return (
     <div style={{ padding: 40 }}>
@@ -118,7 +146,20 @@ export default function AdminPage() {
 
             {exists ? (
               <div style={{ display: 'flex', gap: 10 }}>
-                <span style={{ color: 'green' }}>Déjà importé</span>
+                <span style={{ color: 'green' }}>Deja importe</span>
+
+                <button
+                  onClick={() => importSet(code, { skipImages: true })}
+                  style={{
+                    background: '#2563eb',
+                    color: '#fff',
+                    border: 'none',
+                    padding: '4px 8px',
+                    borderRadius: 4
+                  }}
+                >
+                  Recharger sans images
+                </button>
 
                 <button
                   onClick={() => deleteSet(code)}
