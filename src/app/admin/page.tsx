@@ -205,6 +205,22 @@ export default function AdminPage() {
                   Importer manquantes
                 </Link>
 
+                <Link
+                  href={`/admin/import-missing/${code}`}
+                  style={{
+                    background: '#7c3aed',
+                    color: '#fff',
+                    border: 'none',
+                    padding: '4px 8px',
+                    borderRadius: 4,
+                    textDecoration: 'none',
+                    display: 'inline-flex',
+                    alignItems: 'center'
+                  }}
+                >
+                  Gerer cartes
+                </Link>
+
                 <button
                   onClick={() => deleteSet(code)}
                   style={{

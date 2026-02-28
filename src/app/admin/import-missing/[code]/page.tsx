@@ -15,6 +15,15 @@ type MissingCard = {
   type: string
 }
 
+type SetCardOption = {
+  id: string
+  baseCode: string
+  number: string | null
+  name: string
+  ownersCount: number
+  printsCount: number
+}
+
 export default function ImportMissingCardsPage() {
   const { user, loading: authLoading } = useAuth()
   const params = useParams<{ code: string }>()
@@ -30,10 +39,17 @@ export default function ImportMissingCardsPage() {
   const [selected, setSelected] = useState<Record<string, boolean>>({})
   const [logs, setLogs] = useState<string[]>([])
   const [isImporting, setIsImporting] = useState(false)
+  const [cardOptions, setCardOptions] = useState<SetCardOption[]>([])
+  const [selectedCardCode, setSelectedCardCode] = useState('')
+  const [isDeleting, setIsDeleting] = useState(false)
 
   const selectedPrintCodes = useMemo(
     () => Object.entries(selected).filter(([, value]) => value).map(([key]) => key),
     [selected]
+  )
+  const selectedCard = useMemo(
+    () => cardOptions.find((card) => card.baseCode === selectedCardCode) || null,
+    [cardOptions, selectedCardCode]
   )
 
   const getAuthHeader = useCallback(async () => {
@@ -44,10 +60,12 @@ export default function ImportMissingCardsPage() {
       : ({} as Record<string, string>)
   }, [])
 
-  const loadMissingCards = useCallback(async () => {
+  const loadMissingCards = useCallback(async (options?: { keepLogs?: boolean }) => {
     setLoading(true)
     setError(null)
-    setLogs([])
+    if (!options?.keepLogs) {
+      setLogs([])
+    }
 
     const authHeaders = await getAuthHeader()
     const res = await fetch(`/api/admin/import-set/${code}/missing`, {
@@ -73,14 +91,35 @@ export default function ImportMissingCardsPage() {
     setLoading(false)
   }, [code, getAuthHeader])
 
+  const loadSetCards = useCallback(async () => {
+    const authHeaders = await getAuthHeader()
+    const res = await fetch(`/api/admin/import-set/${code}/cards`, {
+      headers: authHeaders
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      setCardOptions([])
+      setSelectedCardCode('')
+      return
+    }
+
+    const cards: SetCardOption[] = data.cards || []
+    setCardOptions(cards)
+    setSelectedCardCode((prev) =>
+      prev && cards.some((card) => card.baseCode === prev)
+        ? prev
+        : cards[0]?.baseCode || ''
+    )
+  }, [code, getAuthHeader])
+
   useEffect(() => {
     if (!canAccessAdmin) {
       setLoading(false)
       return
     }
     if (!code) return
-    loadMissingCards()
-  }, [canAccessAdmin, code, loadMissingCards])
+    Promise.all([loadMissingCards(), loadSetCards()])
+  }, [canAccessAdmin, code, loadMissingCards, loadSetCards])
 
   const toggleAll = (value: boolean) => {
     setSelected(
@@ -150,6 +189,43 @@ export default function ImportMissingCardsPage() {
       await loadMissingCards()
     } finally {
       setIsImporting(false)
+    }
+  }
+
+  const deleteCardFromSet = async () => {
+    const targetCode = selectedCardCode.trim().toUpperCase()
+    if (!targetCode || isDeleting) return
+
+    const ownersCount = selectedCard?.ownersCount || 0
+    const confirmed = confirm(
+      `Supprimer la carte ${targetCode} du set ${code} ?\nUtilisateurs impactes: ${ownersCount}`
+    )
+    if (!confirmed) return
+
+    setIsDeleting(true)
+    setLogs([])
+
+    try {
+      const authHeaders = await getAuthHeader()
+      const res = await fetch(`/api/admin/import-set/${code}/delete-card`, {
+        method: 'POST',
+        headers: {
+          ...authHeaders,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          mode: 'base',
+          targetCode
+        })
+      })
+
+      const data = await res.json().catch(() => ({}))
+      setLogs(data?.logs || [data?.error || 'Erreur inconnue'])
+
+      await loadSetCards()
+      await loadMissingCards({ keepLogs: true })
+    } finally {
+      setIsDeleting(false)
     }
   }
 
@@ -234,6 +310,51 @@ export default function ImportMissingCardsPage() {
             </label>
           ))
         )}
+      </div>
+
+      <div
+        style={{
+          border: '1px solid #ddd',
+          borderRadius: 6,
+          padding: 12,
+          marginBottom: 20
+        }}
+      >
+        <h2 style={{ margin: '0 0 10px' }}>Supprimer une carte du set</h2>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+          <select
+            value={selectedCardCode}
+            onChange={(e) => setSelectedCardCode(e.target.value)}
+            style={{ minWidth: 340 }}
+          >
+            {cardOptions.map((card) => (
+              <option key={card.id} value={card.baseCode}>
+                {card.baseCode} - {card.name} ({card.ownersCount} collections)
+              </option>
+            ))}
+          </select>
+
+          <div style={{ fontSize: 13, color: '#334155' }}>
+            {selectedCard
+              ? `Numero ${selectedCard.number || '-'} - ${selectedCard.ownersCount} possesseur(s) - ${selectedCard.printsCount} print(s)`
+              : 'Aucune carte'}
+          </div>
+
+          <button
+            onClick={deleteCardFromSet}
+            disabled={!selectedCardCode.trim() || isDeleting}
+            style={{
+              background: '#b91c1c',
+              color: '#fff',
+              border: 'none',
+              padding: '6px 10px',
+              borderRadius: 4,
+              opacity: !selectedCardCode.trim() || isDeleting ? 0.5 : 1
+            }}
+          >
+            {isDeleting ? 'Suppression...' : 'Supprimer'}
+          </button>
+        </div>
       </div>
 
       <div>
