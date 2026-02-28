@@ -34,6 +34,10 @@ function normalizeSetCode(value: string | null | undefined) {
   return (value || '').replace('-', '').toUpperCase()
 }
 
+function normalizePrintCode(value: string | null | undefined) {
+  return (value || '').trim().toUpperCase()
+}
+
 function parseCardName(cardName: string) {
   let variant = 'normal'
   let cleanName = cardName
@@ -43,9 +47,11 @@ function parseCardName(cardName: string) {
   )
   const tagRaw =
     [...groups].reverse().find((value) => value && !/^\d+$/.test(value)) || null
+  let variantTag: string | null = null
 
   if (tagRaw) {
     const tag = tagRaw.toLowerCase()
+    variantTag = tagRaw
 
     if (tag.includes('pirate foil') || tag === 'foil' || tag.endsWith(' foil')) {
       variant = 'Foil'
@@ -62,7 +68,7 @@ function parseCardName(cardName: string) {
     cleanName = cardName.replace(/\([^()]*\)\s*$/g, '').trim()
   }
 
-  return { variant, cleanName }
+  return { variant, cleanName, variantTag }
 }
 
 async function uploadImageToSupabase(imageUrl: string, fileName: string) {
@@ -91,6 +97,51 @@ function extractPrintCodeFromImageUrl(imageUrl: string | null | undefined): stri
   const match = value.match(/\/([^/?#]+)\.(?:jpg|jpeg|png|webp)(?:[?#].*)?$/i)
   if (!match?.[1]) return null
   return match[1].trim()
+}
+
+function slugifyVariantTag(value: string | null | undefined) {
+  const normalized = (value || '').trim().toUpperCase()
+  if (!normalized) return null
+
+  const slug = normalized.replace(/[^A-Z0-9]+/g, '')
+  return slug || null
+}
+
+function resolvePrintCode(params: {
+  providedPrintCode: string | null | undefined
+  imageUrl: string | null | undefined
+  baseCode: string
+  setCode: string
+  variantTag?: string | null
+}) {
+  const provided = (params.providedPrintCode || '').trim()
+  if (provided) {
+    return {
+      printCode: provided,
+      source: 'api_print_code' as const
+    }
+  }
+
+  const fromImageUrl = extractPrintCodeFromImageUrl(params.imageUrl)
+  if (fromImageUrl) {
+    return {
+      printCode: fromImageUrl,
+      source: 'image_url' as const
+    }
+  }
+
+  const variantSlug = slugifyVariantTag(params.variantTag)
+  return {
+    printCode: variantSlug
+      ? `${params.baseCode}_${params.setCode}_${variantSlug}`
+      : `${params.baseCode}_${params.setCode}`,
+    source: 'fallback_set_scoped' as const
+  }
+}
+
+function toErrorMessage(error: unknown) {
+  if (error instanceof Error) return error.message
+  return String(error)
 }
 
 export async function POST(
@@ -124,11 +175,26 @@ export async function POST(
       try {
         const body = await request.json().catch(() => ({}))
         const skipImages = Boolean(body?.skipImages)
+        const onlyPrintCodes = Array.isArray(body?.onlyPrintCodes)
+          ? new Set(
+              body.onlyPrintCodes
+                .map((value: unknown) =>
+                  normalizePrintCode(
+                    typeof value === 'string' ? value : String(value || '')
+                  )
+                )
+                .filter(Boolean)
+            )
+          : null
 
         const { code } = await context.params
+        const normalizedImportCode = normalizeSetCode(code)
         push(`Import du set ${code}`)
         if (skipImages) {
           push('Mode rechargement: sans upload d images')
+        }
+        if (onlyPrintCodes && onlyPrintCodes.size > 0) {
+          push(`Mode import cible: ${onlyPrintCodes.size} print(s) selectionne(s)`)
         }
 
         const apiCode = formatApiCode(code)
@@ -177,10 +243,11 @@ export async function POST(
         let skippedInvalidPrints = 0
         let skippedWrongSet = 0
         let skippedImageUploads = 0
+        let skippedNotSelected = 0
 
         for (const card of apiCards) {
           const apiSetCode = normalizeSetCode(card?.set_id)
-          if (apiSetCode && apiSetCode !== code.toUpperCase()) {
+          if (apiSetCode && apiSetCode !== normalizedImportCode) {
             skippedWrongSet += 1
             push(
               `SKIP hors set ${code}: ${card?.card_image_id || card?.card_set_id || 'inconnu'} (set_id=${card?.set_id})`
@@ -195,10 +262,41 @@ export async function POST(
           }
 
           const baseCode = card.card_set_id
-          const number = extractNumber(baseCode)
-          const { variant: variantFromName, cleanName } = parseCardName(
+          const imageUrl = card.card_image?.toString().trim()
+          const { variant: variantFromName, cleanName, variantTag } = parseCardName(
             card.card_name || ''
           )
+          const resolved = resolvePrintCode({
+            providedPrintCode: card.card_image_id?.toString().trim(),
+            imageUrl,
+            baseCode,
+            setCode: normalizedImportCode,
+            variantTag
+          })
+          const printCode = resolved.printCode
+
+          if (resolved.source === 'image_url') {
+            push(
+              `card_image_id manquant pour ${baseCode}: print_code deduit de l URL (${printCode})`
+            )
+          }
+          if (resolved.source === 'fallback_set_scoped') {
+            push(
+              `card_image_id/image manquant pour ${baseCode}: fallback print_code=${printCode}`
+            )
+          }
+
+          const normalizedPrintCode = normalizePrintCode(printCode)
+          if (
+            onlyPrintCodes &&
+            onlyPrintCodes.size > 0 &&
+            !onlyPrintCodes.has(normalizedPrintCode)
+          ) {
+            skippedNotSelected += 1
+            continue
+          }
+
+          const number = extractNumber(baseCode)
 
           let { data: existingCard } = await supabase
             .from('cards')
@@ -236,17 +334,6 @@ export async function POST(
             )
           }
 
-          const imageUrl = card.card_image?.toString().trim()
-          let printCode = card.card_image_id?.toString().trim()
-          if (!printCode) {
-            const fromImageUrl = extractPrintCodeFromImageUrl(imageUrl)
-            if (fromImageUrl) {
-              printCode = fromImageUrl
-              push(
-                `card_image_id manquant pour ${baseCode}: print_code deduit de l URL (${printCode})`
-              )
-            }
-          }
           const suffix = (printCode || '').split('_')[1] || ''
           const variant =
             variantFromName !== 'normal'
@@ -254,14 +341,6 @@ export async function POST(
               : /^p\d+$/i.test(suffix)
                 ? 'Parallel'
                 : 'normal'
-
-          if (!printCode) {
-            // Keep importing even without image id by falling back to base code.
-            printCode = baseCode
-            push(
-              `card_image_id manquant pour ${baseCode}: fallback print_code=${printCode}`
-            )
-          }
 
           if (!skipImages && !imageUrl) {
             push(`Image manquante pour ${printCode}: placeholder utilise`)
@@ -277,8 +356,8 @@ export async function POST(
 
             try {
               await uploadImageToSupabase(imageUrl, fileName)
-            } catch (imgError: any) {
-              push(`Erreur image ${printCode}: ${imgError.message}`)
+            } catch (imgError: unknown) {
+              push(`Erreur image ${printCode}: ${toErrorMessage(imgError)}`)
               finalImagePath = MISSING_IMAGE_PATH
             }
           } else if (!skipImages && !imageUrl) {
@@ -316,9 +395,12 @@ export async function POST(
         if (skipImages) {
           push(`Resume: ${skippedImageUploads} image(s) non upload (mode sans images)`)
         }
+        if (onlyPrintCodes && onlyPrintCodes.size > 0) {
+          push(`Resume: ${skippedNotSelected} print(s) ignore(s) (non selectionnes)`)
+        }
         push('Import termine avec succes')
-      } catch (error: any) {
-        push(`Erreur serveur: ${error.message}`)
+      } catch (error: unknown) {
+        push(`Erreur serveur: ${toErrorMessage(error)}`)
       } finally {
         controller.close()
       }

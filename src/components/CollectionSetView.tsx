@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 import { useAuth } from '@/lib/auth'
 import { DEFAULT_LOCALE } from '@/lib/locale'
@@ -75,31 +76,102 @@ type Props = {
   ownerUserId?: string | null
   editable?: boolean
   title?: string
+  shareToken?: string | null
+}
+
+function normalizeSetCode(value: string) {
+  return value.trim().toUpperCase().replace(/-/g, '')
+}
+
+function parseSortKey(value: string | null): SortKey {
+  if (value === 'name' || value === 'rarity' || value === 'type') return value
+  return 'number'
+}
+
+function parseSortDirection(value: string | null): SortDirection {
+  return value === 'desc' ? 'desc' : 'asc'
+}
+
+function parseAltFilter(value: string | null): AltFilter {
+  if (value === 'normal' || value === 'alt') return value
+  return 'all'
+}
+
+function parseBoolFlag(value: string | null, fallback = true) {
+  if (value === '0') return false
+  if (value === '1') return true
+  return fallback
+}
+
+function buildViewQuery(params: {
+  searchQuery: string
+  rarityFilter: string
+  typeFilter: string
+  altFilter: AltFilter
+  altTypeFilter: string
+  sortKey: SortKey
+  sortDirection: SortDirection
+  showOwned: boolean
+  showMissing: boolean
+}) {
+  const q = new URLSearchParams()
+  if (params.searchQuery) q.set('q', params.searchQuery)
+  if (params.rarityFilter !== 'all') q.set('rarity', params.rarityFilter)
+  if (params.typeFilter !== 'all') q.set('type', params.typeFilter)
+  if (params.altFilter !== 'all') q.set('alt', params.altFilter)
+  if (params.altTypeFilter !== 'all') q.set('altType', params.altTypeFilter)
+  if (params.sortKey !== 'number') q.set('sort', params.sortKey)
+  if (params.sortDirection !== 'asc') q.set('dir', params.sortDirection)
+  if (!params.showOwned) q.set('owned', '0')
+  if (!params.showMissing) q.set('missing', '0')
+  return q.toString()
 }
 
 export function CollectionSetView({
   code,
   ownerUserId = null,
   editable = true,
-  title
+  title,
+  shareToken = null
 }: Props) {
   const { user } = useAuth()
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const initialQuery = searchParams.toString()
   const resolvedOwnerId = ownerUserId || user?.id || null
   const canEdit = Boolean(editable && user?.id && user.id === resolvedOwnerId)
+  const isSharedView = Boolean(shareToken)
 
   const [items, setItems] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedImage, setSelectedImage] = useState<string | null>(null)
 
-  const [sortKey, setSortKey] = useState<SortKey>('number')
-  const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
-  const [searchQuery, setSearchQuery] = useState('')
-  const [rarityFilter, setRarityFilter] = useState('all')
-  const [typeFilter, setTypeFilter] = useState('all')
-  const [altFilter, setAltFilter] = useState<AltFilter>('all')
-  const [altTypeFilter, setAltTypeFilter] = useState('all')
-  const [showOwned, setShowOwned] = useState(true)
-  const [showMissing, setShowMissing] = useState(true)
+  const [sortKey, setSortKey] = useState<SortKey>(() =>
+    parseSortKey(searchParams.get('sort'))
+  )
+  const [sortDirection, setSortDirection] = useState<SortDirection>(() =>
+    parseSortDirection(searchParams.get('dir'))
+  )
+  const [searchQuery, setSearchQuery] = useState(() => searchParams.get('q') || '')
+  const [rarityFilter, setRarityFilter] = useState(
+    () => searchParams.get('rarity') || 'all'
+  )
+  const [typeFilter, setTypeFilter] = useState(
+    () => searchParams.get('type') || 'all'
+  )
+  const [altFilter, setAltFilter] = useState<AltFilter>(() =>
+    parseAltFilter(searchParams.get('alt'))
+  )
+  const [altTypeFilter, setAltTypeFilter] = useState(
+    () => searchParams.get('altType') || 'all'
+  )
+  const [showOwned, setShowOwned] = useState(() =>
+    parseBoolFlag(searchParams.get('owned'), true)
+  )
+  const [showMissing, setShowMissing] = useState(() =>
+    parseBoolFlag(searchParams.get('missing'), true)
+  )
   const [priceLoading, setPriceLoading] = useState(false)
   const [priceError, setPriceError] = useState<string | null>(null)
   const [ownedCollectionValue, setOwnedCollectionValue] = useState<number | null>(
@@ -108,10 +180,27 @@ export function CollectionSetView({
   const [pricedOwnedCount, setPricedOwnedCount] = useState(0)
   const [priceDetails, setPriceDetails] = useState<PriceDetail[]>([])
   const [showPriceDetails, setShowPriceDetails] = useState(false)
+  const [shareMessage, setShareMessage] = useState<string | null>(null)
 
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true)
+
+      if (shareToken) {
+        const res = await fetch(
+          `/api/share/set/${encodeURIComponent(shareToken)}/${normalizeSetCode(code)}`
+        )
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) {
+          setItems([])
+          setLoading(false)
+          return
+        }
+
+        setItems(data?.items || [])
+        setLoading(false)
+        return
+      }
 
       const { data: setData } = await supabase
         .from('sets')
@@ -180,7 +269,7 @@ export function CollectionSetView({
     }
 
     fetchData()
-  }, [code, resolvedOwnerId])
+  }, [code, resolvedOwnerId, shareToken])
 
 
   const filterOptions = useMemo(() => getFilterOptions(items), [items])
@@ -333,6 +422,87 @@ export function CollectionSetView({
       setPriceDetails([])
     } finally {
       setPriceLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    const queryString = buildViewQuery({
+      searchQuery,
+      rarityFilter,
+      typeFilter,
+      altFilter,
+      altTypeFilter,
+      sortKey,
+      sortDirection,
+      showOwned,
+      showMissing
+    })
+    if (queryString === initialQuery) return
+    router.replace(queryString ? `${pathname}?${queryString}` : pathname, {
+      scroll: false
+    })
+  }, [
+    altFilter,
+    altTypeFilter,
+    initialQuery,
+    pathname,
+    rarityFilter,
+    router,
+    searchQuery,
+    showMissing,
+    showOwned,
+    sortDirection,
+    sortKey,
+    typeFilter
+  ])
+
+  const copyShareLink = async () => {
+    if (!canEdit) return
+
+    setShareMessage(null)
+
+    const queryString = buildViewQuery({
+      searchQuery,
+      rarityFilter,
+      typeFilter,
+      altFilter,
+      altTypeFilter,
+      sortKey,
+      sortDirection,
+      showOwned,
+      showMissing
+    })
+
+    const { data } = await supabase.auth.getSession()
+    const accessToken = data.session?.access_token
+    if (!accessToken) {
+      setShareMessage('Session invalide. Reconnecte-toi.')
+      return
+    }
+
+    const res = await fetch('/api/share/set-link', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        setCode: code,
+        queryString
+      })
+    })
+    const payload = await res.json().catch(() => ({}))
+
+    if (!res.ok || !payload?.shareUrl) {
+      setShareMessage(payload?.error || 'Impossible de generer le lien')
+      return
+    }
+
+    try {
+      await navigator.clipboard.writeText(payload.shareUrl)
+      setShareMessage('Lien copie dans le presse-papiers.')
+    } catch {
+      setShareMessage(`Copie manuelle: ${payload.shareUrl}`)
     }
   }
 
@@ -589,6 +759,21 @@ export function CollectionSetView({
           {sortedItems.length} / {items.length}
         </div>
 
+        {canEdit && (
+          <button
+            onClick={copyShareLink}
+            style={{
+              padding: '8px 12px',
+              borderRadius: 8,
+              border: '1px solid #cbd5e1',
+              background: '#ffffff',
+              cursor: 'pointer'
+            }}
+          >
+            Copier lien de partage
+          </button>
+        )}
+
         <button
           onClick={calculateCollectionValue}
           disabled={priceLoading || ownedItemsAll.length === 0}
@@ -627,6 +812,14 @@ export function CollectionSetView({
         )}
 
         {priceError && <div style={{ fontSize: 12, color: '#b91c1c' }}>{priceError}</div>}
+        {shareMessage && (
+          <div style={{ fontSize: 12, color: '#0f766e' }}>{shareMessage}</div>
+        )}
+        {isSharedView && (
+          <div style={{ fontSize: 12, color: '#334155' }}>
+            Vue partagee en lecture seule
+          </div>
+        )}
       </div>
 
       <div style={{ marginBottom: 16 }}>

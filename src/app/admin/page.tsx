@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { supabase } from '@/lib/supabaseClient'
 import { useAuth } from '@/lib/auth'
 import { isAdminEmail, parseAdminEmails } from '@/lib/admin'
@@ -160,6 +161,35 @@ export default function AdminPage() {
                 >
                   Recharger sans images
                 </button>
+
+                <button
+                  onClick={() => importSet(code)}
+                  style={{
+                    background: '#0ea5e9',
+                    color: '#fff',
+                    border: 'none',
+                    padding: '4px 8px',
+                    borderRadius: 4
+                  }}
+                >
+                  Mise a jour (avec images)
+                </button>
+
+                <Link
+                  href={`/admin/import-missing/${code}`}
+                  style={{
+                    background: '#0f766e',
+                    color: '#fff',
+                    border: 'none',
+                    padding: '4px 8px',
+                    borderRadius: 4,
+                    textDecoration: 'none',
+                    display: 'inline-flex',
+                    alignItems: 'center'
+                  }}
+                >
+                  Importer manquantes
+                </Link>
 
                 <button
                   onClick={() => deleteSet(code)}

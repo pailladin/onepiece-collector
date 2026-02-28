@@ -38,48 +38,74 @@ export async function POST(
       .single()
 
     if (!setData) {
-      logs.push('Set non trouvé')
+      logs.push('Set non trouve')
       return NextResponse.json({ logs })
     }
 
     const setId = setData.id
 
-    // Récupération des cards du set
     const { data: cards } = await supabase
       .from('cards')
       .select('id')
       .eq('base_set_id', setId)
-
     const cardIds = cards?.map((c) => c.id) || []
+    logs.push(`${cardIds.length} cartes trouvees`)
 
-    logs.push(`${cardIds.length} cartes trouvées`)
+    const { data: printsData, error: printsError } = await supabase
+      .from('card_prints')
+      .select('id')
+      .eq('distribution_set_id', setId)
 
-    // 1️⃣ Supprimer les prints
-    await supabase.from('card_prints').delete().eq('distribution_set_id', setId)
-
-    logs.push('Prints supprimés')
-
-    // 2️⃣ Supprimer traductions
-    if (cardIds.length > 0) {
-      await supabase.from('card_translations').delete().in('card_id', cardIds)
-
-      logs.push('Traductions supprimées')
-
-      await supabase.from('cards').delete().in('id', cardIds)
-
-      logs.push('Cartes supprimées')
+    if (printsError) {
+      logs.push(`Erreur lecture prints: ${printsError.message}`)
+      return NextResponse.json({ logs }, { status: 500 })
     }
 
-    // 3️⃣ Supprimer le set
+    const printIds = (printsData || []).map((p) => p.id)
+    logs.push(`${printIds.length} prints trouves`)
+
+    if (printIds.length > 0) {
+      const { count: linkedCollectionsCount, error: collectionsError } = await supabase
+        .from('collections')
+        .select('id', { head: true, count: 'exact' })
+        .in('card_print_id', printIds)
+
+      if (collectionsError) {
+        logs.push(`Erreur verification collections: ${collectionsError.message}`)
+        return NextResponse.json({ logs }, { status: 500 })
+      }
+
+      if ((linkedCollectionsCount || 0) > 0) {
+        logs.push(
+          `Suppression annulee: ${linkedCollectionsCount} entree(s) de collection liee(s) au set.`
+        )
+        logs.push(
+          'Pour eviter toute perte de collection, utilisez "Importer" ou "Importer manquantes".'
+        )
+        return NextResponse.json({ logs }, { status: 409 })
+      }
+    }
+
+    // Aucun lien de collection: suppression complete autorisee.
+    await supabase.from('card_prints').delete().eq('distribution_set_id', setId)
+    logs.push('Prints supprimes')
+
+    if (cardIds.length > 0) {
+      await supabase.from('card_translations').delete().in('card_id', cardIds)
+      logs.push('Traductions supprimees')
+
+      await supabase.from('cards').delete().in('id', cardIds)
+      logs.push('Cartes supprimees')
+    }
+
     await supabase.from('sets').delete().eq('id', setId)
-
-    logs.push('Set supprimé')
-
-    logs.push('Suppression terminée')
+    logs.push('Set supprime')
+    logs.push('Suppression terminee')
 
     return NextResponse.json({ logs })
-  } catch (error: any) {
-    logs.push(`Erreur: ${error.message}`)
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error)
+    logs.push(`Erreur: ${message}`)
     return NextResponse.json({ logs }, { status: 500 })
   }
 }
