@@ -40,16 +40,16 @@ export default function ImportMissingCardsPage() {
   const [logs, setLogs] = useState<string[]>([])
   const [isImporting, setIsImporting] = useState(false)
   const [cardOptions, setCardOptions] = useState<SetCardOption[]>([])
-  const [selectedCardCode, setSelectedCardCode] = useState('')
+  const [selectedCardCodes, setSelectedCardCodes] = useState<Record<string, boolean>>({})
   const [isDeleting, setIsDeleting] = useState(false)
 
   const selectedPrintCodes = useMemo(
     () => Object.entries(selected).filter(([, value]) => value).map(([key]) => key),
     [selected]
   )
-  const selectedCard = useMemo(
-    () => cardOptions.find((card) => card.baseCode === selectedCardCode) || null,
-    [cardOptions, selectedCardCode]
+  const selectedCards = useMemo(
+    () => cardOptions.filter((card) => Boolean(selectedCardCodes[card.baseCode])),
+    [cardOptions, selectedCardCodes]
   )
 
   const getAuthHeader = useCallback(async () => {
@@ -99,16 +99,17 @@ export default function ImportMissingCardsPage() {
     const data = await res.json().catch(() => ({}))
     if (!res.ok) {
       setCardOptions([])
-      setSelectedCardCode('')
+      setSelectedCardCodes({})
       return
     }
 
     const cards: SetCardOption[] = data.cards || []
     setCardOptions(cards)
-    setSelectedCardCode((prev) =>
-      prev && cards.some((card) => card.baseCode === prev)
-        ? prev
-        : cards[0]?.baseCode || ''
+    setSelectedCardCodes(
+      Object.fromEntries(cards.map((card) => [card.baseCode, false])) as Record<
+        string,
+        boolean
+      >
     )
   }, [code, getAuthHeader])
 
@@ -193,12 +194,12 @@ export default function ImportMissingCardsPage() {
   }
 
   const deleteCardFromSet = async () => {
-    const targetCode = selectedCardCode.trim().toUpperCase()
-    if (!targetCode || isDeleting) return
+    const targetCodes = selectedCards.map((card) => card.baseCode.trim().toUpperCase())
+    if (targetCodes.length === 0 || isDeleting) return
 
-    const ownersCount = selectedCard?.ownersCount || 0
+    const ownersCount = selectedCards.reduce((sum, card) => sum + card.ownersCount, 0)
     const confirmed = confirm(
-      `Supprimer la carte ${targetCode} du set ${code} ?\nUtilisateurs impactes: ${ownersCount}`
+      `Supprimer ${targetCodes.length} carte(s) du set ${code} ?\nUtilisateurs impactes (somme): ${ownersCount}`
     )
     if (!confirmed) return
 
@@ -207,20 +208,35 @@ export default function ImportMissingCardsPage() {
 
     try {
       const authHeaders = await getAuthHeader()
-      const res = await fetch(`/api/admin/import-set/${code}/delete-card`, {
-        method: 'POST',
-        headers: {
-          ...authHeaders,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          mode: 'base',
-          targetCode
-        })
-      })
+      const nextLogs: string[] = []
 
-      const data = await res.json().catch(() => ({}))
-      setLogs(data?.logs || [data?.error || 'Erreur inconnue'])
+      for (const targetCode of targetCodes) {
+        nextLogs.push(`--- Suppression ${targetCode} ---`)
+        const res = await fetch(`/api/admin/import-set/${code}/delete-card`, {
+          method: 'POST',
+          headers: {
+            ...authHeaders,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            mode: 'base',
+            targetCode
+          })
+        })
+
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) {
+          nextLogs.push(data?.error || 'Erreur inconnue')
+        }
+        const entryLogs = Array.isArray(data?.logs) ? data.logs : []
+        if (entryLogs.length === 0 && res.ok) {
+          nextLogs.push('Suppression terminee')
+        } else {
+          nextLogs.push(...entryLogs)
+        }
+      }
+
+      setLogs(nextLogs)
 
       await loadSetCards()
       await loadMissingCards({ keepLogs: true })
@@ -321,40 +337,73 @@ export default function ImportMissingCardsPage() {
         }}
       >
         <h2 style={{ margin: '0 0 10px' }}>Supprimer une carte du set</h2>
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-          <select
-            value={selectedCardCode}
-            onChange={(e) => setSelectedCardCode(e.target.value)}
-            style={{ minWidth: 340 }}
-          >
-            {cardOptions.map((card) => (
-              <option key={card.id} value={card.baseCode}>
-                {card.baseCode} - {card.name} ({card.ownersCount} collections)
-              </option>
-            ))}
-          </select>
-
-          <div style={{ fontSize: 13, color: '#334155' }}>
-            {selectedCard
-              ? `Numero ${selectedCard.number || '-'} - ${selectedCard.ownersCount} possesseur(s) - ${selectedCard.printsCount} print(s)`
-              : 'Aucune carte'}
-          </div>
-
-          <button
-            onClick={deleteCardFromSet}
-            disabled={!selectedCardCode.trim() || isDeleting}
-            style={{
-              background: '#b91c1c',
-              color: '#fff',
-              border: 'none',
-              padding: '6px 10px',
-              borderRadius: 4,
-              opacity: !selectedCardCode.trim() || isDeleting ? 0.5 : 1
-            }}
-          >
-            {isDeleting ? 'Suppression...' : 'Supprimer'}
-          </button>
+        <div style={{ marginBottom: 10, fontSize: 13, color: '#334155' }}>
+          {selectedCards.length} carte(s) selectionnee(s)
         </div>
+        <div
+          style={{
+            border: '1px solid #ddd',
+            borderRadius: 6,
+            maxHeight: 280,
+            overflowY: 'auto',
+            marginBottom: 10
+          }}
+        >
+          {cardOptions.length === 0 ? (
+            <div style={{ padding: 12 }}>Aucune carte.</div>
+          ) : (
+            cardOptions.map((card) => (
+              <label
+                key={card.id}
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '24px 1fr',
+                  gap: 8,
+                  alignItems: 'start',
+                  padding: '8px 10px',
+                  borderBottom: '1px solid #eee'
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={Boolean(selectedCardCodes[card.baseCode])}
+                  onChange={(e) =>
+                    setSelectedCardCodes((prev) => ({
+                      ...prev,
+                      [card.baseCode]: e.target.checked
+                    }))
+                  }
+                />
+                <div>
+                  <div>
+                    <code>{card.baseCode}</code> - {card.name}
+                  </div>
+                  <div style={{ fontSize: 12, color: '#666' }}>
+                    Numero {card.number || '-'} - {card.ownersCount} possesseur(s) -{' '}
+                    {card.printsCount} print(s)
+                  </div>
+                </div>
+              </label>
+            ))
+          )}
+        </div>
+
+        <button
+          onClick={deleteCardFromSet}
+          disabled={selectedCards.length === 0 || isDeleting}
+          style={{
+            background: '#b91c1c',
+            color: '#fff',
+            border: 'none',
+            padding: '6px 10px',
+            borderRadius: 4,
+            opacity: selectedCards.length === 0 || isDeleting ? 0.5 : 1
+          }}
+        >
+          {isDeleting
+            ? 'Suppression...'
+            : `Supprimer la selection (${selectedCards.length})`}
+        </button>
       </div>
 
       <div>

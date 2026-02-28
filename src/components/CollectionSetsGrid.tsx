@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import type { ReactNode } from 'react'
 import type { SetRow, SetStats } from '@/lib/collections/fetchUserSetStats'
 
 const STORAGE_BASE_URL =
@@ -11,14 +12,30 @@ type Props = {
   sets: SetRow[]
   stats: Record<string, SetStats>
   getSetHref: (setCode: string) => string
+  headerActions?: ReactNode
 }
 
-export function CollectionSetsGrid({ title, sets, stats, getSetHref }: Props) {
+export function CollectionSetsGrid({
+  title,
+  sets,
+  stats,
+  getSetHref,
+  headerActions
+}: Props) {
   return (
     <div style={{ padding: 40 }}>
-      <h1 style={{ fontSize: 24, fontWeight: 'bold', marginBottom: 30 }}>
-        {title}
-      </h1>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: 12,
+          marginBottom: 30
+        }}
+      >
+        <h1 style={{ fontSize: 24, fontWeight: 'bold', margin: 0 }}>{title}</h1>
+        {headerActions}
+      </div>
 
       <div
         style={{

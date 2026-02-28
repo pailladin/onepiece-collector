@@ -40,7 +40,7 @@ export async function GET(
 
     for (const card of cards) {
       const key = normalizePrintCode(card?.card_image_id)
-      const price = Number(card?.market_price)
+      const price = Number(card?.inventory_price)
       if (!key || !Number.isFinite(price)) continue
       prices[key] = price
     }

@@ -16,6 +16,7 @@ export type SetStats = {
 export type SetRow = {
   id: string
   code: string
+  name: string
 }
 
 type CardPrintSetRow = {
