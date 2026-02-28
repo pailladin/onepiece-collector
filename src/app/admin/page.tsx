@@ -104,8 +104,8 @@ export default function AdminPage() {
     await loadData()
   }
 
-  const deleteSet = async (code: string) => {
-    if (!confirm(`Supprimer le set ${code} ?`)) return
+  const deleteSet = async (code: string, forceDelete = false) => {
+    if (!forceDelete && !confirm(`Supprimer le set ${code} ?`)) return
 
     setLogs([])
     setShowModal(true)
@@ -113,11 +113,25 @@ export default function AdminPage() {
     const authHeaders = await getAuthHeader()
     const res = await fetch(`/api/admin/delete-set/${code}`, {
       method: 'POST',
-      headers: authHeaders
+      headers: {
+        ...authHeaders,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ forceDelete })
     })
 
     const data = await res.json()
     setLogs(data.logs || ['Erreur inconnue'])
+
+    if (res.status === 409 && !forceDelete) {
+      const confirmForce = confirm(
+        `Le set ${code} a des cartes dans des collections. Forcer la suppression et supprimer aussi ces entrees ?`
+      )
+      if (confirmForce) {
+        await deleteSet(code, true)
+        return
+      }
+    }
 
     await loadData()
   }

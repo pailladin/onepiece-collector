@@ -77,6 +77,27 @@ function resolvePrintCode(params: {
     : `${params.baseCode}_${params.setCode}`
 }
 
+async function ensureSetScopedPrintCode(params: {
+  printCode: string
+  setId: string
+  setCode: string
+}) {
+  const normalized = normalizePrintCode(params.printCode)
+  if (!normalized) return normalized
+
+  const { data: existing } = await supabase
+    .from('card_prints')
+    .select('distribution_set_id')
+    .eq('print_code', normalized)
+    .maybeSingle()
+
+  if (!existing || existing.distribution_set_id === params.setId) {
+    return normalized
+  }
+
+  return `${normalized}_${params.setCode}`
+}
+
 export async function GET(
   request: Request,
   context: { params: Promise<{ code: string }> }
@@ -149,12 +170,17 @@ export async function GET(
     if (!card?.card_set_id) continue
 
     const imageUrl = card?.card_image?.toString().trim()
-    const printCode = resolvePrintCode({
+    const basePrintCode = resolvePrintCode({
       providedPrintCode: card?.card_image_id?.toString().trim(),
       imageUrl,
       baseCode: card.card_set_id,
       setCode: normalizedCode,
       variantTag: extractVariantTag(card?.card_name)
+    })
+    const printCode = await ensureSetScopedPrintCode({
+      printCode: basePrintCode,
+      setId: setData.id,
+      setCode: normalizedCode
     })
 
     const normalizedPrint = normalizePrintCode(printCode)

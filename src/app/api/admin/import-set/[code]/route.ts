@@ -144,6 +144,39 @@ function toErrorMessage(error: unknown) {
   return String(error)
 }
 
+async function ensureSetScopedPrintCode(params: {
+  printCode: string
+  setId: string
+  setCode: string
+  push: (message: string) => void
+}) {
+  const normalized = normalizePrintCode(params.printCode)
+  if (!normalized) return normalized
+
+  const { data: existing, error } = await supabase
+    .from('card_prints')
+    .select('distribution_set_id')
+    .eq('print_code', normalized)
+    .maybeSingle()
+
+  if (error) {
+    params.push(
+      `Warning verification conflit print_code ${normalized}: ${error.message}`
+    )
+    return normalized
+  }
+
+  if (!existing || existing.distribution_set_id === params.setId) {
+    return normalized
+  }
+
+  const scopedCode = `${normalized}_${params.setCode}`
+  params.push(
+    `Conflit print_code ${normalized} (autre set): utilisation de ${scopedCode}`
+  )
+  return scopedCode
+}
+
 export async function POST(
   request: Request,
   context: { params: Promise<{ code: string }> }
@@ -273,7 +306,12 @@ export async function POST(
             setCode: normalizedImportCode,
             variantTag
           })
-          const printCode = resolved.printCode
+          const printCode = await ensureSetScopedPrintCode({
+            printCode: resolved.printCode,
+            setId,
+            setCode: normalizedImportCode,
+            push
+          })
 
           if (resolved.source === 'image_url') {
             push(

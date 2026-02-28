@@ -62,7 +62,7 @@ export function CollectionSetsGrid({ title, sets, stats, getSetHref }: Props) {
                 </div>
 
                 <div style={{ marginTop: 10 }}>
-                  {stat?.owned} / {stat?.total}
+                  Total: {stat?.owned} / {stat?.total}
                 </div>
 
                 <div
@@ -85,6 +85,48 @@ export function CollectionSetsGrid({ title, sets, stats, getSetHref }: Props) {
 
                 <div style={{ marginTop: 5, fontSize: 12 }}>
                   {stat?.percent}% complete
+                </div>
+
+                <div style={{ marginTop: 10, fontSize: 12, color: '#334155' }}>
+                  Normales: {stat?.ownedNormal || 0} / {stat?.totalNormal || 0}
+                </div>
+                <div
+                  style={{
+                    marginTop: 6,
+                    height: 6,
+                    background: '#e2e8f0',
+                    borderRadius: 4,
+                  }}
+                >
+                  <div
+                    style={{
+                      width: `${stat?.percentNormal || 0}%`,
+                      height: '100%',
+                      background: '#16a34a',
+                      borderRadius: 4,
+                    }}
+                  />
+                </div>
+
+                <div style={{ marginTop: 8, fontSize: 12, color: '#334155' }}>
+                  Alternatives: {stat?.ownedAlt || 0} / {stat?.totalAlt || 0}
+                </div>
+                <div
+                  style={{
+                    marginTop: 6,
+                    height: 6,
+                    background: '#e2e8f0',
+                    borderRadius: 4,
+                  }}
+                >
+                  <div
+                    style={{
+                      width: `${stat?.percentAlt || 0}%`,
+                      height: '100%',
+                      background: '#7c3aed',
+                      borderRadius: 4,
+                    }}
+                  />
                 </div>
               </div>
             </Link>

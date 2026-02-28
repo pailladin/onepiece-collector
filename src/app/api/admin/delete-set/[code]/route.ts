@@ -26,6 +26,8 @@ export async function POST(
   }
 
   const { code } = await context.params
+  const body = await request.json().catch(() => ({}))
+  const forceDelete = Boolean(body?.forceDelete)
   const logs: string[] = []
 
   try {
@@ -65,9 +67,9 @@ export async function POST(
     logs.push(`${printIds.length} prints trouves`)
 
     if (printIds.length > 0) {
-      const { count: linkedCollectionsCount, error: collectionsError } = await supabase
+      const { data: linkedCollections, error: collectionsError } = await supabase
         .from('collections')
-        .select('id', { head: true, count: 'exact' })
+        .select('user_id, quantity')
         .in('card_print_id', printIds)
 
       if (collectionsError) {
@@ -75,14 +77,25 @@ export async function POST(
         return NextResponse.json({ logs }, { status: 500 })
       }
 
-      if ((linkedCollectionsCount || 0) > 0) {
+      const collectionRows = linkedCollections || []
+      const positiveRows = collectionRows.filter((row) => (row.quantity || 0) > 0)
+      const positiveUsers = new Set(positiveRows.map((row) => row.user_id)).size
+
+      if (positiveRows.length > 0 && !forceDelete) {
         logs.push(
-          `Suppression annulee: ${linkedCollectionsCount} entree(s) de collection liee(s) au set.`
+          `Suppression annulee: ${positiveRows.length} entree(s) de collection avec quantite > 0 (${positiveUsers} utilisateur(s)).`
         )
         logs.push(
-          'Pour eviter toute perte de collection, utilisez "Importer" ou "Importer manquantes".'
+          'Confirmez une suppression forcee si vous voulez supprimer aussi ces entrees de collection.'
         )
         return NextResponse.json({ logs }, { status: 409 })
+      }
+
+      if (forceDelete && collectionRows.length > 0) {
+        await supabase.from('collections').delete().in('card_print_id', printIds)
+        logs.push(
+          `Mode force: ${collectionRows.length} entree(s) de collection supprimee(s).`
+        )
       }
     }
 
