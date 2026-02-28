@@ -137,70 +137,154 @@ export default function FriendsPage() {
   }
 
   return (
-    <div style={{ padding: 40, display: 'grid', gap: 28 }}>
-      <section>
-        <h1 style={{ marginTop: 0 }}>Amis</h1>
-        <p style={{ marginTop: 4 }}>
-          Definis ton pseudo, puis ajoute des amis pour voir leur collection.
+    <div
+      style={{
+        minHeight: '100vh',
+        padding: '18px 28px 28px',
+        background:
+          'radial-gradient(circle at 12% 8%, #fff4e6 0%, #e0f2fe 40%, #eef2ff 100%)',
+        display: 'grid',
+        gap: 12,
+        alignContent: 'start'
+      }}
+    >
+      <section
+        style={{
+          border: '1px solid #cfe4ff',
+          borderRadius: 14,
+          background: 'linear-gradient(145deg, #ffffff 0%, #eff6ff 100%)',
+          padding: 14
+        }}
+      >
+        <h1 style={{ margin: 0, fontSize: 30, color: '#0f172a' }}>Amis</h1>
+        <p style={{ marginTop: 8, color: '#475569' }}>
+          Definis ton pseudo, ajoute des amis et compare vos collections pour preparer
+          vos echanges.
         </p>
       </section>
 
-      <section style={{ border: '1px solid #e2e8f0', borderRadius: 10, padding: 16 }}>
-        <h2 style={{ marginTop: 0 }}>Mon pseudo</h2>
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'minmax(280px, 1fr) minmax(320px, 1.2fr)',
+          gap: 12
+        }}
+      >
+        <section
+          style={{
+            border: '1px solid #d1d5db',
+            borderRadius: 12,
+            padding: 12,
+            background: '#ffffffd1'
+          }}
+        >
+          <h2 style={{ marginTop: 0, marginBottom: 10, color: '#0f172a' }}>Mon pseudo</h2>
+          <div style={{ display: 'grid', gap: 8 }}>
+            <input
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="Pseudo (min 3 caracteres)"
+              style={{
+                width: '100%',
+                boxSizing: 'border-box',
+                padding: '9px 10px',
+                borderRadius: 8,
+                border: '1px solid #cbd5e1'
+              }}
+            />
+            <button
+              onClick={saveUsername}
+              disabled={!canSaveUsername}
+              style={{
+                width: 'fit-content',
+                background: '#0ea5e9',
+                color: '#fff',
+                border: 'none',
+                borderRadius: 8,
+                padding: '8px 12px',
+                opacity: !canSaveUsername ? 0.6 : 1,
+                cursor: !canSaveUsername ? 'not-allowed' : 'pointer'
+              }}
+            >
+              Enregistrer
+            </button>
+          </div>
+        </section>
+
+        <section
+          style={{
+            border: '1px solid #d1d5db',
+            borderRadius: 12,
+            padding: 12,
+            background: '#ffffffd1'
+          }}
+        >
+          <h2 style={{ marginTop: 0, marginBottom: 10, color: '#0f172a' }}>Recherche de joueurs</h2>
           <input
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            placeholder="Pseudo (min 3 caracteres)"
-            style={{ minWidth: 260, padding: '8px 10px' }}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Rechercher un pseudo (min 2 caracteres)"
+            style={{
+              width: '100%',
+              boxSizing: 'border-box',
+              padding: '9px 10px',
+              borderRadius: 8,
+              border: '1px solid #cbd5e1'
+            }}
           />
-          <button onClick={saveUsername} disabled={!canSaveUsername}>
-            Enregistrer
-          </button>
-        </div>
-      </section>
 
-      <section style={{ border: '1px solid #e2e8f0', borderRadius: 10, padding: 16 }}>
-        <h2 style={{ marginTop: 0 }}>Recherche de joueurs</h2>
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Rechercher un pseudo"
-          style={{ minWidth: 260, padding: '8px 10px' }}
-        />
-
-        <div style={{ marginTop: 12, display: 'grid', gap: 8 }}>
-          {searchResults.map((profile) => {
-            const alreadyFriend = friendIds.has(profile.id)
-            return (
-              <div
-                key={profile.id}
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  border: '1px solid #e2e8f0',
-                  borderRadius: 8,
-                  padding: '10px 12px'
-                }}
-              >
-                <div>{profile.username}</div>
-                <button
-                  disabled={alreadyFriend}
-                  onClick={() => addFriend(profile.id)}
+          <div style={{ marginTop: 10, display: 'grid', gap: 8 }}>
+            {search.trim().length >= 2 && searchResults.length === 0 && (
+              <div style={{ fontSize: 13, color: '#64748b' }}>Aucun resultat.</div>
+            )}
+            {searchResults.map((profile) => {
+              const alreadyFriend = friendIds.has(profile.id)
+              return (
+                <div
+                  key={profile.id}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: 8,
+                    padding: '10px 12px',
+                    background: '#fff'
+                  }}
                 >
-                  {alreadyFriend ? 'Deja ami' : 'Ajouter'}
-                </button>
-              </div>
-            )
-          })}
-        </div>
-      </section>
+                  <div style={{ fontWeight: 600, color: '#0f172a' }}>{profile.username}</div>
+                  <button
+                    disabled={alreadyFriend}
+                    onClick={() => addFriend(profile.id)}
+                    style={{
+                      background: alreadyFriend ? '#e2e8f0' : '#0f766e',
+                      color: alreadyFriend ? '#475569' : '#fff',
+                      border: 'none',
+                      borderRadius: 8,
+                      padding: '7px 10px',
+                      cursor: alreadyFriend ? 'not-allowed' : 'pointer'
+                    }}
+                  >
+                    {alreadyFriend ? 'Deja ami' : 'Ajouter'}
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        </section>
+      </div>
 
-      <section style={{ border: '1px solid #e2e8f0', borderRadius: 10, padding: 16 }}>
-        <h2 style={{ marginTop: 0 }}>Mes amis</h2>
+      <section
+        style={{
+          border: '1px solid #d1d5db',
+          borderRadius: 12,
+          padding: 12,
+          background: '#ffffffd1'
+        }}
+      >
+        <h2 style={{ marginTop: 0, marginBottom: 10, color: '#0f172a' }}>Mes amis</h2>
         {friends.length === 0 && (
-          <div>Aucun ami pour le moment.</div>
+          <div style={{ fontSize: 14, color: '#64748b' }}>Aucun ami pour le moment.</div>
         )}
         <div style={{ display: 'grid', gap: 8 }}>
           {friends.map((friend) => (
@@ -212,11 +296,12 @@ export default function FriendsPage() {
                 alignItems: 'center',
                 border: '1px solid #e2e8f0',
                 borderRadius: 8,
-                padding: '10px 12px'
+                padding: '10px 12px',
+                background: '#fff'
               }}
             >
-              <div>{friend.username}</div>
-              <div style={{ display: 'flex', gap: 12 }}>
+              <div style={{ fontWeight: 600, color: '#0f172a' }}>{friend.username}</div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 <Link href={`/friends/${friend.id}`}>Voir ses collections</Link>
                 <Link href={`/friends/${friend.id}/trade`}>Voir echanges</Link>
               </div>
@@ -225,9 +310,7 @@ export default function FriendsPage() {
         </div>
       </section>
 
-      {message && (
-        <div style={{ color: '#0f172a', fontWeight: 600 }}>{message}</div>
-      )}
+      {message && <div style={{ color: '#0f172a', fontWeight: 600 }}>{message}</div>}
     </div>
   )
 }

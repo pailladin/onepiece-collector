@@ -42,10 +42,12 @@ export default function CollectionPage() {
     return <div style={{ padding: 40 }}>Connecte-toi pour voir ta collection.</div>
   }
 
+  const visibleSets = sets.filter((set) => (stats[set.code]?.owned || 0) > 0)
+
   return (
     <CollectionSetsGrid
       title="Ma Collection"
-      sets={sets}
+      sets={visibleSets}
       stats={stats}
       getSetHref={(setCode) => `/collection/${setCode}`}
     />

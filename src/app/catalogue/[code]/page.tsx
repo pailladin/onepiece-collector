@@ -132,9 +132,7 @@ export default function CatalogueSetPage() {
           .select('*')
           .eq('user_id', user.id)
 
-        ownedMap = new Map(
-          collectionData?.map((c) => [c.card_print_id, c.quantity])
-        )
+        ownedMap = new Map(collectionData?.map((c) => [c.card_print_id, c.quantity]))
       }
 
       const cardsMap = new Map(cardsData?.map((c) => [c.id, c]))
@@ -171,12 +169,9 @@ export default function CatalogueSetPage() {
 
     return [...filteredItems].sort((a, b) => {
       const nameA =
-        a.card?.card_translations?.find((t: any) => t.locale === DEFAULT_LOCALE)
-          ?.name || ''
-
+        a.card?.card_translations?.find((t: any) => t.locale === DEFAULT_LOCALE)?.name || ''
       const nameB =
-        b.card?.card_translations?.find((t: any) => t.locale === DEFAULT_LOCALE)
-          ?.name || ''
+        b.card?.card_translations?.find((t: any) => t.locale === DEFAULT_LOCALE)?.name || ''
 
       switch (sortKey) {
         case 'number': {
@@ -197,7 +192,6 @@ export default function CatalogueSetPage() {
 
           const varA = VARIANT_PRIORITY[a.variant_type] ?? 99
           const varB = VARIANT_PRIORITY[b.variant_type] ?? 99
-
           return (varA - varB) * multiplier
         }
 
@@ -211,9 +205,7 @@ export default function CatalogueSetPage() {
         }
 
         case 'type':
-          return (
-            (a.card?.type || '').localeCompare(b.card?.type || '') * multiplier
-          )
+          return (a.card?.type || '').localeCompare(b.card?.type || '') * multiplier
 
         default:
           return 0
@@ -250,20 +242,30 @@ export default function CatalogueSetPage() {
     }
 
     setItems(
-      items.map((i) =>
-        i.id === printId ? { ...i, quantity: Math.max(newQty, 0) } : i
-      )
+      items.map((i) => (i.id === printId ? { ...i, quantity: Math.max(newQty, 0) } : i))
     )
+  }
+
+  const resetFilters = () => {
+    setSearchQuery('')
+    setRarityFilter('all')
+    setTypeFilter('all')
+    setAltFilter('all')
+    setAltTypeFilter('all')
+    setSortKey('number')
+    setSortDirection('asc')
   }
 
   if (loading) {
     return <div style={{ padding: 40 }}>Chargement...</div>
   }
 
+  const totalCount = items.length
+
   return (
     <div
       style={{
-        padding: 40,
+        padding: '18px 28px 28px',
         background:
           'radial-gradient(circle at 10% 20%, #f0f9ff 0%, #eef2ff 35%, #fff7ed 100%)',
         minHeight: '100vh'
@@ -271,9 +273,9 @@ export default function CatalogueSetPage() {
     >
       <h1
         style={{
-          fontSize: 24,
+          fontSize: 30,
           fontWeight: 'bold',
-          marginBottom: 20,
+          marginBottom: 14,
           color: '#111827'
         }}
       >
@@ -283,91 +285,140 @@ export default function CatalogueSetPage() {
       <div
         style={{
           marginBottom: 20,
-          display: 'flex',
-          gap: 12,
-          flexWrap: 'wrap',
-          alignItems: 'center'
+          display: 'grid',
+          gridTemplateColumns: 'minmax(300px, 1.6fr) minmax(180px, 0.65fr) minmax(220px, 0.9fr)',
+          gap: 12
         }}
       >
-        <input
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Recherche nom ou code"
+        <div
           style={{
-            minWidth: 220,
-            padding: '8px 10px',
-            borderRadius: 8,
-            border: '1px solid #cbd5e1'
-          }}
-        />
-
-        <select
-          value={rarityFilter}
-          onChange={(e) => setRarityFilter(e.target.value)}
-        >
-          <option value="all">Toutes raretes</option>
-          {filterOptions.rarities.map((rarity) => (
-            <option key={rarity} value={rarity}>
-              {rarity}
-            </option>
-          ))}
-        </select>
-
-        <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
-          <option value="all">Tous types</option>
-          {filterOptions.types.map((cardType) => (
-            <option key={cardType} value={cardType}>
-              {cardType}
-            </option>
-          ))}
-        </select>
-
-        <select
-          value={altFilter}
-          onChange={(e) => {
-            const value = e.target.value as AltFilter
-            setAltFilter(value)
-            if (value === 'normal') setAltTypeFilter('all')
+            border: '1px solid #d1d5db',
+            borderRadius: 12,
+            padding: 12,
+            background: '#ffffffd1'
           }}
         >
-          <option value="all">Toutes versions</option>
-          <option value="normal">Normales</option>
-          <option value="alt">Alternatives</option>
-        </select>
+          <div style={{ fontSize: 12, color: '#475569', marginBottom: 8 }}>
+            Recherche et filtres
+          </div>
+          <div style={{ display: 'grid', gap: 8 }}>
+            <input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Recherche nom, code ou variante"
+              style={{
+                width: '100%',
+                maxWidth: '100%',
+                boxSizing: 'border-box',
+                padding: '9px 10px',
+                borderRadius: 8,
+                border: '1px solid #cbd5e1'
+              }}
+            />
 
-        <select
-          value={altTypeFilter}
-          onChange={(e) => setAltTypeFilter(e.target.value)}
-          disabled={altFilter === 'normal'}
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <select value={rarityFilter} onChange={(e) => setRarityFilter(e.target.value)}>
+                <option value="all">Toutes raretes</option>
+                {filterOptions.rarities.map((rarity) => (
+                  <option key={rarity} value={rarity}>
+                    {rarity}
+                  </option>
+                ))}
+              </select>
+
+              <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+                <option value="all">Tous types</option>
+                {filterOptions.types.map((cardType) => (
+                  <option key={cardType} value={cardType}>
+                    {cardType}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={altFilter}
+                onChange={(e) => {
+                  const value = e.target.value as AltFilter
+                  setAltFilter(value)
+                  if (value === 'normal') setAltTypeFilter('all')
+                }}
+              >
+                <option value="all">Toutes versions</option>
+                <option value="normal">Normales</option>
+                <option value="alt">Alternatives</option>
+              </select>
+
+              <select
+                value={altTypeFilter}
+                onChange={(e) => setAltTypeFilter(e.target.value)}
+                disabled={altFilter === 'normal'}
+              >
+                <option value="all">Tous types alternatives</option>
+                {filterOptions.altTypes.map((altType) => (
+                  <option key={altType} value={altType}>
+                    {getAltTypeLabel(altType)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div
+          style={{
+            border: '1px solid #d1d5db',
+            borderRadius: 12,
+            padding: 12,
+            background: '#ffffffd1'
+          }}
         >
-          <option value="all">Tous types alternatives</option>
-          {filterOptions.altTypes.map((altType) => (
-            <option key={altType} value={altType}>
-              {getAltTypeLabel(altType)}
-            </option>
-          ))}
-        </select>
+          <div style={{ fontSize: 12, color: '#475569', marginBottom: 8 }}>Tri</div>
+          <div style={{ display: 'grid', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <select value={sortKey} onChange={(e) => setSortKey(e.target.value as SortKey)}>
+                <option value="number">Numero</option>
+                <option value="name">Nom</option>
+                <option value="rarity">Rarete</option>
+                <option value="type">Type</option>
+              </select>
 
-        <select
-          value={sortKey}
-          onChange={(e) => setSortKey(e.target.value as SortKey)}
+              <select
+                value={sortDirection}
+                onChange={(e) => setSortDirection(e.target.value as SortDirection)}
+              >
+                <option value="asc">Ascendant</option>
+                <option value="desc">Descendant</option>
+              </select>
+            </div>
+            <div style={{ fontSize: 12, color: '#334155' }}>
+              Resultats filtres: {sortedItems.length} / {totalCount}
+            </div>
+          </div>
+        </div>
+
+        <div
+          style={{
+            border: '1px solid #d1d5db',
+            borderRadius: 12,
+            padding: 12,
+            background: '#ffffffd1'
+          }}
         >
-          <option value="number">Numéro</option>
-          <option value="name">Nom</option>
-          <option value="rarity">Rareté</option>
-          <option value="type">Type</option>
-        </select>
-
-        <select
-          value={sortDirection}
-          onChange={(e) => setSortDirection(e.target.value as SortDirection)}
-        >
-          <option value="asc">Ascendant</option>
-          <option value="desc">Descendant</option>
-        </select>
-
-        <div style={{ fontSize: 12, color: '#334155' }}>
-          {sortedItems.length} / {items.length}
+          <div style={{ fontSize: 12, color: '#475569', marginBottom: 8 }}>Actions</div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            <button
+              onClick={resetFilters}
+              style={{
+                padding: '8px 12px',
+                borderRadius: 8,
+                border: '1px solid #cbd5e1',
+                background: '#ffffff',
+                cursor: 'pointer'
+              }}
+            >
+              Reinitialiser filtres
+            </button>
+          </div>
         </div>
       </div>
 
@@ -382,9 +433,7 @@ export default function CatalogueSetPage() {
           const translation = item.card?.card_translations?.find(
             (t: any) => t.locale === DEFAULT_LOCALE
           )
-
-          const hasImagePath =
-            Boolean(item.image_path) && item.image_path !== MISSING_IMAGE_PATH
+          const hasImagePath = Boolean(item.image_path) && item.image_path !== MISSING_IMAGE_PATH
           const imageUrl = hasImagePath
             ? `${STORAGE_BASE_URL}/${code}/${item.image_path}`
             : CARD_PLACEHOLDER_IMAGE
@@ -431,8 +480,8 @@ export default function CatalogueSetPage() {
                     color: '#fff',
                     borderRadius: 999,
                     padding: '3px 8px'
-                }}
-              >
+                  }}
+                >
                   {altBadgeLabel}
                 </div>
               )}
@@ -454,22 +503,17 @@ export default function CatalogueSetPage() {
               />
 
               <div style={{ fontWeight: 'bold' }}>{getDisplayPrintCode(item)}</div>
-
               <div>{translation?.name}</div>
 
               <div style={{ fontSize: 12 }}>
-                <strong>{item.card?.rarity}</strong> • {item.card?.type}
+                <strong>{item.card?.rarity}</strong> - {item.card?.type}
               </div>
 
               {user && (
                 <div style={{ marginTop: 10 }}>
-                  <button onClick={() => updateQuantity(item.id, -1)}>
-                    ➖
-                  </button>
-
+                  <button onClick={() => updateQuantity(item.id, -1)}>-</button>
                   <span style={{ margin: '0 8px' }}>{item.quantity}</span>
-
-                  <button onClick={() => updateQuantity(item.id, 1)}>➕</button>
+                  <button onClick={() => updateQuantity(item.id, 1)}>+</button>
                 </div>
               )}
             </div>
@@ -492,6 +536,7 @@ export default function CatalogueSetPage() {
         >
           <img
             src={selectedImage}
+            alt="Apercu carte"
             style={{
               maxHeight: '90%',
               maxWidth: '90%',

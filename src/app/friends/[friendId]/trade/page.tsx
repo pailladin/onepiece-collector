@@ -228,15 +228,31 @@ export default function FriendTradePage() {
   }
 
   const renderList = (items: TradeItem[], emptyText: string) => {
-    if (items.length === 0) return <div>{emptyText}</div>
+    if (items.length === 0) {
+      return (
+        <div
+          style={{
+            fontSize: 14,
+            color: '#64748b',
+            background: '#fff',
+            border: '1px dashed #cbd5e1',
+            borderRadius: 10,
+            padding: 12
+          }}
+        >
+          {emptyText}
+        </div>
+      )
+    }
     return (
       <div style={{ display: 'grid', gap: 8 }}>
         {items.map((item) => (
           <div
             key={item.id}
             style={{
-              border: '1px solid #e2e8f0',
-              borderRadius: 8,
+              border: '1px solid #dbeafe',
+              borderRadius: 10,
+              background: '#fff',
               padding: '10px 12px',
               display: 'grid',
               gridTemplateColumns: '120px 1fr auto',
@@ -244,14 +260,14 @@ export default function FriendTradePage() {
               alignItems: 'center'
             }}
           >
-            <div style={{ fontWeight: 700 }}>{item.displayCode}</div>
+            <div style={{ fontWeight: 700, color: '#0f172a' }}>{item.displayCode}</div>
             <div>
-              <div>{item.name}</div>
+              <div style={{ fontWeight: 600 }}>{item.name}</div>
               <div style={{ fontSize: 12, color: '#475569' }}>
-                {item.setCode} | {item.rarity} | {item.type}
+                {item.setCode} - {item.rarity} - {item.type}
               </div>
             </div>
-            <div style={{ fontSize: 12, color: '#0f172a', fontWeight: 700 }}>
+            <div style={{ fontSize: 12, color: '#0f172a', fontWeight: 700, whiteSpace: 'nowrap' }}>
               x{item.giverQty} en double
             </div>
           </div>
@@ -261,34 +277,101 @@ export default function FriendTradePage() {
   }
 
   return (
-    <div style={{ padding: 40, display: 'grid', gap: 22 }}>
-      <div style={{ display: 'grid', gap: 8 }}>
-        <Link href={`/friends/${friendId}`}>Retour aux collections de cet ami</Link>
-        <h1 style={{ margin: 0 }}>Echanges avec {friendUsername}</h1>
-        <div style={{ color: '#334155' }}>
-          {totalPotential} cartes potentiellement echangeables.
+    <div
+      style={{
+        minHeight: '100vh',
+        padding: '18px 28px 28px',
+        background:
+          'radial-gradient(circle at 12% 8%, #fff4e6 0%, #e0f2fe 40%, #eef2ff 100%)',
+        display: 'grid',
+        gap: 12,
+        alignContent: 'start'
+      }}
+    >
+      <section
+        style={{
+          border: '1px solid #cfe4ff',
+          borderRadius: 14,
+          background: 'linear-gradient(145deg, #ffffff 0%, #eff6ff 100%)',
+          padding: 14
+        }}
+      >
+        <div style={{ display: 'grid', gap: 8 }}>
+          <Link href={`/friends/${friendId}`}>Retour aux collections de cet ami</Link>
+          <h1 style={{ margin: 0, fontSize: 30, color: '#0f172a' }}>
+            Echanges avec {friendUsername}
+          </h1>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <div
+              style={{
+                fontSize: 12,
+                background: '#fff',
+                border: '1px solid #cbd5e1',
+                borderRadius: 999,
+                padding: '4px 10px'
+              }}
+            >
+              Potentiel total: <strong>{totalPotential}</strong>
+            </div>
+            <div
+              style={{
+                fontSize: 12,
+                background: '#fff',
+                border: '1px solid #cbd5e1',
+                borderRadius: 999,
+                padding: '4px 10px'
+              }}
+            >
+              {friendUsername} -&gt; moi: <strong>{friendCanGive.length}</strong>
+            </div>
+            <div
+              style={{
+                fontSize: 12,
+                background: '#fff',
+                border: '1px solid #cbd5e1',
+                borderRadius: 999,
+                padding: '4px 10px'
+              }}
+            >
+              Moi -&gt; {friendUsername}: <strong>{iCanGive.length}</strong>
+            </div>
+          </div>
         </div>
-      </div>
+      </section>
 
       {error && (
-        <div style={{ color: '#b91c1c', fontWeight: 600 }}>
+        <div style={{ color: '#b91c1c', fontWeight: 600, padding: '0 4px' }}>
           {error}
         </div>
       )}
 
-      <section style={{ border: '1px solid #e2e8f0', borderRadius: 10, padding: 16 }}>
-        <h2 style={{ marginTop: 0 }}>
-          {friendUsername} peut me donner (ses doubles que je n&apos;ai pas)
-        </h2>
-        {renderList(friendCanGive, 'Aucune carte trouvee dans ce sens.')}
-      </section>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+          gap: 12
+        }}
+      >
+        <section style={{ border: '1px solid #d1d5db', borderRadius: 12, padding: 12, background: '#ffffffd1' }}>
+          <h2 style={{ marginTop: 0, marginBottom: 10, color: '#0f172a' }}>
+            {friendUsername} peut me donner
+          </h2>
+          <div style={{ marginBottom: 10, fontSize: 13, color: '#475569' }}>
+            Ses doubles que je n&apos;ai pas encore.
+          </div>
+          {renderList(friendCanGive, 'Aucune carte trouvee dans ce sens.')}
+        </section>
 
-      <section style={{ border: '1px solid #e2e8f0', borderRadius: 10, padding: 16 }}>
-        <h2 style={{ marginTop: 0 }}>
-          Je peux donner a {friendUsername} (mes doubles qu&apos;il n&apos;a pas)
-        </h2>
-        {renderList(iCanGive, 'Aucune carte trouvee dans ce sens.')}
-      </section>
+        <section style={{ border: '1px solid #d1d5db', borderRadius: 12, padding: 12, background: '#ffffffd1' }}>
+          <h2 style={{ marginTop: 0, marginBottom: 10, color: '#0f172a' }}>
+            Je peux donner a {friendUsername}
+          </h2>
+          <div style={{ marginBottom: 10, fontSize: 13, color: '#475569' }}>
+            Mes doubles qu&apos;il n&apos;a pas encore.
+          </div>
+          {renderList(iCanGive, 'Aucune carte trouvee dans ce sens.')}
+        </section>
+      </div>
     </div>
   )
 }

@@ -174,10 +174,10 @@ export function CollectionSetView({
   )
   const [priceLoading, setPriceLoading] = useState(false)
   const [priceError, setPriceError] = useState<string | null>(null)
-  const [ownedCollectionValue, setOwnedCollectionValue] = useState<number | null>(
-    null
-  )
-  const [pricedOwnedCount, setPricedOwnedCount] = useState(0)
+  const [priceModalTotal, setPriceModalTotal] = useState<number | null>(null)
+  const [priceModalPricedCount, setPriceModalPricedCount] = useState(0)
+  const [priceModalExpectedCount, setPriceModalExpectedCount] = useState(0)
+  const [priceModalTitle, setPriceModalTitle] = useState('Detail des prix')
   const [priceDetails, setPriceDetails] = useState<PriceDetail[]>([])
   const [showPriceDetails, setShowPriceDetails] = useState(false)
   const [shareMessage, setShareMessage] = useState<string | null>(null)
@@ -353,6 +353,10 @@ export function CollectionSetView({
     () => items.filter((item) => (item.quantity || 0) > 0),
     [items]
   )
+  const missingItemsAll = useMemo(
+    () => items.filter((item) => (item.quantity || 0) === 0),
+    [items]
+  )
 
   const formatCurrency = (value: number) =>
     new Intl.NumberFormat('en-US', {
@@ -360,7 +364,7 @@ export function CollectionSetView({
       currency: 'USD'
     }).format(value)
 
-  const calculateCollectionValue = async () => {
+  const calculatePriceDetails = async (mode: 'owned' | 'missing') => {
     if (!code) return
 
     setPriceLoading(true)
@@ -383,12 +387,13 @@ export function CollectionSetView({
       let total = 0
       let matched = 0
       const details: PriceDetail[] = []
+      const targetItems = mode === 'owned' ? ownedItemsAll : missingItemsAll
 
-      for (const item of ownedItemsAll) {
+      for (const item of targetItems) {
         const printCode = (item.print_code || '').trim().toUpperCase()
         const unitPrice = prices[printCode]
         if (!Number.isFinite(unitPrice)) continue
-        const quantity = item.quantity || 0
+        const quantity = mode === 'owned' ? item.quantity || 0 : 1
         const totalPrice = unitPrice * quantity
         const name =
           item.card?.card_translations?.find((t: any) => t.locale === DEFAULT_LOCALE)
@@ -407,22 +412,40 @@ export function CollectionSetView({
         })
       }
 
-      setOwnedCollectionValue(total)
-      setPricedOwnedCount(matched)
+      setPriceModalTitle(
+        mode === 'owned'
+          ? 'Detail des prix - Cartes possedees'
+          : 'Detail des prix - Cartes manquantes'
+      )
+      setPriceModalTotal(total)
+      setPriceModalPricedCount(matched)
+      setPriceModalExpectedCount(targetItems.length)
       setPriceDetails(
         details.sort(
           (a, b) =>
-            b.totalPrice - a.totalPrice || b.unitPrice - a.unitPrice || a.name.localeCompare(b.name)
+            b.totalPrice - a.totalPrice ||
+            b.unitPrice - a.unitPrice ||
+            a.name.localeCompare(b.name)
         )
       )
+      setShowPriceDetails(true)
     } catch {
       setPriceError('Erreur serveur pendant le calcul')
-      setOwnedCollectionValue(null)
-      setPricedOwnedCount(0)
+      setPriceModalTotal(null)
+      setPriceModalPricedCount(0)
+      setPriceModalExpectedCount(0)
       setPriceDetails([])
     } finally {
       setPriceLoading(false)
     }
+  }
+
+  const calculateCollectionValue = async () => {
+    await calculatePriceDetails('owned')
+  }
+
+  const calculateMissingValue = async () => {
+    await calculatePriceDetails('missing')
   }
 
   useEffect(() => {
@@ -506,6 +529,16 @@ export function CollectionSetView({
     }
   }
 
+  const resetFilters = () => {
+    setSearchQuery('')
+    setRarityFilter('all')
+    setTypeFilter('all')
+    setAltFilter('all')
+    setAltTypeFilter('all')
+    setSortKey('number')
+    setSortDirection('asc')
+  }
+
   const updateQuantity = async (printId: string, delta: number) => {
     if (!user || !canEdit) return
 
@@ -545,6 +578,13 @@ export function CollectionSetView({
   if (loading) {
     return <div style={{ padding: 40 }}>Chargement...</div>
   }
+
+  const totalCount = items.length
+  const ownedCount = ownedItemsAll.length
+  const missingCount = Math.max(totalCount - ownedCount, 0)
+  const lifePercent = totalCount > 0 ? Math.round((ownedCount / totalCount) * 100) : 0
+  const altCount = items.filter((item) => isAltVersion(item)).length
+  const normalCount = totalCount - altCount
 
   const renderGrid = (data: any[]) => (
     <div
@@ -652,7 +692,7 @@ export function CollectionSetView({
   return (
     <div
       style={{
-        padding: 40,
+        padding: '18px 28px 28px',
         background:
           'radial-gradient(circle at 10% 20%, #f0f9ff 0%, #eef2ff 35%, #fff7ed 100%)',
         minHeight: '100vh'
@@ -660,9 +700,9 @@ export function CollectionSetView({
     >
       <h1
         style={{
-          fontSize: 24,
+          fontSize: 30,
           fontWeight: 'bold',
-          marginBottom: 20,
+          marginBottom: 14,
           color: '#111827'
         }}
       >
@@ -671,155 +711,283 @@ export function CollectionSetView({
 
       <div
         style={{
-          marginBottom: 20,
-          display: 'flex',
-          gap: 12,
-          flexWrap: 'wrap',
-          alignItems: 'center'
+          border: '1px solid #cfe4ff',
+          borderRadius: 14,
+          background: 'linear-gradient(145deg, #ffffff 0%, #eff6ff 100%)',
+          padding: 16,
+          marginBottom: 16
         }}
       >
-        <input
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Recherche nom ou code"
+        <div
           style={{
-            minWidth: 220,
-            padding: '8px 10px',
-            borderRadius: 8,
-            border: '1px solid #cbd5e1'
-          }}
-        />
-
-        <select
-          value={rarityFilter}
-          onChange={(e) => setRarityFilter(e.target.value)}
-        >
-          <option value="all">Toutes raretes</option>
-          {filterOptions.rarities.map((rarity) => (
-            <option key={rarity} value={rarity}>
-              {rarity}
-            </option>
-          ))}
-        </select>
-
-        <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
-          <option value="all">Tous types</option>
-          {filterOptions.types.map((cardType) => (
-            <option key={cardType} value={cardType}>
-              {cardType}
-            </option>
-          ))}
-        </select>
-
-        <select
-          value={altFilter}
-          onChange={(e) => {
-            const value = e.target.value as AltFilter
-            setAltFilter(value)
-            if (value === 'normal') setAltTypeFilter('all')
+            display: 'flex',
+            justifyContent: 'space-between',
+            gap: 16,
+            flexWrap: 'wrap',
+            marginBottom: 10
           }}
         >
-          <option value="all">Toutes versions</option>
-          <option value="normal">Normales</option>
-          <option value="alt">Alternatives</option>
-        </select>
-
-        <select
-          value={altTypeFilter}
-          onChange={(e) => setAltTypeFilter(e.target.value)}
-          disabled={altFilter === 'normal'}
-        >
-          <option value="all">Tous types alternatives</option>
-          {filterOptions.altTypes.map((altType) => (
-            <option key={altType} value={altType}>
-              {getAltTypeLabel(altType)}
-            </option>
-          ))}
-        </select>
-
-        <select
-          value={sortKey}
-          onChange={(e) => setSortKey(e.target.value as SortKey)}
-        >
-          <option value="number">Numero</option>
-          <option value="name">Nom</option>
-          <option value="rarity">Rarete</option>
-          <option value="type">Type</option>
-        </select>
-
-        <select
-          value={sortDirection}
-          onChange={(e) => setSortDirection(e.target.value as SortDirection)}
-        >
-          <option value="asc">Ascendant</option>
-          <option value="desc">Descendant</option>
-        </select>
-
-        <div style={{ fontSize: 12, color: '#334155' }}>
-          {sortedItems.length} / {items.length}
+          <div style={{ minWidth: 220 }}>
+            <div style={{ fontSize: 12, color: '#475569', marginBottom: 4 }}>Ligne de vie</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a' }}>
+              {ownedCount} possedees / {totalCount} ({lifePercent}%)
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            <div
+              style={{
+                fontSize: 12,
+                background: '#ffffff',
+                border: '1px solid #cbd5e1',
+                borderRadius: 999,
+                padding: '4px 10px'
+              }}
+            >
+              Normales: <strong>{normalCount}</strong>
+            </div>
+            <div
+              style={{
+                fontSize: 12,
+                background: '#ffffff',
+                border: '1px solid #cbd5e1',
+                borderRadius: 999,
+                padding: '4px 10px'
+              }}
+            >
+              Alternatives: <strong>{altCount}</strong>
+            </div>
+            <div
+              style={{
+                fontSize: 12,
+                background: '#ffffff',
+                border: '1px solid #cbd5e1',
+                borderRadius: 999,
+                padding: '4px 10px'
+              }}
+            >
+              Manquantes: <strong>{missingCount}</strong>
+            </div>
+          </div>
         </div>
 
-        {canEdit && (
-          <button
-            onClick={copyShareLink}
-            style={{
-              padding: '8px 12px',
-              borderRadius: 8,
-              border: '1px solid #cbd5e1',
-              background: '#ffffff',
-              cursor: 'pointer'
-            }}
-          >
-            Copier lien de partage
-          </button>
-        )}
-
-        <button
-          onClick={calculateCollectionValue}
-          disabled={priceLoading || ownedItemsAll.length === 0}
+        <div
           style={{
-            padding: '8px 12px',
-            borderRadius: 8,
-            border: '1px solid #cbd5e1',
-            background: '#ffffff',
-            cursor:
-              priceLoading || ownedItemsAll.length === 0 ? 'not-allowed' : 'pointer'
+            height: 12,
+            background: '#dbeafe',
+            borderRadius: 999,
+            overflow: 'hidden'
           }}
         >
-          {priceLoading ? 'Calcul en cours...' : 'Calculer valeur collection'}
-        </button>
+          <div
+            style={{
+              width: `${lifePercent}%`,
+              height: '100%',
+              background: 'linear-gradient(90deg, #0ea5e9 0%, #22c55e 100%)'
+            }}
+          />
+        </div>
+      </div>
 
-        {ownedCollectionValue !== null && (
-          <>
-            <div style={{ fontSize: 12, color: '#0f172a', fontWeight: 600 }}>
-              Valeur estimee: {formatCurrency(ownedCollectionValue)} ({pricedOwnedCount}/
-              {ownedItemsAll.length} cartes pricees)
+      <div
+        style={{
+          marginBottom: 20,
+          display: 'grid',
+          gridTemplateColumns: 'minmax(300px, 1.6fr) minmax(180px, 0.65fr) minmax(280px, 1fr)',
+          gap: 12
+        }}
+      >
+        <div
+          style={{
+            border: '1px solid #d1d5db',
+            borderRadius: 12,
+            padding: 12,
+            background: '#ffffffd1'
+          }}
+        >
+          <div style={{ fontSize: 12, color: '#475569', marginBottom: 8 }}>
+            Recherche et filtres
+          </div>
+          <div style={{ display: 'grid', gap: 8 }}>
+            <input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Recherche nom, code ou variante"
+              style={{
+                width: '100%',
+                maxWidth: '100%',
+                boxSizing: 'border-box',
+                padding: '9px 10px',
+                borderRadius: 8,
+                border: '1px solid #cbd5e1'
+              }}
+            />
+
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <select
+                value={rarityFilter}
+                onChange={(e) => setRarityFilter(e.target.value)}
+              >
+                <option value="all">Toutes raretes</option>
+                {filterOptions.rarities.map((rarity) => (
+                  <option key={rarity} value={rarity}>
+                    {rarity}
+                  </option>
+                ))}
+              </select>
+
+              <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+                <option value="all">Tous types</option>
+                {filterOptions.types.map((cardType) => (
+                  <option key={cardType} value={cardType}>
+                    {cardType}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={altFilter}
+                onChange={(e) => {
+                  const value = e.target.value as AltFilter
+                  setAltFilter(value)
+                  if (value === 'normal') setAltTypeFilter('all')
+                }}
+              >
+                <option value="all">Toutes versions</option>
+                <option value="normal">Normales</option>
+                <option value="alt">Alternatives</option>
+              </select>
+
+              <select
+                value={altTypeFilter}
+                onChange={(e) => setAltTypeFilter(e.target.value)}
+                disabled={altFilter === 'normal'}
+              >
+                <option value="all">Tous types alternatives</option>
+                {filterOptions.altTypes.map((altType) => (
+                  <option key={altType} value={altType}>
+                    {getAltTypeLabel(altType)}
+                  </option>
+                ))}
+              </select>
             </div>
+          </div>
+        </div>
+
+        <div
+          style={{
+            border: '1px solid #d1d5db',
+            borderRadius: 12,
+            padding: 12,
+            background: '#ffffffd1'
+          }}
+        >
+          <div style={{ fontSize: 12, color: '#475569', marginBottom: 8 }}>Tri</div>
+          <div style={{ display: 'grid', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <select
+                value={sortKey}
+                onChange={(e) => setSortKey(e.target.value as SortKey)}
+              >
+                <option value="number">Numero</option>
+                <option value="name">Nom</option>
+                <option value="rarity">Rarete</option>
+                <option value="type">Type</option>
+              </select>
+
+              <select
+                value={sortDirection}
+                onChange={(e) => setSortDirection(e.target.value as SortDirection)}
+              >
+                <option value="asc">Ascendant</option>
+                <option value="desc">Descendant</option>
+              </select>
+            </div>
+            <div style={{ fontSize: 12, color: '#334155' }}>
+              Resultats filtres: {sortedItems.length} / {items.length}
+            </div>
+          </div>
+        </div>
+
+        <div
+          style={{
+            border: '1px solid #d1d5db',
+            borderRadius: 12,
+            padding: 12,
+            background: '#ffffffd1'
+          }}
+        >
+          <div style={{ fontSize: 12, color: '#475569', marginBottom: 8 }}>Actions</div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
             <button
-              onClick={() => setShowPriceDetails(true)}
-              disabled={priceDetails.length === 0}
+              onClick={resetFilters}
               style={{
                 padding: '8px 12px',
                 borderRadius: 8,
                 border: '1px solid #cbd5e1',
                 background: '#ffffff',
-                cursor: priceDetails.length === 0 ? 'not-allowed' : 'pointer'
+                cursor: 'pointer'
               }}
             >
-              Voir detail prix
+              Reinitialiser filtres
             </button>
-          </>
-        )}
 
-        {priceError && <div style={{ fontSize: 12, color: '#b91c1c' }}>{priceError}</div>}
-        {shareMessage && (
-          <div style={{ fontSize: 12, color: '#0f766e' }}>{shareMessage}</div>
-        )}
-        {isSharedView && (
-          <div style={{ fontSize: 12, color: '#334155' }}>
-            Vue partagee en lecture seule
+            {canEdit && (
+              <button
+                onClick={copyShareLink}
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: 8,
+                  border: '1px solid #cbd5e1',
+                  background: '#ffffff',
+                  cursor: 'pointer'
+                }}
+              >
+                Copier lien de partage
+              </button>
+            )}
+
+            <button
+              onClick={calculateCollectionValue}
+              disabled={priceLoading || ownedItemsAll.length === 0}
+              style={{
+                padding: '8px 12px',
+                borderRadius: 8,
+                border: '1px solid #cbd5e1',
+                background: '#ffffff',
+                cursor:
+                  priceLoading || ownedItemsAll.length === 0 ? 'not-allowed' : 'pointer'
+              }}
+            >
+              {priceLoading ? 'Calcul en cours...' : 'Calculer valeur collection'}
+            </button>
+
+            <button
+              onClick={calculateMissingValue}
+              disabled={priceLoading || missingItemsAll.length === 0}
+              style={{
+                padding: '8px 12px',
+                borderRadius: 8,
+                border: '1px solid #cbd5e1',
+                background: '#ffffff',
+                cursor:
+                  priceLoading || missingItemsAll.length === 0
+                    ? 'not-allowed'
+                    : 'pointer'
+              }}
+            >
+              {priceLoading ? 'Calcul en cours...' : 'Estimer cout manquantes'}
+            </button>
           </div>
-        )}
+          {priceError && <div style={{ marginTop: 6, fontSize: 12, color: '#b91c1c' }}>{priceError}</div>}
+          {shareMessage && (
+            <div style={{ marginTop: 6, fontSize: 12, color: '#0f766e' }}>{shareMessage}</div>
+          )}
+          {isSharedView && (
+            <div style={{ marginTop: 6, fontSize: 12, color: '#334155' }}>
+              Vue partagee en lecture seule
+            </div>
+          )}
+        </div>
       </div>
 
       <div style={{ marginBottom: 16 }}>
@@ -907,45 +1075,92 @@ export function CollectionSetView({
               width: 'min(900px, 95vw)',
               maxHeight: '80vh',
               overflow: 'auto',
-              padding: 16
+              padding: 0
             }}
           >
             <div
               style={{
+                position: 'sticky',
+                top: 0,
+                zIndex: 1,
+                background: '#fff',
+                borderBottom: '1px solid #e2e8f0',
+                padding: 16,
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
-                marginBottom: 12
+                gap: 12
               }}
             >
-              <h2 style={{ margin: 0, fontSize: 18 }}>
-                Detail des prix (plus chere a moins chere)
-              </h2>
+              <div>
+                <h2 style={{ margin: 0, fontSize: 18 }}>{priceModalTitle}</h2>
+                <div style={{ marginTop: 4, fontSize: 13, color: '#334155' }}>
+                  Total estime: <strong>{formatCurrency(priceModalTotal || 0)}</strong>{' '}
+                  ({priceModalPricedCount}/{priceModalExpectedCount} cartes pricees)
+                </div>
+              </div>
               <button onClick={() => setShowPriceDetails(false)}>Fermer</button>
             </div>
 
-            {priceDetails.map((row) => (
+            <div style={{ padding: 12 }}>
               <div
-                key={row.id}
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: '1.4fr 1fr 0.6fr 0.8fr 0.8fr',
+                  gridTemplateColumns: '1.5fr 1fr 0.6fr 0.8fr 0.8fr 0.9fr',
                   gap: 10,
-                  padding: '8px 0',
+                  padding: '6px 8px',
+                  fontSize: 12,
+                  color: '#475569',
                   borderBottom: '1px solid #e2e8f0',
-                  fontSize: 13
+                  marginBottom: 2
                 }}
               >
-                <div>
-                  <div style={{ fontWeight: 700 }}>{row.displayCode}</div>
-                  <div>{row.name}</div>
-                </div>
-                <div>{row.printCode}</div>
-                <div>x{row.quantity}</div>
-                <div>{formatCurrency(row.unitPrice)}</div>
-                <div style={{ fontWeight: 700 }}>{formatCurrency(row.totalPrice)}</div>
+                <div>Carte</div>
+                <div>Code print</div>
+                <div>Qte</div>
+                <div>Prix u.</div>
+                <div>Total</div>
+                <div>Lien</div>
               </div>
-            ))}
+
+              {priceDetails.map((row) => (
+                (() => {
+                  const baseCode = (row.printCode || '').split('_')[0] || ''
+                  const cardmarketUrl = `https://www.cardmarket.com/fr/OnePiece/Products/Singles?searchMode=v2&idCategory=1621&idExpansion=0&searchString=${encodeURIComponent(baseCode)}&idRarity=0&perSite=30`
+                  return (
+                <div
+                  key={row.id}
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1.5fr 1fr 0.6fr 0.8fr 0.8fr 0.9fr',
+                    gap: 10,
+                    padding: '10px 8px',
+                    borderBottom: '1px solid #e2e8f0',
+                    fontSize: 13,
+                    alignItems: 'center'
+                  }}
+                >
+                  <div>
+                    <div style={{ fontWeight: 700 }}>{row.displayCode}</div>
+                    <div>{row.name}</div>
+                  </div>
+                  <div style={{ color: '#334155' }}>{row.printCode}</div>
+                  <div>x{row.quantity}</div>
+                  <div>{formatCurrency(row.unitPrice)}</div>
+                  <div style={{ fontWeight: 700 }}>{formatCurrency(row.totalPrice)}</div>
+                  <a
+                    href={cardmarketUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{ color: '#0369a1', fontWeight: 600 }}
+                  >
+                    Cardmarket
+                  </a>
+                </div>
+                  )
+                })()
+              ))}
+            </div>
           </div>
         </div>
       )}
