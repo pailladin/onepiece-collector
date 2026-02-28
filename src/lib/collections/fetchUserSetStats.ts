@@ -94,8 +94,19 @@ export async function fetchUserSetStats(userId: string) {
         (p) => p.distribution_set_id === set.id
       ) || [])
 
-    const normalPrints = prints.filter((p) => !isAltVersion(p))
-    const altPrints = prints.filter((p) => isAltVersion(p))
+    const normalPrints = prints.filter(
+      (p) =>
+        !isAltVersion({
+          print_code: p.print_code ?? undefined,
+          variant_type: p.variant_type ?? undefined
+        })
+    )
+    const altPrints = prints.filter((p) =>
+      isAltVersion({
+        print_code: p.print_code ?? undefined,
+        variant_type: p.variant_type ?? undefined
+      })
+    )
     const totalNormal = normalPrints.length
     const totalAlt = altPrints.length
     const total = totalNormal + totalAlt
