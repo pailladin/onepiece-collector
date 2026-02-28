@@ -377,8 +377,9 @@ export function CollectionSetView({
 
       if (!res.ok) {
         setPriceError(data?.error || 'Erreur calcul prix')
-        setOwnedCollectionValue(null)
-        setPricedOwnedCount(0)
+        setPriceModalTotal(null)
+        setPriceModalPricedCount(0)
+        setPriceModalExpectedCount(0)
         setPriceDetails([])
         return
       }
