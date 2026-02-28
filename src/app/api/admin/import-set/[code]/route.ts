@@ -51,7 +51,8 @@ function parseCardName(cardName: string) {
 
   if (tagRaw) {
     const tag = tagRaw.toLowerCase()
-    variantTag = tagRaw
+    const isReprintTag = tag === 'reprint'
+    variantTag = isReprintTag ? null : tagRaw
 
     if (tag.includes('pirate foil') || tag === 'foil' || tag.endsWith(' foil')) {
       variant = 'Foil'
@@ -65,7 +66,11 @@ function parseCardName(cardName: string) {
       variant = 'SP'
     }
 
-    cleanName = cardName.replace(/\([^()]*\)\s*$/g, '').trim()
+    if (isReprintTag) {
+      cleanName = cardName.replace(/\s*\(reprint\)\s*$/i, '').trim()
+    } else {
+      cleanName = cardName.replace(/\([^()]*\)\s*$/g, '').trim()
+    }
   }
 
   return { variant, cleanName, variantTag }
@@ -114,19 +119,19 @@ function resolvePrintCode(params: {
   setCode: string
   variantTag?: string | null
 }) {
-  const provided = (params.providedPrintCode || '').trim()
-  if (provided) {
-    return {
-      printCode: provided,
-      source: 'api_print_code' as const
-    }
-  }
-
   const fromImageUrl = extractPrintCodeFromImageUrl(params.imageUrl)
   if (fromImageUrl) {
     return {
       printCode: fromImageUrl,
       source: 'image_url' as const
+    }
+  }
+
+  const provided = (params.providedPrintCode || '').trim()
+  if (provided) {
+    return {
+      printCode: provided,
+      source: 'api_print_code' as const
     }
   }
 
@@ -244,7 +249,8 @@ export async function POST(
           return
         }
 
-        push(`${apiCards.length} cartes recues`)
+        const totalCards = apiCards.length
+        push(`${totalCards} cartes recues`)
 
         const setName = apiCards[0]?.set_name || code
 
@@ -278,19 +284,20 @@ export async function POST(
         let skippedImageUploads = 0
         let skippedNotSelected = 0
 
-        for (const card of apiCards) {
+        for (const [index, card] of apiCards.entries()) {
+          const progress = `${index + 1}/${totalCards}`
           const apiSetCode = normalizeSetCode(card?.set_id)
           if (apiSetCode && apiSetCode !== normalizedImportCode) {
             skippedWrongSet += 1
             push(
-              `SKIP hors set ${code}: ${card?.card_image_id || card?.card_set_id || 'inconnu'} (set_id=${card?.set_id})`
+              `[${progress}] SKIP hors set ${code}: ${card?.card_image_id || card?.card_set_id || 'inconnu'} (set_id=${card?.set_id})`
             )
             continue
           }
 
           if (!card?.card_set_id) {
             skippedInvalidPrints += 1
-            push('SKIP print invalide: card_set_id manquant')
+            push(`[${progress}] SKIP print invalide: card_set_id manquant`)
             continue
           }
 
@@ -315,12 +322,12 @@ export async function POST(
 
           if (resolved.source === 'image_url') {
             push(
-              `card_image_id manquant pour ${baseCode}: print_code deduit de l URL (${printCode})`
+              `[${progress}] card_image_id manquant pour ${baseCode}: print_code deduit de l URL (${printCode})`
             )
           }
           if (resolved.source === 'fallback_set_scoped') {
             push(
-              `card_image_id/image manquant pour ${baseCode}: fallback print_code=${printCode}`
+              `[${progress}] card_image_id/image manquant pour ${baseCode}: fallback print_code=${printCode}`
             )
           }
 
@@ -331,6 +338,7 @@ export async function POST(
             !onlyPrintCodes.has(normalizedPrintCode)
           ) {
             skippedNotSelected += 1
+            push(`[${progress}] SKIP non selectionne: ${normalizedPrintCode}`)
             continue
           }
 
@@ -381,7 +389,7 @@ export async function POST(
                 : 'normal'
 
           if (!skipImages && !imageUrl) {
-            push(`Image manquante pour ${printCode}: placeholder utilise`)
+            push(`[${progress}] Image manquante pour ${printCode}: placeholder utilise`)
           }
 
           const imagePath = `${printCode}.jpg`
@@ -390,12 +398,12 @@ export async function POST(
 
           if (!skipImages && imageUrl) {
             const fileName = `${code}/${imagePath}`
-            push(`Upload image ${fileName}`)
+            push(`[${progress}] Upload image ${fileName}`)
 
             try {
               await uploadImageToSupabase(imageUrl, fileName)
             } catch (imgError: unknown) {
-              push(`Erreur image ${printCode}: ${toErrorMessage(imgError)}`)
+              push(`[${progress}] Erreur image ${printCode}: ${toErrorMessage(imgError)}`)
               finalImagePath = MISSING_IMAGE_PATH
             }
           } else if (!skipImages && !imageUrl) {
@@ -420,7 +428,9 @@ export async function POST(
             .upsert(printPayload, { onConflict: 'print_code' })
 
           if (printError) {
-            push(`Erreur print ${printCode}: ${printError.message}`)
+            push(`[${progress}] Erreur print ${printCode}: ${printError.message}`)
+          } else {
+            push(`[${progress}] OK print ${printCode}`)
           }
         }
 

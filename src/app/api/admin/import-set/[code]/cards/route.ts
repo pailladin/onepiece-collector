@@ -25,7 +25,7 @@ function getCodePriority(baseCode: string, setCode: string) {
 }
 
 function cleanCardName(value: string) {
-  return value.replace(/\s*\(\d+\)\s*$/g, '').trim()
+  return value.replace(/\s*\((?:\d+|reprint)\)\s*$/gi, '').trim()
 }
 
 type CardRow = {

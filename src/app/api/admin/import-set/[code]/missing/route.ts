@@ -47,7 +47,10 @@ function extractVariantTag(cardName: string | null | undefined) {
   const groups = Array.from(name.matchAll(/\(([^()]*)\)/g)).map((m) =>
     (m[1] || '').trim()
   )
-  return [...groups].reverse().find((value) => value && !/^\d+$/.test(value)) || null
+  const tag =
+    [...groups].reverse().find((value) => value && !/^\d+$/.test(value)) || null
+  if (!tag) return null
+  return tag.toLowerCase() === 'reprint' ? null : tag
 }
 
 function slugifyVariantTag(value: string | null | undefined) {
@@ -65,11 +68,11 @@ function resolvePrintCode(params: {
   setCode: string
   variantTag?: string | null
 }) {
-  const provided = (params.providedPrintCode || '').trim()
-  if (provided) return provided
-
   const fromImageUrl = extractPrintCodeFromImageUrl(params.imageUrl)
   if (fromImageUrl) return fromImageUrl
+
+  const provided = (params.providedPrintCode || '').trim()
+  if (provided) return provided
 
   const variantSlug = slugifyVariantTag(params.variantTag)
   return variantSlug
