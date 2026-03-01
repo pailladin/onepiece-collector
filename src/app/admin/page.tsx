@@ -43,7 +43,10 @@ export default function AdminPage() {
     loadData()
   }, [canAccessAdmin])
 
-  const importSet = async (code: string, options?: { skipImages?: boolean }) => {
+  const importSet = async (
+    code: string,
+    options?: { skipImages?: boolean; missingImagesOnly?: boolean }
+  ) => {
     setLogs([])
     setShowModal(true)
 
@@ -55,7 +58,8 @@ export default function AdminPage() {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        skipImages: Boolean(options?.skipImages)
+        skipImages: Boolean(options?.skipImages),
+        missingImagesOnly: Boolean(options?.missingImagesOnly)
       })
     })
 
@@ -174,6 +178,19 @@ export default function AdminPage() {
                   }}
                 >
                   Recharger sans images
+                </button>
+
+                <button
+                  onClick={() => importSet(code, { missingImagesOnly: true })}
+                  style={{
+                    background: '#f59e0b',
+                    color: '#111827',
+                    border: 'none',
+                    padding: '4px 8px',
+                    borderRadius: 4
+                  }}
+                >
+                  Reimporter images manquantes
                 </button>
 
                 <button

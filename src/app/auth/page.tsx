@@ -13,15 +13,27 @@ export default function AuthPage() {
 
   const canSubmit = email.trim().length > 3 && password.length >= 6
 
+  const buildUsernameFromEmail = (value: string) => {
+    const localPart = (value.split('@')[0] || 'user').toLowerCase()
+    const base = localPart.replace(/[^a-z0-9_]/g, '').slice(0, 16)
+    const safeBase = base.length >= 3 ? base : 'user'
+    const suffix = Math.random().toString(36).slice(2, 8)
+    return `${safeBase}_${suffix}`
+  }
+
   const handleSignUp = async () => {
     if (!canSubmit || loading) return
     setLoading(true)
     setMessage('')
 
+    const username = buildUsernameFromEmail(email.trim())
     const { error } = await supabase.auth.signUp({
       email,
       password,
       options: {
+        data: {
+          username
+        },
         emailRedirectTo: `${window.location.origin}/auth`
       }
     })

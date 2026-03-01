@@ -213,6 +213,7 @@ export async function POST(
       try {
         const body = await request.json().catch(() => ({}))
         const skipImages = Boolean(body?.skipImages)
+        const missingImagesOnly = Boolean(body?.missingImagesOnly)
         const onlyPrintCodes = Array.isArray(body?.onlyPrintCodes)
           ? new Set(
               body.onlyPrintCodes
@@ -230,6 +231,9 @@ export async function POST(
         push(`Import du set ${code}`)
         if (skipImages) {
           push('Mode rechargement: sans upload d images')
+        }
+        if (missingImagesOnly) {
+          push('Mode reimport images manquantes active')
         }
         if (onlyPrintCodes && onlyPrintCodes.size > 0) {
           push(`Mode import cible: ${onlyPrintCodes.size} print(s) selectionne(s)`)
@@ -260,6 +264,11 @@ export async function POST(
           .eq('code', code)
           .single()
 
+        if (!setData && missingImagesOnly) {
+          push(`Set ${code} introuvable: impossible de reimporter les images`)
+          return
+        }
+
         if (!setData) {
           const { data: newSet, error } = await supabase
             .from('sets')
@@ -279,6 +288,156 @@ export async function POST(
         }
 
         const setId = setData.id
+        let effectiveOnlyPrintCodes = onlyPrintCodes
+
+        if (missingImagesOnly) {
+          const { data: missingImageRows, error: missingImageError } = await supabase
+            .from('card_prints')
+            .select('print_code')
+            .eq('distribution_set_id', setId)
+            .eq('image_path', MISSING_IMAGE_PATH)
+
+          if (missingImageError) {
+            push(
+              `Erreur lecture images manquantes: ${missingImageError.message}`
+            )
+            return
+          }
+
+          const missingImageCodes = new Set(
+            (missingImageRows || [])
+              .map((row) => normalizePrintCode(row.print_code))
+              .filter(Boolean)
+          )
+
+          if (effectiveOnlyPrintCodes && effectiveOnlyPrintCodes.size > 0) {
+            effectiveOnlyPrintCodes = new Set(
+              [...effectiveOnlyPrintCodes].filter((code) =>
+                missingImageCodes.has(code)
+              )
+            )
+          } else {
+            effectiveOnlyPrintCodes = missingImageCodes
+          }
+
+          push(
+            `Images manquantes a reimporter: ${effectiveOnlyPrintCodes.size} print(s)`
+          )
+
+          if (effectiveOnlyPrintCodes.size === 0) {
+            push('Aucune image manquante a reimporter')
+            return
+          }
+
+          const imageByPrintCode = new Map<string, string>()
+          let skippedWrongSetForImages = 0
+          let skippedInvalidPrintForImages = 0
+
+          for (const card of apiCards) {
+            const apiSetCode = normalizeSetCode(card?.set_id)
+            if (apiSetCode && apiSetCode !== normalizedImportCode) {
+              skippedWrongSetForImages += 1
+              continue
+            }
+            if (!card?.card_set_id) {
+              skippedInvalidPrintForImages += 1
+              continue
+            }
+
+            const baseCode = card.card_set_id
+            const imageUrl = card.card_image?.toString().trim()
+            if (!imageUrl) continue
+
+            const { variantTag } = parseCardName(card.card_name || '')
+            const variantSlug = slugifyVariantTag(variantTag)
+            const directImageCode = extractPrintCodeFromImageUrl(imageUrl)
+            const providedPrintCode = card.card_image_id?.toString().trim()
+            const fallbackVariantCode = variantSlug
+              ? `${baseCode}_${normalizedImportCode}_${variantSlug}`
+              : null
+            const fallbackSetScopedCode = `${baseCode}_${normalizedImportCode}`
+
+            const candidateCodesRaw = [
+              directImageCode,
+              providedPrintCode,
+              fallbackVariantCode,
+              fallbackSetScopedCode
+            ].filter(Boolean) as string[]
+
+            let matchedPrintCode: string | null = null
+            for (const candidateRaw of candidateCodesRaw) {
+              const candidate = normalizePrintCode(candidateRaw)
+              if (effectiveOnlyPrintCodes.has(candidate)) {
+                matchedPrintCode = candidate
+                break
+              }
+            }
+
+            if (!matchedPrintCode) {
+              continue
+            }
+
+            if (!imageByPrintCode.has(matchedPrintCode)) {
+              imageByPrintCode.set(matchedPrintCode, imageUrl)
+            }
+          }
+
+          let uploaded = 0
+          let missingInApi = 0
+          let failed = 0
+
+          for (const printCode of [...effectiveOnlyPrintCodes].sort((a, b) =>
+            a.localeCompare(b, 'fr')
+          )) {
+            const imageUrl = imageByPrintCode.get(printCode)
+            if (!imageUrl) {
+              missingInApi += 1
+              push(`SKIP ${printCode}: image absente dans l API`)
+              continue
+            }
+
+            const imagePath = `${printCode}.jpg`
+            const fileName = `${code}/${imagePath}`
+
+            try {
+              push(`Upload image ${fileName}`)
+              await uploadImageToSupabase(imageUrl, fileName)
+
+              const { error: updateError } = await supabase
+                .from('card_prints')
+                .update({ image_path: imagePath })
+                .eq('distribution_set_id', setId)
+                .eq('print_code', printCode)
+
+              if (updateError) {
+                failed += 1
+                push(`Erreur update image_path ${printCode}: ${updateError.message}`)
+                continue
+              }
+
+              uploaded += 1
+              push(`OK image ${printCode}`)
+            } catch (imgError: unknown) {
+              failed += 1
+              push(`Erreur image ${printCode}: ${toErrorMessage(imgError)}`)
+            }
+          }
+
+          if (skippedWrongSetForImages > 0) {
+            push(
+              `Resume: ${skippedWrongSetForImages} print(s) API ignore(s) (hors set ${code})`
+            )
+          }
+          if (skippedInvalidPrintForImages > 0) {
+            push(
+              `Resume: ${skippedInvalidPrintForImages} print(s) API ignore(s) (donnees invalides)`
+            )
+          }
+          push(`Resume images: ${uploaded} reimportee(s), ${missingInApi} introuvable(s), ${failed} erreur(s)`)
+          push('Reimport images manquantes termine')
+          return
+        }
+
         let skippedInvalidPrints = 0
         let skippedWrongSet = 0
         let skippedImageUploads = 0
@@ -333,9 +492,9 @@ export async function POST(
 
           const normalizedPrintCode = normalizePrintCode(printCode)
           if (
-            onlyPrintCodes &&
-            onlyPrintCodes.size > 0 &&
-            !onlyPrintCodes.has(normalizedPrintCode)
+            effectiveOnlyPrintCodes &&
+            effectiveOnlyPrintCodes.size > 0 &&
+            !effectiveOnlyPrintCodes.has(normalizedPrintCode)
           ) {
             skippedNotSelected += 1
             push(`[${progress}] SKIP non selectionne: ${normalizedPrintCode}`)
@@ -443,7 +602,7 @@ export async function POST(
         if (skipImages) {
           push(`Resume: ${skippedImageUploads} image(s) non upload (mode sans images)`)
         }
-        if (onlyPrintCodes && onlyPrintCodes.size > 0) {
+        if (effectiveOnlyPrintCodes && effectiveOnlyPrintCodes.size > 0) {
           push(`Resume: ${skippedNotSelected} print(s) ignore(s) (non selectionnes)`)
         }
         push('Import termine avec succes')
