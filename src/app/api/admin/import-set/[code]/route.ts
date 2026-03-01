@@ -214,8 +214,8 @@ export async function POST(
         const body = await request.json().catch(() => ({}))
         const skipImages = Boolean(body?.skipImages)
         const missingImagesOnly = Boolean(body?.missingImagesOnly)
-        const onlyPrintCodes = Array.isArray(body?.onlyPrintCodes)
-          ? new Set(
+        const onlyPrintCodes: Set<string> | null = Array.isArray(body?.onlyPrintCodes)
+          ? new Set<string>(
               body.onlyPrintCodes
                 .map((value: unknown) =>
                   normalizePrintCode(
@@ -288,7 +288,7 @@ export async function POST(
         }
 
         const setId = setData.id
-        let effectiveOnlyPrintCodes = onlyPrintCodes
+        let effectiveOnlyPrintCodes: Set<string> | null = onlyPrintCodes
 
         if (missingImagesOnly) {
           const { data: missingImageRows, error: missingImageError } = await supabase
@@ -304,9 +304,11 @@ export async function POST(
             return
           }
 
-          const missingImageCodes = new Set(
+          const missingImageCodes = new Set<string>(
             (missingImageRows || [])
-              .map((row) => normalizePrintCode(row.print_code))
+              .map((row: { print_code: string | null }) =>
+                normalizePrintCode(row.print_code)
+              )
               .filter(Boolean)
           )
 
