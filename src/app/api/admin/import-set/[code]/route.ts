@@ -1,3 +1,4 @@
+import crypto from 'node:crypto'
 import { createClient } from '@supabase/supabase-js'
 import { getRequestUser } from '@/lib/server/authUser'
 import { isAdminEmail, parseAdminEmails } from '@/lib/admin'
@@ -36,6 +37,20 @@ function normalizeSetCode(value: string | null | undefined) {
 
 function normalizePrintCode(value: string | null | undefined) {
   return (value || '').trim().toUpperCase()
+}
+
+function normalizeVariantLabel(value: string | null | undefined) {
+  const raw = (value || '').trim()
+  if (!raw) return 'NORMAL'
+  return raw.toUpperCase()
+}
+
+function isSetScopedFallbackCode(baseCode: string, setCode: string, printCode: string) {
+  const base = normalizePrintCode(baseCode)
+  const set = normalizeSetCode(setCode)
+  const code = normalizePrintCode(printCode)
+  if (!base || !set || !code) return false
+  return code.startsWith(`${base}_${set}`)
 }
 
 function parseCardName(cardName: string) {
@@ -93,6 +108,16 @@ async function uploadImageToSupabase(imageUrl: string, fileName: string) {
   if (error) {
     throw new Error(error.message)
   }
+}
+
+async function getImageSha1(imageUrl: string) {
+  const imageResponse = await fetch(imageUrl)
+  if (!imageResponse.ok) {
+    throw new Error('Erreur telechargement image')
+  }
+  const arrayBuffer = await imageResponse.arrayBuffer()
+  const buffer = Buffer.from(arrayBuffer)
+  return crypto.createHash('sha1').update(buffer).digest('hex')
 }
 
 function extractPrintCodeFromImageUrl(imageUrl: string | null | undefined): string | null {
@@ -444,6 +469,37 @@ export async function POST(
         let skippedWrongSet = 0
         let skippedImageUploads = 0
         let skippedNotSelected = 0
+        let skippedFallbackDuplicates = 0
+        let skippedApiImageDuplicates = 0
+
+        const seenNonFallbackSemanticKeys = new Set<string>()
+        const insertedFallbackBySemanticKey = new Map<string, string>()
+        const existingFallbackBySemanticKey = new Map<string, Set<string>>()
+        const seenSemanticImageKeys = new Set<string>()
+        const seenSemanticImageHashes = new Set<string>()
+        const imageHashCache = new Map<string, string>()
+
+        const { data: existingPrintRows } = await supabase
+          .from('card_prints')
+          .select('print_code, variant_type')
+          .eq('distribution_set_id', setId)
+
+        for (const row of existingPrintRows || []) {
+          const printCode = normalizePrintCode(row.print_code)
+          if (!printCode) continue
+          const baseCode = printCode.split('_')[0] || ''
+          const variant = normalizeVariantLabel(row.variant_type)
+          const semanticKey = `${baseCode}::${variant}`
+
+          if (isSetScopedFallbackCode(baseCode, normalizedImportCode, printCode)) {
+            if (!existingFallbackBySemanticKey.has(semanticKey)) {
+              existingFallbackBySemanticKey.set(semanticKey, new Set<string>())
+            }
+            existingFallbackBySemanticKey.get(semanticKey)?.add(printCode)
+          } else {
+            seenNonFallbackSemanticKeys.add(semanticKey)
+          }
+        }
 
         for (const [index, card] of apiCards.entries()) {
           const progress = `${index + 1}/${totalCards}`
@@ -548,9 +604,95 @@ export async function POST(
               : /^p\d+$/i.test(suffix)
                 ? 'Parallel'
                 : 'normal'
+          const semanticKey = `${normalizePrintCode(baseCode)}::${normalizeVariantLabel(
+            variant
+          )}`
+          const imageSignature = normalizePrintCode(
+            extractPrintCodeFromImageUrl(imageUrl) || imageUrl || MISSING_IMAGE_PATH
+          )
+          const semanticImageKey = `${semanticKey}::${imageSignature}`
+          let semanticImageHashKey: string | null = null
+          if (!skipImages && imageUrl) {
+            try {
+              let hash = imageHashCache.get(imageUrl)
+              if (!hash) {
+                hash = await getImageSha1(imageUrl)
+                imageHashCache.set(imageUrl, hash)
+              }
+              semanticImageHashKey = `${semanticKey}::${hash}`
+            } catch (hashError: unknown) {
+              push(
+                `[${progress}] Warning hash image indisponible ${normalizedPrintCode}: ${toErrorMessage(hashError)}`
+              )
+            }
+          }
+          const isFallbackPrint =
+            resolved.source === 'fallback_set_scoped' ||
+            isSetScopedFallbackCode(baseCode, normalizedImportCode, normalizedPrintCode)
+
+          if (seenSemanticImageKeys.has(semanticImageKey)) {
+            skippedApiImageDuplicates += 1
+            push(
+              `[${progress}] SKIP doublon API image ${normalizedPrintCode} (meme carte/variante/image)`
+            )
+            continue
+          }
+          if (
+            semanticImageHashKey &&
+            seenSemanticImageHashes.has(semanticImageHashKey)
+          ) {
+            skippedApiImageDuplicates += 1
+            push(
+              `[${progress}] SKIP doublon API image ${normalizedPrintCode} (meme carte/variante/contenu image)`
+            )
+            continue
+          }
+          seenSemanticImageKeys.add(semanticImageKey)
+          if (semanticImageHashKey) {
+            seenSemanticImageHashes.add(semanticImageHashKey)
+          }
+
+          if (isFallbackPrint) {
+            const hasCanonicalAlready = seenNonFallbackSemanticKeys.has(semanticKey)
+            const hasFallbackAlready =
+              insertedFallbackBySemanticKey.has(semanticKey) ||
+              (existingFallbackBySemanticKey.get(semanticKey)?.size || 0) > 0
+
+            if (hasCanonicalAlready || hasFallbackAlready) {
+              skippedFallbackDuplicates += 1
+              push(
+                `[${progress}] SKIP doublon fallback ${normalizedPrintCode} (carte/variante deja presente)`
+              )
+              continue
+            }
+          } else {
+            const existingFallbackCodes = existingFallbackBySemanticKey.get(semanticKey)
+            if (existingFallbackCodes && existingFallbackCodes.size > 0) {
+              const fallbackCodes = [...existingFallbackCodes]
+              const { error: cleanupError } = await supabase
+                .from('card_prints')
+                .delete()
+                .eq('distribution_set_id', setId)
+                .in('print_code', fallbackCodes)
+
+              if (cleanupError) {
+                push(
+                  `[${progress}] Warning nettoyage fallback impossible (${fallbackCodes.join(', ')}): ${cleanupError.message}`
+                )
+              } else {
+                push(
+                  `[${progress}] Nettoyage fallback: ${fallbackCodes.join(', ')}`
+                )
+                existingFallbackBySemanticKey.delete(semanticKey)
+              }
+            }
+            seenNonFallbackSemanticKeys.add(semanticKey)
+          }
 
           if (!skipImages && !imageUrl) {
-            push(`[${progress}] Image manquante pour ${printCode}: placeholder utilise`)
+            push(
+              `[${progress}] Image manquante pour ${printCode}: placeholder utilise`
+            )
           }
 
           const imagePath = `${printCode}.jpg`
@@ -564,7 +706,9 @@ export async function POST(
             try {
               await uploadImageToSupabase(imageUrl, fileName)
             } catch (imgError: unknown) {
-              push(`[${progress}] Erreur image ${printCode}: ${toErrorMessage(imgError)}`)
+              push(
+                `[${progress}] Erreur image ${printCode}: ${toErrorMessage(imgError)}`
+              )
               finalImagePath = MISSING_IMAGE_PATH
             }
           } else if (!skipImages && !imageUrl) {
@@ -592,6 +736,9 @@ export async function POST(
             push(`[${progress}] Erreur print ${printCode}: ${printError.message}`)
           } else {
             push(`[${progress}] OK print ${printCode}`)
+            if (isFallbackPrint) {
+              insertedFallbackBySemanticKey.set(semanticKey, normalizedPrintCode)
+            }
           }
         }
 
@@ -606,6 +753,16 @@ export async function POST(
         }
         if (effectiveOnlyPrintCodes && effectiveOnlyPrintCodes.size > 0) {
           push(`Resume: ${skippedNotSelected} print(s) ignore(s) (non selectionnes)`)
+        }
+        if (skippedFallbackDuplicates > 0) {
+          push(
+            `Resume: ${skippedFallbackDuplicates} print(s) fallback ignoree(s) (doublons)`
+          )
+        }
+        if (skippedApiImageDuplicates > 0) {
+          push(
+            `Resume: ${skippedApiImageDuplicates} print(s) ignoree(s) (doublons API image)`
+          )
         }
         push('Import termine avec succes')
       } catch (error: unknown) {

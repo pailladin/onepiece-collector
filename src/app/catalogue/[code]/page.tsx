@@ -78,6 +78,13 @@ export default function CatalogueSetPage() {
   const [typeFilter, setTypeFilter] = useState('all')
   const [altFilter, setAltFilter] = useState<AltFilter>('all')
   const [altTypeFilter, setAltTypeFilter] = useState('all')
+  const normalizedSetCode = (code || '').toString().replace('-', '').toUpperCase()
+
+  const isSetScopedFallbackPrint = (printCode: string | null | undefined) => {
+    const raw = (printCode || '').toString().trim().toUpperCase()
+    if (!raw || !normalizedSetCode) return false
+    return raw.includes(`_${normalizedSetCode}`)
+  }
 
   useEffect(() => {
     const fetchData = async () => {
@@ -143,7 +150,40 @@ export default function CatalogueSetPage() {
         quantity: ownedMap.get(print.id) || 0
       }))
 
-      setItems(merged)
+      const dedupedByVisualKey = new Map<string, any>()
+      for (const item of merged) {
+        const baseCode = String(item.print_code || '')
+          .trim()
+          .toUpperCase()
+          .split('_')[0]
+        const variant = String(item.variant_type || 'normal').trim().toUpperCase()
+        const imageKey = String(item.image_path || MISSING_IMAGE_PATH)
+          .trim()
+          .toUpperCase()
+        const visualKey = `${baseCode}::${variant}::${imageKey}`
+        const existing = dedupedByVisualKey.get(visualKey)
+
+        if (!existing) {
+          dedupedByVisualKey.set(visualKey, item)
+          continue
+        }
+
+        const existingFallback = isSetScopedFallbackPrint(existing.print_code)
+        const currentFallback = isSetScopedFallbackPrint(item.print_code)
+        const existingMissingImage =
+          !existing.image_path || existing.image_path === MISSING_IMAGE_PATH
+        const currentMissingImage = !item.image_path || item.image_path === MISSING_IMAGE_PATH
+        const shouldReplace =
+          (existingFallback && !currentFallback) ||
+          (existingMissingImage && !currentMissingImage) ||
+          Number(item.quantity || 0) > Number(existing.quantity || 0)
+
+        if (shouldReplace) {
+          dedupedByVisualKey.set(visualKey, item)
+        }
+      }
+
+      setItems([...dedupedByVisualKey.values()])
       setLoading(false)
     }
 

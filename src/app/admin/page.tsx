@@ -146,6 +146,22 @@ export default function AdminPage() {
   return (
     <div style={{ padding: 40 }}>
       <h1>Admin - Import Sets</h1>
+      <div style={{ margin: '10px 0 20px' }}>
+        <Link
+          href="/admin/users"
+          style={{
+            background: '#111827',
+            color: '#fff',
+            padding: '6px 10px',
+            borderRadius: 4,
+            textDecoration: 'none',
+            display: 'inline-flex',
+            alignItems: 'center'
+          }}
+        >
+          Gerer les utilisateurs
+        </Link>
+      </div>
 
       {apiSets.map((set: any) => {
         const code = set.set_id.replace('-', '')
