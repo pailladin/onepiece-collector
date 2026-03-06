@@ -42,6 +42,7 @@ This repo contains a Vercel cron endpoint that downloads the One Piece Cardmarke
 Files:
 - `src/app/api/cron/cardmarket-price-guide/route.ts`
 - `vercel.json`
+- `supabase/cardmarket-price-guide-table.sql`
 
 Required Vercel env vars:
 - `CRON_SECRET`
@@ -50,6 +51,8 @@ Required Vercel env vars:
 - `CARDMARKET_PRICE_GUIDE_BUCKET=cron` (optional, defaults to `cron`)
 - `CARDMARKET_PRICE_GUIDE_SOURCE_URL=https://www.cardmarket.com/en/Spoils/Data/Price-Guide` (optional)
 - `CARDMARKET_PRICE_GUIDE_DIRECT_URL=<direct price_guide_18.json url>` (optional fallback if source page returns 403)
+
+Before enabling cron, run `supabase/cardmarket-price-guide-table.sql` in the Supabase SQL Editor to create the table `public.cardmarket_price_guide_entries`.
 
 Manual test:
 
@@ -61,3 +64,7 @@ curl -X GET "https://<your-domain>/api/cron/cardmarket-price-guide" \
 Uploaded files:
 - `cardmarket/price-guide/YYYY-MM-DD/price_guide_18.json`
 - `cardmarket/price-guide/latest/price_guide_18.json`
+
+Database refresh:
+- Daily upsert into `public.cardmarket_price_guide_entries`
+- Rows not seen in the latest JSON are deleted automatically
