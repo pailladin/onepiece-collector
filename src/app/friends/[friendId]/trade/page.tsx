@@ -71,6 +71,15 @@ function sortTradeItems(items: TradeItem[]) {
   })
 }
 
+function groupTradeItemsBySet(items: TradeItem[]) {
+  const grouped = new Map<string, TradeItem[]>()
+  for (const item of sortTradeItems(items)) {
+    if (!grouped.has(item.setCode)) grouped.set(item.setCode, [])
+    grouped.get(item.setCode)?.push(item)
+  }
+  return [...grouped.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+}
+
 export default function FriendTradePage() {
   const { user, loading: authLoading } = useAuth()
   const params = useParams()
@@ -81,6 +90,7 @@ export default function FriendTradePage() {
   const [friendUsername, setFriendUsername] = useState('Ami')
   const [friendCanGive, setFriendCanGive] = useState<TradeItem[]>([])
   const [iCanGive, setICanGive] = useState<TradeItem[]>([])
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     const loadTrade = async () => {
@@ -267,7 +277,7 @@ export default function FriendTradePage() {
     return <div style={{ padding: 40 }}>Ami introuvable.</div>
   }
 
-  const renderList = (items: TradeItem[], emptyText: string) => {
+  const renderList = (items: TradeItem[], emptyText: string, sideKey: string) => {
     if (items.length === 0) {
       return (
         <div
@@ -284,32 +294,94 @@ export default function FriendTradePage() {
         </div>
       )
     }
+    const grouped = groupTradeItemsBySet(items)
     return (
-      <div style={{ display: 'grid', gap: 8 }}>
-        {items.map((item) => (
-          <div
-            key={item.id}
-            style={{
-              border: '1px solid #dbeafe',
-              borderRadius: 10,
-              background: '#fff',
-              padding: '10px 12px',
-              display: 'grid',
-              gridTemplateColumns: '120px 1fr auto',
-              gap: 12,
-              alignItems: 'center'
-            }}
-          >
-            <div style={{ fontWeight: 700, color: '#0f172a' }}>{item.displayCode}</div>
-            <div>
-              <div style={{ fontWeight: 600 }}>{item.name}</div>
-              <div style={{ fontSize: 12, color: '#475569' }}>
-                {item.setCode} - {item.rarity} - {item.type}
-              </div>
-            </div>
-            <div style={{ fontSize: 12, color: '#0f172a', fontWeight: 700, whiteSpace: 'nowrap' }}>
-              x{item.giverQty} en double
-            </div>
+      <div style={{ display: 'grid', gap: 12 }}>
+        {grouped.map(([setCode, setItems]) => (
+          <div key={`${sideKey}-${setCode}`}>
+            {(() => {
+              const groupKey = `${sideKey}:${setCode}`
+              const isExpanded = expandedGroups[groupKey] ?? false
+              return (
+                <>
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() =>
+                      setExpandedGroups((prev) => ({
+                        ...prev,
+                        [groupKey]: !(prev[groupKey] ?? false)
+                      }))
+                    }
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        setExpandedGroups((prev) => ({
+                          ...prev,
+                          [groupKey]: !(prev[groupKey] ?? false)
+                        }))
+                      }
+                    }}
+                    style={{
+                      width: '100%',
+                      maxWidth: '100%',
+                      boxSizing: 'border-box',
+                      textAlign: 'left',
+                      fontWeight: 700,
+                      color: '#0f172a',
+                      marginBottom: 6,
+                      border: '1px solid #cbd5e1',
+                      background: '#fff',
+                      borderRadius: 8,
+                      padding: '8px 10px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {isExpanded ? 'v' : '>'} {setCode} ({setItems.length})
+                  </div>
+                  {isExpanded && (
+                    <div style={{ display: 'grid', gap: 8, minWidth: 0 }}>
+                      {setItems.map((item) => (
+                        <div
+                          key={item.id}
+                          style={{
+                            border: '1px solid #dbeafe',
+                            borderRadius: 10,
+                            background: '#fff',
+                            padding: '10px 12px',
+                            boxSizing: 'border-box',
+                            width: '100%',
+                            maxWidth: '100%',
+                            display: 'grid',
+                            gridTemplateColumns: '120px 1fr auto',
+                            gap: 12,
+                            alignItems: 'center'
+                          }}
+                        >
+                          <div style={{ fontWeight: 700, color: '#0f172a' }}>{item.displayCode}</div>
+                          <div>
+                            <div style={{ fontWeight: 600 }}>{item.name}</div>
+                            <div style={{ fontSize: 12, color: '#475569' }}>
+                              {item.setCode} - {item.rarity} - {item.type}
+                            </div>
+                          </div>
+                          <div
+                            style={{
+                              fontSize: 12,
+                              color: '#0f172a',
+                              fontWeight: 700,
+                              whiteSpace: 'nowrap'
+                            }}
+                          >
+                            x{item.giverQty} en double
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )
+            })()}
           </div>
         ))}
       </div>
@@ -399,7 +471,7 @@ export default function FriendTradePage() {
           <div style={{ marginBottom: 10, fontSize: 13, color: '#475569' }}>
             Ses doubles que je n&apos;ai pas encore.
           </div>
-          {renderList(friendCanGive, 'Aucune carte trouvee dans ce sens.')}
+          {renderList(friendCanGive, 'Aucune carte trouvee dans ce sens.', 'friendToMe')}
         </section>
 
         <section style={{ border: '1px solid #d1d5db', borderRadius: 12, padding: 12, background: '#ffffffd1' }}>
@@ -409,7 +481,7 @@ export default function FriendTradePage() {
           <div style={{ marginBottom: 10, fontSize: 13, color: '#475569' }}>
             Mes doubles qu&apos;il n&apos;a pas encore.
           </div>
-          {renderList(iCanGive, 'Aucune carte trouvee dans ce sens.')}
+          {renderList(iCanGive, 'Aucune carte trouvee dans ce sens.', 'meToFriend')}
         </section>
       </div>
     </div>

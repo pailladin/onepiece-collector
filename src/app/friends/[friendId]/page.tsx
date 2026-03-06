@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 import {
@@ -18,6 +18,10 @@ export default function FriendCollectionsPage() {
   const [sets, setSets] = useState<SetRow[]>([])
   const [stats, setStats] = useState<Record<string, SetStats>>({})
   const [loading, setLoading] = useState(true)
+  const visibleSets = useMemo(
+    () => sets.filter((set) => (stats[set.code]?.owned || 0) > 0),
+    [sets, stats]
+  )
 
   useEffect(() => {
     const fetchData = async () => {
@@ -58,7 +62,7 @@ export default function FriendCollectionsPage() {
       </div>
       <CollectionSetsGrid
         title={`Collection de ${friendUsername}`}
-        sets={sets}
+        sets={visibleSets}
         stats={stats}
         getSetHref={(setCode) => `/friends/${friendId}/${setCode}`}
       />

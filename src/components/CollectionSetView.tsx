@@ -39,7 +39,7 @@ type DoubleDetail = {
   displayCode: string
   name: string
   quantity: number
-  doubleQty: number
+  unitPrice: number | null
 }
 
 const RARITY_PRIORITY: Record<string, number> = {
@@ -191,6 +191,7 @@ export function CollectionSetView({
   const [showPriceDetails, setShowPriceDetails] = useState(false)
   const [shareMessage, setShareMessage] = useState<string | null>(null)
   const [showDoublesModal, setShowDoublesModal] = useState(false)
+  const [doublesPriceLoading, setDoublesPriceLoading] = useState(false)
 
   useEffect(() => {
     const fetchData = async () => {
@@ -379,10 +380,10 @@ export function CollectionSetView({
             displayCode: getDisplayPrintCode(item),
             name,
             quantity,
-            doubleQty: Math.max(quantity - 1, 0)
+            unitPrice: null
           }
         })
-        .sort((a, b) => b.doubleQty - a.doubleQty || a.displayCode.localeCompare(b.displayCode)),
+        .sort((a, b) => b.quantity - a.quantity || a.displayCode.localeCompare(b.displayCode)),
     [ownedItemsAll]
   )
   const missingItemsAll = useMemo(
@@ -480,6 +481,38 @@ export function CollectionSetView({
   const calculateMissingValue = async () => {
     await calculatePriceDetails('missing')
   }
+
+  const openDoublesModal = async () => {
+    if (!canEdit || doublesDetails.length === 0 || doublesPriceLoading) return
+    setDoublesPriceLoading(true)
+    setShowDoublesModal(true)
+    try {
+      const res = await fetch(`/api/optcg/prices/${code}`)
+      const data = await res.json().catch(() => ({}))
+      const prices: Record<string, number> = res.ok ? data?.prices || {} : {}
+      const enriched = doublesDetails
+        .map((row) => ({
+          ...row,
+          unitPrice: Number.isFinite(prices[row.printCode]) ? prices[row.printCode] : null
+        }))
+        .sort(
+          (a, b) =>
+            (b.unitPrice || -1) - (a.unitPrice || -1) ||
+            b.quantity - a.quantity ||
+            a.displayCode.localeCompare(b.displayCode)
+        )
+      // Reuse state setter by rebuilding from owned items is heavier; direct state for modal table only
+      setDoublesRows(enriched)
+    } finally {
+      setDoublesPriceLoading(false)
+    }
+  }
+
+  const [doublesRows, setDoublesRows] = useState<DoubleDetail[]>([])
+
+  useEffect(() => {
+    setDoublesRows(doublesDetails)
+  }, [doublesDetails])
 
   useEffect(() => {
     const queryString = buildViewQuery({
@@ -1012,7 +1045,7 @@ export function CollectionSetView({
             </button>
 
             <button
-              onClick={() => setShowDoublesModal(true)}
+              onClick={openDoublesModal}
               disabled={!canEdit || doublesDetails.length === 0}
               style={{
                 padding: '8px 12px',
@@ -1023,7 +1056,7 @@ export function CollectionSetView({
                   !canEdit || doublesDetails.length === 0 ? 'not-allowed' : 'pointer'
               }}
             >
-              Doubles
+              {doublesPriceLoading ? 'Chargement...' : 'Doubles'}
             </button>
           </div>
           {priceError && <div style={{ marginTop: 6, fontSize: 12, color: '#b91c1c' }}>{priceError}</div>}
@@ -1280,10 +1313,10 @@ export function CollectionSetView({
                     <div>Carte</div>
                     <div>Code print</div>
                     <div>Quantite</div>
-                    <div>Doubles</div>
+                    <div>Prix</div>
                   </div>
 
-                  {doublesDetails.map((row) => (
+                  {doublesRows.map((row) => (
                     <div
                       key={row.id}
                       style={{
@@ -1302,7 +1335,9 @@ export function CollectionSetView({
                       </div>
                       <div style={{ color: '#334155' }}>{row.printCode}</div>
                       <div>x{row.quantity}</div>
-                      <div style={{ fontWeight: 700 }}>x{row.doubleQty}</div>
+                      <div style={{ fontWeight: 700 }}>
+                        {row.unitPrice == null ? '-' : formatCurrency(row.unitPrice)}
+                      </div>
                     </div>
                   ))}
                 </>
