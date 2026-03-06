@@ -111,7 +111,7 @@ export async function GET(
             const printCode = printCodeById.get(link.card_print_id)
             if (!printCode) continue
             const cmAvgPrice = avgPriceByProductId.get(link.cardmarket_product_id)
-            if (Number.isFinite(cmAvgPrice)) {
+            if (cmAvgPrice != null && Number.isFinite(cmAvgPrice)) {
               prices[printCode] = cmAvgPrice
               sources[printCode] = 'cardmarket'
             }
