@@ -34,3 +34,29 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## Vercel cron: Cardmarket Price Guide
+
+This repo contains a Vercel cron endpoint that downloads the One Piece Cardmarket price guide JSON every day and uploads it to the `cron` storage bucket in Supabase.
+
+Files:
+- `src/app/api/cron/cardmarket-price-guide/route.ts`
+- `vercel.json`
+
+Required Vercel env vars:
+- `CRON_SECRET`
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `CARDMARKET_PRICE_GUIDE_BUCKET=cron` (optional, defaults to `cron`)
+- `CARDMARKET_PRICE_GUIDE_SOURCE_URL=https://www.cardmarket.com/en/Spoils/Data/Price-Guide` (optional)
+
+Manual test:
+
+```bash
+curl -X GET "https://<your-domain>/api/cron/cardmarket-price-guide" \
+  -H "Authorization: Bearer <CRON_SECRET>"
+```
+
+Uploaded files:
+- `cardmarket/price-guide/YYYY-MM-DD/price_guide_18.json`
+- `cardmarket/price-guide/latest/price_guide_18.json`

@@ -1,0 +1,8 @@
+﻿{
+  "crons": [
+    {
+      "path": "/api/cron/cardmarket-price-guide",
+      "schedule": "0 3 * * *"
+    }
+  ]
+}
