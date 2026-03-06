@@ -501,15 +501,22 @@ export function CollectionSetView({
       const data = await res.json().catch(() => ({}))
       const prices: Record<string, number> = res.ok ? data?.prices || {} : {}
       const priceSources: Record<string, PriceSource> = res.ok ? data?.sources || {} : {}
-      const enriched = doublesDetails
-        .map((row) => ({
-          ...row,
-          unitPrice: Number.isFinite(prices[row.printCode]) ? prices[row.printCode] : null,
-          source:
-            Number.isFinite(prices[row.printCode])
-              ? (priceSources[row.printCode] === 'cardmarket' ? 'cardmarket' : 'us')
-              : null
-        }))
+      const enriched: DoubleDetail[] = doublesDetails
+        .map((row) => {
+          const priceValue = prices[row.printCode]
+          const unitPrice = Number.isFinite(priceValue) ? priceValue : null
+          const source: PriceSource | null =
+            unitPrice == null
+              ? null
+              : priceSources[row.printCode] === 'cardmarket'
+                ? 'cardmarket'
+                : 'us'
+          return {
+            ...row,
+            unitPrice,
+            source
+          }
+        })
         .sort(
           (a, b) =>
             (b.unitPrice || -1) - (a.unitPrice || -1) ||
