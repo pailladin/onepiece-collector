@@ -21,15 +21,21 @@ type PrintRow = {
   baseCode: string
   cardNumber: string | null
   rarity: string
+  imagePath: string | null
   linkedProductId: string | null
 }
 
 type Candidate = {
   imageUrl: string
+  imageFallbackUrls?: string[]
+  proxyImageUrl?: string
+  proxyImageFallbackUrls?: string[]
   imageCode: string
   productId: string
   cardmarketUrl: string
 }
+
+const MISSING_IMAGE_PATH = '__missing__'
 
 export default function AdminCardmarketLinksPage() {
   const { user, loading: authLoading } = useAuth()
@@ -51,6 +57,7 @@ export default function AdminCardmarketLinksPage() {
   const [manualProductIdByPrint, setManualProductIdByPrint] = useState<Record<string, string>>({})
   const [manualSourceUrlByPrint, setManualSourceUrlByPrint] = useState<Record<string, string>>({})
   const [savingPrintId, setSavingPrintId] = useState<string | null>(null)
+  const [hoveredPrintId, setHoveredPrintId] = useState<string | null>(null)
 
   const selectedRow = useMemo(
     () => rows.find((row) => row.printId === selectedPrintId) || null,
@@ -111,7 +118,7 @@ export default function AdminCardmarketLinksPage() {
     }
   }, [getAuthHeaders, onlyUnlinked, selectedSetCode])
 
-  const loadCandidates = async (printId: string) => {
+  const loadCandidates = useCallback(async (printId: string) => {
     setLoadingCandidatesFor(printId)
     setError(null)
 
@@ -132,6 +139,12 @@ export default function AdminCardmarketLinksPage() {
 
       const candidates = (data?.candidates || []) as Candidate[]
       setCandidatesByPrintId((prev) => ({ ...prev, [printId]: candidates }))
+      if (candidates.length === 1 && candidates[0]?.productId) {
+        setManualProductIdByPrint((prev) => ({
+          ...prev,
+          [printId]: candidates[0].productId
+        }))
+      }
       if (typeof data?.searchUrl === 'string') {
         setSearchUrlByPrintId((prev) => ({ ...prev, [printId]: data.searchUrl }))
       }
@@ -149,7 +162,7 @@ export default function AdminCardmarketLinksPage() {
     } finally {
       setLoadingCandidatesFor(null)
     }
-  }
+  }, [expansionIdOverride, getAuthHeaders])
 
   const saveLink = async (printId: string, productId: string, source: string, confidence: number) => {
     if (!productId.trim()) return
@@ -182,8 +195,12 @@ export default function AdminCardmarketLinksPage() {
         )
       )
       if (onlyUnlinked) {
-        setRows((prev) => prev.filter((row) => row.printId !== printId))
-        setSelectedPrintId((current) => (current === printId ? null : current))
+        setRows((prev) => {
+          const nextRows = prev.filter((row) => row.printId !== printId)
+          const nextSelectedId = nextRows[0]?.printId || null
+          setSelectedPrintId(nextSelectedId)
+          return nextRows
+        })
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur inconnue')
@@ -201,6 +218,13 @@ export default function AdminCardmarketLinksPage() {
     if (!canAccessAdmin || !selectedSetCode) return
     loadRows()
   }, [canAccessAdmin, selectedSetCode, onlyUnlinked, loadRows])
+
+  useEffect(() => {
+    if (!selectedPrintId) return
+    if (loadingCandidatesFor === selectedPrintId) return
+    if (candidatesByPrintId[selectedPrintId]) return
+    void loadCandidates(selectedPrintId)
+  }, [selectedPrintId, loadingCandidatesFor, candidatesByPrintId, loadCandidates])
 
   if (authLoading) return <div style={{ padding: 40 }}>Chargement...</div>
   if (!canAccessAdmin) return <div style={{ padding: 40 }}>Acces refuse.</div>
@@ -229,6 +253,12 @@ export default function AdminCardmarketLinksPage() {
 
     return null
   }
+
+  const localStorageBaseUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/cards-images`
+  const getLocalImageUrl = (row: PrintRow): string | null =>
+    row.imagePath && row.imagePath !== MISSING_IMAGE_PATH
+      ? `${localStorageBaseUrl}/${selectedSetCode}/${row.imagePath}`
+      : null
 
   return (
     <div style={{ padding: 24 }}>
@@ -311,7 +341,12 @@ export default function AdminCardmarketLinksPage() {
                 return (
                   <button
                     key={row.printId}
-                    onClick={() => setSelectedPrintId(row.printId)}
+                    onClick={() => {
+                      setSelectedPrintId(row.printId)
+                      void loadCandidates(row.printId)
+                    }}
+                    onMouseEnter={() => setHoveredPrintId(row.printId)}
+                    onMouseLeave={() => setHoveredPrintId((current) => (current === row.printId ? null : current))}
                     style={{
                       width: '100%',
                       textAlign: 'left',
@@ -327,6 +362,27 @@ export default function AdminCardmarketLinksPage() {
                     <div style={{ fontSize: 12, color: '#64748b' }}>
                       {row.baseCode} | {row.rarity || 'n/a'} | {row.variantType}
                     </div>
+                    {(() => {
+                      const previewUrl = getLocalImageUrl(row)
+                      const showPreview = Boolean(previewUrl) && (selected || hoveredPrintId === row.printId)
+                      if (!showPreview || !previewUrl) return null
+                      return (
+                        <div style={{ marginTop: 8 }}>
+                          <img
+                            src={previewUrl}
+                            alt={`Preview ${row.printCode}`}
+                            style={{
+                              width: 72,
+                              height: 100,
+                              objectFit: 'cover',
+                              border: '1px solid #cbd5e1',
+                              borderRadius: 4,
+                              background: '#fff'
+                            }}
+                          />
+                        </div>
+                      )
+                    })()}
                     {row.linkedProductId && (
                       <div style={{ fontSize: 12, color: '#047857' }}>
                         Lie: {row.linkedProductId}
@@ -459,8 +515,16 @@ export default function AdminCardmarketLinksPage() {
                       <div style={{ fontWeight: 700, marginBottom: 4 }}>idProduct #{candidate.productId}</div>
                       <div style={{ marginBottom: 8 }}>
                         <img
-                          src={candidate.imageUrl}
+                          src={candidate.proxyImageUrl || candidate.imageUrl}
                           alt={`Cardmarket ${candidate.productId}`}
+                          onError={(e) => {
+                            const target = e.currentTarget
+                            const fallbacks = candidate.proxyImageFallbackUrls || candidate.imageFallbackUrls || []
+                            const idx = Number.parseInt(target.dataset.fallbackIndex || '0', 10)
+                            if (!Number.isFinite(idx) || idx < 0 || idx >= fallbacks.length) return
+                            target.dataset.fallbackIndex = String(idx + 1)
+                            target.src = fallbacks[idx]
+                          }}
                           style={{
                             width: 120,
                             height: 168,
@@ -469,6 +533,17 @@ export default function AdminCardmarketLinksPage() {
                             borderRadius: 4
                           }}
                         />
+                      </div>
+                      <div style={{ fontSize: 11, color: '#334155', marginBottom: 6 }}>
+                        URL image:{' '}
+                        <a
+                          href={candidate.imageUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          style={{ color: '#1d4ed8', wordBreak: 'break-all' }}
+                        >
+                          {candidate.imageUrl}
+                        </a>
                       </div>
                       <div style={{ fontSize: 12, color: '#64748b', marginBottom: 8 }}>
                         Code image: {candidate.imageCode}

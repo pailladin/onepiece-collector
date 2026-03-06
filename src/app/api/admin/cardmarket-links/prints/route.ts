@@ -16,6 +16,7 @@ type PrintRow = {
   id: string
   print_code: string
   variant_type: string | null
+  image_path: string | null
   card_id: string
 }
 
@@ -70,7 +71,7 @@ export async function GET(request: Request) {
 
   const { data: printsData, error: printsError } = await supabase
     .from('card_prints')
-    .select('id, print_code, variant_type, card_id')
+    .select('id, print_code, variant_type, image_path, card_id')
     .eq('distribution_set_id', setData.id)
     .order('print_code', { ascending: true })
 
@@ -148,6 +149,7 @@ export async function GET(request: Request) {
         baseCode: card?.base_code || '',
         cardNumber: card?.number || null,
         rarity: card?.rarity || '',
+        imagePath: print.image_path,
         linkedProductId: linkByPrintId.get(print.id) || null
       }
     })

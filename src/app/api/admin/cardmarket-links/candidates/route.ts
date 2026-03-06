@@ -32,12 +32,17 @@ type SetRow = {
   name: string | null
 }
 
+type PriceGuideExpansionRow = {
+  source_expansion_id: string | null
+}
+
 type CatalogRow = {
   product_id: string
   name: string | null
   id_expansion: number | null
   id_metacard: number | null
   date_added: string | null
+  raw_json: unknown
 }
 
 function clean(value: string | null | undefined): string {
@@ -75,6 +80,61 @@ function nameContainsCode(name: string, code: string): boolean {
   return n.includes(`(${c})`) || n.includes(c)
 }
 
+function extractSetPrefixFromName(name: string | null): string | null {
+  const text = (name || '').toUpperCase()
+  const match = text.match(/\(([A-Z0-9]{2,6})-\d{2,4}[A-Z]?\)/)
+  return match?.[1] || null
+}
+
+function findImageUrlsInRawJson(value: unknown, out: Set<string>) {
+  if (typeof value === 'string') {
+    if (value.includes('product-images.s3.cardmarket.com')) out.add(value)
+    return
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) findImageUrlsInRawJson(item, out)
+    return
+  }
+  if (!value || typeof value !== 'object') return
+  for (const nested of Object.values(value as Record<string, unknown>)) {
+    findImageUrlsInRawJson(nested, out)
+  }
+}
+
+function buildCandidateImageUrls(params: {
+  productId: string
+  setCode: string
+  name: string | null
+  idExpansion: number | null
+  rawJson: unknown
+}): string[] {
+  const urls = new Set<string>()
+  const rawUrls = new Set<string>()
+  findImageUrlsInRawJson(params.rawJson, rawUrls)
+  for (const url of rawUrls) urls.add(url)
+
+  const prefixes = new Set<string>()
+  prefixes.add(clean(params.setCode))
+  const fromName = extractSetPrefixFromName(params.name)
+  if (fromName) prefixes.add(clean(fromName))
+
+  for (const prefix of prefixes) {
+    if (!prefix) continue
+    urls.add(`https://product-images.s3.cardmarket.com/1621/${prefix}/${params.productId}/${params.productId}.jpg`)
+    urls.add(`https://product-images.s3.cardmarket.com/1621/${prefix}/${params.productId}/${params.productId}.png`)
+    urls.add(`https://product-images.s3.cardmarket.com/1621/${prefix}/${params.productId}/${params.productId}.webp`)
+  }
+
+  if (params.idExpansion != null) {
+    const exp = String(params.idExpansion)
+    urls.add(`https://product-images.s3.cardmarket.com/1621/${exp}/${params.productId}/${params.productId}.jpg`)
+    urls.add(`https://product-images.s3.cardmarket.com/1621/${exp}/${params.productId}/${params.productId}.png`)
+    urls.add(`https://product-images.s3.cardmarket.com/1621/${exp}/${params.productId}/${params.productId}.webp`)
+  }
+
+  return [...urls]
+}
+
 function computeScore(params: {
   row: CatalogRow
   printCode: string
@@ -101,6 +161,27 @@ function computeScore(params: {
   return score
 }
 
+async function inferExpansionId(setCode: string): Promise<number | null> {
+  const patterns = [setCode, setCode.replace(/-/g, ''), `${setCode.slice(0, -2)}-${setCode.slice(-2)}`]
+  for (const pattern of patterns) {
+    const value = pattern.trim()
+    if (!value) continue
+    const { data, error } = await supabase
+      .from('cardmarket_price_guide_entries')
+      .select('source_expansion_id')
+      .ilike('set_code', `%${value}%`)
+      .not('source_expansion_id', 'is', null)
+      .limit(1)
+
+    if (!error) {
+      const row = ((data as PriceGuideExpansionRow[] | null) || [])[0]
+      const parsed = Number.parseInt(String(row?.source_expansion_id || ''), 10)
+      if (Number.isFinite(parsed)) return parsed
+    }
+  }
+  return null
+}
+
 export async function GET(request: Request) {
   const userResult = await getRequestUser(request)
   if (!userResult.user) {
@@ -117,6 +198,7 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url)
   const printId = (url.searchParams.get('printId') || '').trim()
+  const expansionIdRaw = (url.searchParams.get('expansionId') || '').trim()
   if (!printId) {
     return NextResponse.json({ error: 'printId requis' }, { status: 400 })
   }
@@ -171,21 +253,29 @@ export async function GET(request: Request) {
 
   const printCode = clean(print.print_code)
   const searchCode = basePrintCode(printCode)
+  const expansionIdOverride = Number.parseInt(expansionIdRaw, 10)
+  const inferredExpansionId = await inferExpansionId(set.code)
+  const effectiveExpansionId = Number.isFinite(expansionIdOverride)
+    ? expansionIdOverride
+    : inferredExpansionId
   const searchUrl = `https://www.cardmarket.com/en/OnePiece/Products/Search?searchMode=v2&idCategory=0&idExpansion=0&searchString=${encodeURIComponent(
     searchCode
   )}&idRarity=0&perSite=30`
 
+  const byCodeQuery = supabase
+    .from('cardmarket_catalog_entries')
+    .select('product_id, name, id_expansion, id_metacard, date_added, raw_json')
+    .ilike('name', `%${searchCode}%`)
+    .limit(120)
+  const byNameQuery = supabase
+    .from('cardmarket_catalog_entries')
+    .select('product_id, name, id_expansion, id_metacard, date_added, raw_json')
+    .ilike('name', `%${cardName.split(' ').slice(0, 2).join(' ')}%`)
+    .limit(120)
+
   const [byCodeResult, byNameResult] = await Promise.all([
-    supabase
-      .from('cardmarket_catalog_entries')
-      .select('product_id, name, id_expansion, id_metacard, date_added')
-      .ilike('name', `%${searchCode}%`)
-      .limit(120),
-    supabase
-      .from('cardmarket_catalog_entries')
-      .select('product_id, name, id_expansion, id_metacard, date_added')
-      .ilike('name', `%${cardName.split(' ').slice(0, 2).join(' ')}%`)
-      .limit(120)
+    Number.isFinite(effectiveExpansionId) ? byCodeQuery.eq('id_expansion', effectiveExpansionId) : byCodeQuery,
+    Number.isFinite(effectiveExpansionId) ? byNameQuery.eq('id_expansion', effectiveExpansionId) : byNameQuery
   ])
 
   if (byCodeResult.error) {
@@ -209,8 +299,43 @@ export async function GET(request: Request) {
     map.set(row.product_id, row)
   }
 
-  const candidates = [...map.values()]
+  const candidateRows = [...map.values()]
+  const candidateProductIds = candidateRows.map((row) => row.product_id)
+  const linkedByProductId = new Map<string, string>()
+
+  if (candidateProductIds.length > 0) {
+    const { data: linksData, error: linksError } = await supabase
+      .from('cardmarket_print_links')
+      .select('card_print_id, cardmarket_product_id')
+      .in('cardmarket_product_id', candidateProductIds)
+
+    if (linksError) {
+      return NextResponse.json(
+        { error: `Erreur lecture mappings existants: ${linksError.message}` },
+        { status: 500 }
+      )
+    }
+
+    for (const row of (linksData as Array<{ card_print_id: string; cardmarket_product_id: string }> | null) ||
+      []) {
+      linkedByProductId.set(row.cardmarket_product_id, row.card_print_id)
+    }
+  }
+
+  const candidates = candidateRows
+    .filter((row) => {
+      const linkedPrintId = linkedByProductId.get(row.product_id)
+      if (!linkedPrintId) return true
+      return linkedPrintId === print.id
+    })
     .map((row) => {
+      const imageUrls = buildCandidateImageUrls({
+        productId: row.product_id,
+        setCode: set.code,
+        name: row.name,
+        idExpansion: row.id_expansion,
+        rawJson: row.raw_json
+      })
       const score = computeScore({
         row,
         printCode,
@@ -220,7 +345,14 @@ export async function GET(request: Request) {
         rarity: card.rarity || ''
       })
       return {
-        imageUrl: `https://product-images.s3.cardmarket.com/1621/${set.code}/${row.product_id}/${row.product_id}.jpg`,
+        imageUrl: imageUrls[0] || '',
+        imageFallbackUrls: imageUrls.slice(1),
+        proxyImageUrl: imageUrls[0]
+          ? `/api/cardmarket/image?src=${encodeURIComponent(imageUrls[0])}`
+          : '',
+        proxyImageFallbackUrls: imageUrls
+          .slice(1)
+          .map((url) => `/api/cardmarket/image?src=${encodeURIComponent(url)}`),
         imageCode: row.product_id,
         productId: row.product_id,
         cardmarketUrl: `https://www.cardmarket.com/en/OnePiece/Products?idProduct=${row.product_id}`,
@@ -243,6 +375,7 @@ export async function GET(request: Request) {
       setName: set.name || set.code
     },
     searchUrl,
+    effectiveExpansionId,
     candidates
   })
 }
