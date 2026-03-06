@@ -23,6 +23,7 @@ const CARD_PLACEHOLDER_IMAGE =
 
 type SortKey = 'number' | 'name' | 'rarity' | 'type'
 type SortDirection = 'asc' | 'desc'
+type PriceSource = 'cardmarket' | 'us'
 type PriceDetail = {
   id: string
   printCode: string
@@ -31,6 +32,8 @@ type PriceDetail = {
   quantity: number
   unitPrice: number
   totalPrice: number
+  source: PriceSource
+  cardmarketProductId: string | null
 }
 
 type DoubleDetail = {
@@ -40,6 +43,7 @@ type DoubleDetail = {
   name: string
   quantity: number
   unitPrice: number | null
+  source: PriceSource | null
 }
 
 const RARITY_PRIORITY: Record<string, number> = {
@@ -380,7 +384,8 @@ export function CollectionSetView({
             displayCode: getDisplayPrintCode(item),
             name,
             quantity,
-            unitPrice: null
+            unitPrice: null,
+            source: null
           }
         })
         .sort((a, b) => b.quantity - a.quantity || a.displayCode.localeCompare(b.displayCode)),
@@ -418,6 +423,8 @@ export function CollectionSetView({
       }
 
       const prices: Record<string, number> = data?.prices || {}
+      const priceSources: Record<string, PriceSource> = data?.sources || {}
+      const cardmarketProductIds: Record<string, string> = data?.cardmarketProductIds || {}
       let total = 0
       let matched = 0
       const details: PriceDetail[] = []
@@ -427,6 +434,7 @@ export function CollectionSetView({
         const printCode = (item.print_code || '').trim().toUpperCase()
         const unitPrice = prices[printCode]
         if (!Number.isFinite(unitPrice)) continue
+        const source: PriceSource = priceSources[printCode] === 'cardmarket' ? 'cardmarket' : 'us'
         const quantity = mode === 'owned' ? item.quantity || 0 : 1
         const totalPrice = unitPrice * quantity
         const name =
@@ -442,7 +450,9 @@ export function CollectionSetView({
           name,
           quantity,
           unitPrice,
-          totalPrice
+          totalPrice,
+          source,
+          cardmarketProductId: cardmarketProductIds[printCode] || null
         })
       }
 
@@ -490,10 +500,15 @@ export function CollectionSetView({
       const res = await fetch(`/api/optcg/prices/${code}`)
       const data = await res.json().catch(() => ({}))
       const prices: Record<string, number> = res.ok ? data?.prices || {} : {}
+      const priceSources: Record<string, PriceSource> = res.ok ? data?.sources || {} : {}
       const enriched = doublesDetails
         .map((row) => ({
           ...row,
-          unitPrice: Number.isFinite(prices[row.printCode]) ? prices[row.printCode] : null
+          unitPrice: Number.isFinite(prices[row.printCode]) ? prices[row.printCode] : null,
+          source:
+            Number.isFinite(prices[row.printCode])
+              ? (priceSources[row.printCode] === 'cardmarket' ? 'cardmarket' : 'us')
+              : null
         }))
         .sort(
           (a, b) =>
@@ -1207,7 +1222,9 @@ export function CollectionSetView({
               {priceDetails.map((row) => (
                 (() => {
                   const baseCode = (row.printCode || '').split('_')[0] || ''
-                  const cardmarketUrl = `https://www.cardmarket.com/fr/OnePiece/Products/Singles?searchMode=v2&idCategory=1621&idExpansion=0&searchString=${encodeURIComponent(baseCode)}&idRarity=0&perSite=30`
+                  const cardmarketUrl = row.cardmarketProductId
+                    ? `https://www.cardmarket.com/en/OnePiece/Products?idProduct=${encodeURIComponent(row.cardmarketProductId)}`
+                    : `https://www.cardmarket.com/fr/OnePiece/Products/Singles?searchMode=v2&idCategory=1621&idExpansion=0&searchString=${encodeURIComponent(baseCode)}&idRarity=0&perSite=30`
                   return (
                 <div
                   key={row.id}
@@ -1226,8 +1243,17 @@ export function CollectionSetView({
                     <div>{row.name}</div>
                   </div>
                   <div style={{ color: '#334155' }}>{row.printCode}</div>
-                  <div>x{row.quantity}</div>
-                  <div>{formatCurrency(row.unitPrice)}</div>
+                    <div>x{row.quantity}</div>
+                  <div
+                    title={
+                      row.source === 'cardmarket'
+                        ? 'Prix Cardmarket (avg_price)'
+                        : 'Prix US (source externe), un ecart peut exister'
+                    }
+                  >
+                    {formatCurrency(row.unitPrice)}
+                    {row.source !== 'cardmarket' ? '*' : ''}
+                  </div>
                   <div style={{ fontWeight: 700 }}>{formatCurrency(row.totalPrice)}</div>
                   <a
                     href={cardmarketUrl}
@@ -1241,8 +1267,11 @@ export function CollectionSetView({
                   )
                 })()
               ))}
+              </div>
+              <div style={{ fontSize: 12, color: '#64748b', padding: '0 8px 10px' }}>
+                * Prix US (source externe), un ecart peut exister avec Cardmarket.
+              </div>
             </div>
-          </div>
         </div>
       )}
 
@@ -1336,10 +1365,13 @@ export function CollectionSetView({
                       <div style={{ color: '#334155' }}>{row.printCode}</div>
                       <div>x{row.quantity}</div>
                       <div style={{ fontWeight: 700 }}>
-                        {row.unitPrice == null ? '-' : formatCurrency(row.unitPrice)}
+                        {row.unitPrice == null ? '-' : `${formatCurrency(row.unitPrice)}${row.source !== 'cardmarket' ? '*' : ''}`}
                       </div>
                     </div>
                   ))}
+                  <div style={{ fontSize: 12, color: '#64748b', padding: '8px 8px 2px' }}>
+                    * Prix US (source externe), un ecart peut exister avec Cardmarket.
+                  </div>
                 </>
               )}
             </div>

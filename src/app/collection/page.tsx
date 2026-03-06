@@ -27,6 +27,7 @@ type SetPriceRow = {
   total: number
   pricedCount: number
   expectedCount: number
+  usFallbackCount: number
 }
 
 function chunkArray<T>(items: T[], size: number) {
@@ -169,9 +170,11 @@ export default function CollectionPage() {
           const res = await fetch(`/api/optcg/prices/${setCode}`)
           const data = await res.json().catch(() => ({}))
           const prices: Record<string, number> = res.ok ? data?.prices || {} : {}
+          const sources: Record<string, 'cardmarket' | 'us'> = res.ok ? data?.sources || {} : {}
 
           let setTotal = 0
           let setPricedCount = 0
+          let setUsFallbackCount = 0
 
           for (const ownedPrint of ownedPrints) {
             const unitPrice = prices[ownedPrint.printCode]
@@ -179,6 +182,9 @@ export default function CollectionPage() {
 
             setPricedCount += 1
             setTotal += unitPrice * ownedPrint.quantity
+            if (sources[ownedPrint.printCode] !== 'cardmarket') {
+              setUsFallbackCount += 1
+            }
           }
 
           globalPricedCount += setPricedCount
@@ -189,7 +195,8 @@ export default function CollectionPage() {
             setName: setRow?.name || setCode,
             total: setTotal,
             pricedCount: setPricedCount,
-            expectedCount
+            expectedCount,
+            usFallbackCount: setUsFallbackCount
           })
         })
       )
@@ -281,6 +288,11 @@ export default function CollectionPage() {
                   Total estime: <strong>{formatCurrency(priceTotal || 0)}</strong> (
                   {pricePricedCount}/{priceExpectedCount} cartes pricees)
                 </div>
+                {priceSetRows.some((row) => row.usFallbackCount > 0) && (
+                  <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
+                    * Prix US (source externe), un ecart peut exister avec Cardmarket.
+                  </div>
+                )}
               </div>
               <button onClick={() => setShowPriceModal(false)}>Fermer</button>
             </div>
@@ -332,7 +344,16 @@ export default function CollectionPage() {
                       {row.pricedCount}/{row.expectedCount}
                     </div>
                     <div style={{ textAlign: 'right', fontWeight: 700 }}>
-                      {formatCurrency(row.total)}
+                      <span
+                        title={
+                          row.usFallbackCount > 0
+                            ? 'Inclut des prix US (source externe), un ecart peut exister'
+                            : 'Prix Cardmarket (avg_price)'
+                        }
+                      >
+                        {formatCurrency(row.total)}
+                        {row.usFallbackCount > 0 ? '*' : ''}
+                      </span>
                     </div>
                   </div>
                 ))
