@@ -33,6 +33,15 @@ type PriceDetail = {
   totalPrice: number
 }
 
+type DoubleDetail = {
+  id: string
+  printCode: string
+  displayCode: string
+  name: string
+  quantity: number
+  doubleQty: number
+}
+
 const RARITY_PRIORITY: Record<string, number> = {
   C: 1,
   UC: 2,
@@ -181,6 +190,7 @@ export function CollectionSetView({
   const [priceDetails, setPriceDetails] = useState<PriceDetail[]>([])
   const [showPriceDetails, setShowPriceDetails] = useState(false)
   const [shareMessage, setShareMessage] = useState<string | null>(null)
+  const [showDoublesModal, setShowDoublesModal] = useState(false)
 
   useEffect(() => {
     const fetchData = async () => {
@@ -352,6 +362,28 @@ export function CollectionSetView({
   const ownedItemsAll = useMemo(
     () => items.filter((item) => (item.quantity || 0) > 0),
     [items]
+  )
+  const doublesDetails = useMemo<DoubleDetail[]>(
+    () =>
+      ownedItemsAll
+        .filter((item) => (item.quantity || 0) > 1)
+        .map((item) => {
+          const printCode = (item.print_code || '').trim().toUpperCase()
+          const name =
+            item.card?.card_translations?.find((t: any) => t.locale === DEFAULT_LOCALE)
+              ?.name || ''
+          const quantity = item.quantity || 0
+          return {
+            id: item.id,
+            printCode,
+            displayCode: getDisplayPrintCode(item),
+            name,
+            quantity,
+            doubleQty: Math.max(quantity - 1, 0)
+          }
+        })
+        .sort((a, b) => b.doubleQty - a.doubleQty || a.displayCode.localeCompare(b.displayCode)),
+    [ownedItemsAll]
   )
   const missingItemsAll = useMemo(
     () => items.filter((item) => (item.quantity || 0) === 0),
@@ -959,7 +991,7 @@ export function CollectionSetView({
                   priceLoading || ownedItemsAll.length === 0 ? 'not-allowed' : 'pointer'
               }}
             >
-              {priceLoading ? 'Calcul en cours...' : 'Calculer valeur collection'}
+              {priceLoading ? 'Calcul en cours...' : 'Valeur Collection'}
             </button>
 
             <button
@@ -976,7 +1008,22 @@ export function CollectionSetView({
                     : 'pointer'
               }}
             >
-              {priceLoading ? 'Calcul en cours...' : 'Estimer cout manquantes'}
+              {priceLoading ? 'Calcul en cours...' : 'Completer collection'}
+            </button>
+
+            <button
+              onClick={() => setShowDoublesModal(true)}
+              disabled={!canEdit || doublesDetails.length === 0}
+              style={{
+                padding: '8px 12px',
+                borderRadius: 8,
+                border: '1px solid #cbd5e1',
+                background: '#ffffff',
+                cursor:
+                  !canEdit || doublesDetails.length === 0 ? 'not-allowed' : 'pointer'
+              }}
+            >
+              Doubles
             </button>
           </div>
           {priceError && <div style={{ marginTop: 6, fontSize: 12, color: '#b91c1c' }}>{priceError}</div>}
@@ -1161,6 +1208,105 @@ export function CollectionSetView({
                   )
                 })()
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showDoublesModal && (
+        <div
+          onClick={() => setShowDoublesModal(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.6)',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            zIndex: 1100
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: '#fff',
+              borderRadius: 10,
+              width: 'min(820px, 95vw)',
+              maxHeight: '80vh',
+              overflow: 'auto',
+              padding: 0
+            }}
+          >
+            <div
+              style={{
+                position: 'sticky',
+                top: 0,
+                zIndex: 1,
+                background: '#fff',
+                borderBottom: '1px solid #e2e8f0',
+                padding: 16,
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                gap: 12
+              }}
+            >
+              <div>
+                <h2 style={{ margin: 0, fontSize: 18 }}>Detail des doubles - Cartes possedees</h2>
+                <div style={{ marginTop: 4, fontSize: 13, color: '#334155' }}>
+                  {doublesDetails.length} carte(s) avec au moins un double
+                </div>
+              </div>
+              <button onClick={() => setShowDoublesModal(false)}>Fermer</button>
+            </div>
+
+            <div style={{ padding: 12 }}>
+              {doublesDetails.length === 0 ? (
+                <div style={{ fontSize: 14, color: '#64748b' }}>Aucun double.</div>
+              ) : (
+                <>
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: '1.5fr 1fr 0.8fr 0.8fr',
+                      gap: 10,
+                      padding: '6px 8px',
+                      fontSize: 12,
+                      color: '#475569',
+                      borderBottom: '1px solid #e2e8f0',
+                      marginBottom: 2
+                    }}
+                  >
+                    <div>Carte</div>
+                    <div>Code print</div>
+                    <div>Quantite</div>
+                    <div>Doubles</div>
+                  </div>
+
+                  {doublesDetails.map((row) => (
+                    <div
+                      key={row.id}
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: '1.5fr 1fr 0.8fr 0.8fr',
+                        gap: 10,
+                        padding: '10px 8px',
+                        borderBottom: '1px solid #e2e8f0',
+                        fontSize: 13,
+                        alignItems: 'center'
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontWeight: 700 }}>{row.displayCode}</div>
+                        <div>{row.name}</div>
+                      </div>
+                      <div style={{ color: '#334155' }}>{row.printCode}</div>
+                      <div>x{row.quantity}</div>
+                      <div style={{ fontWeight: 700 }}>x{row.doubleQty}</div>
+                    </div>
+                  ))}
+                </>
+              )}
             </div>
           </div>
         </div>
