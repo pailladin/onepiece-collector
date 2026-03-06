@@ -24,7 +24,13 @@ function buildDatedPath(date: Date): string {
 
 async function resolveDownloadUrl(sourcePageUrl: string): Promise<string> {
   const response = await fetch(sourcePageUrl, {
-    headers: { 'User-Agent': 'onepiece-collector-cron/1.0' },
+    headers: {
+      'User-Agent':
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
+      Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      'Accept-Language': 'en-US,en;q=0.9,fr;q=0.8',
+      Referer: 'https://www.cardmarket.com/'
+    },
     cache: 'no-store'
   })
 
@@ -45,7 +51,10 @@ async function resolveDownloadUrl(sourcePageUrl: string): Promise<string> {
 async function downloadFile(downloadUrl: string): Promise<ArrayBuffer> {
   const response = await fetch(downloadUrl, {
     headers: {
-      'User-Agent': 'onepiece-collector-cron/1.0',
+      'User-Agent':
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
+      Accept: 'application/json,text/plain,*/*',
+      'Accept-Language': 'en-US,en;q=0.9,fr;q=0.8',
       Referer: 'https://www.cardmarket.com/'
     },
     cache: 'no-store'
@@ -68,9 +77,10 @@ function isAuthorized(request: NextRequest): boolean {
 
 async function runJob() {
   const sourcePageUrl = process.env.CARDMARKET_PRICE_GUIDE_SOURCE_URL || DEFAULT_SOURCE_PAGE
+  const directDownloadUrl = process.env.CARDMARKET_PRICE_GUIDE_DIRECT_URL
   const bucket = process.env.CARDMARKET_PRICE_GUIDE_BUCKET || 'cron'
 
-  const downloadUrl = await resolveDownloadUrl(sourcePageUrl)
+  const downloadUrl = directDownloadUrl || (await resolveDownloadUrl(sourcePageUrl))
   const fileBuffer = await downloadFile(downloadUrl)
 
   const datedPath = buildDatedPath(new Date())

@@ -49,6 +49,7 @@ Required Vercel env vars:
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `CARDMARKET_PRICE_GUIDE_BUCKET=cron` (optional, defaults to `cron`)
 - `CARDMARKET_PRICE_GUIDE_SOURCE_URL=https://www.cardmarket.com/en/Spoils/Data/Price-Guide` (optional)
+- `CARDMARKET_PRICE_GUIDE_DIRECT_URL=<direct price_guide_18.json url>` (optional fallback if source page returns 403)
 
 Manual test:
 
