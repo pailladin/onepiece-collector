@@ -254,6 +254,38 @@ export default function AdminPage() {
                   Gerer cartes
                 </Link>
 
+                <Link
+                  href={`/admin/edit-card/${code}`}
+                  style={{
+                    background: '#1d4ed8',
+                    color: '#fff',
+                    border: 'none',
+                    padding: '4px 8px',
+                    borderRadius: 4,
+                    textDecoration: 'none',
+                    display: 'inline-flex',
+                    alignItems: 'center'
+                  }}
+                >
+                  Modifier carte
+                </Link>
+
+                <Link
+                  href={`/admin/create-card/${code}`}
+                  style={{
+                    background: '#075985',
+                    color: '#fff',
+                    border: 'none',
+                    padding: '4px 8px',
+                    borderRadius: 4,
+                    textDecoration: 'none',
+                    display: 'inline-flex',
+                    alignItems: 'center'
+                  }}
+                >
+                  Creer carte
+                </Link>
+
                 <button
                   onClick={() => deleteSet(code)}
                   style={{
@@ -268,7 +300,24 @@ export default function AdminPage() {
                 </button>
               </div>
             ) : (
-              <button onClick={() => importSet(code)}>Importer</button>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => importSet(code)}>Importer</button>
+                <Link
+                  href={`/admin/create-card/${code}`}
+                  style={{
+                    background: '#075985',
+                    color: '#fff',
+                    border: 'none',
+                    padding: '4px 8px',
+                    borderRadius: 4,
+                    textDecoration: 'none',
+                    display: 'inline-flex',
+                    alignItems: 'center'
+                  }}
+                >
+                  Creer carte
+                </Link>
+              </div>
             )}
           </div>
         )

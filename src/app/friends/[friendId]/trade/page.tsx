@@ -50,6 +50,15 @@ type TradeItem = {
   needQty: number
 }
 
+function chunkArray<T>(items: T[], size: number): T[][] {
+  if (items.length === 0) return []
+  const result: T[][] = []
+  for (let index = 0; index < items.length; index += size) {
+    result.push(items.slice(index, index + size))
+  }
+  return result
+}
+
 function sortTradeItems(items: TradeItem[]) {
   return [...items].sort((a, b) => {
     if (a.setCode !== b.setCode) return a.setCode.localeCompare(b.setCode)
@@ -94,30 +103,8 @@ export default function FriendTradePage() {
         ((setsData as SetRow[] | null) || []).map((row) => [row.id, row.code])
       )
 
-      const { data: printsData } = await supabase
-        .from('card_prints')
-        .select('id, card_id, distribution_set_id, print_code, variant_type')
-
-      const prints = (printsData as CardPrintRow[] | null) || []
-      const cardIds = [...new Set(prints.map((row) => row.card_id))]
-
-      const { data: cardsData } = await supabase
-        .from('cards')
-        .select(
-          `
-            id,
-            rarity,
-            type,
-            card_translations (
-              locale,
-              name
-            )
-          `
-        )
-        .in('id', cardIds)
-
       const cardsById = new Map<string, CardRow>(
-        ((cardsData as CardRow[] | null) || []).map((row) => [row.id, row])
+        []
       )
 
       const { data: myCollectionData, error: myCollectionError } = await supabase
@@ -156,6 +143,58 @@ export default function FriendTradePage() {
         ])
       )
 
+      const relevantPrintIds = [
+        ...new Set(
+          [...mineByPrint.entries(), ...friendByPrint.entries()]
+            .filter(([, qty]) => qty > 0)
+            .map(([printId]) => printId)
+        )
+      ]
+
+      const prints: CardPrintRow[] = []
+      for (const idsChunk of chunkArray(relevantPrintIds, 500)) {
+        const { data: printsData, error: printsError } = await supabase
+          .from('card_prints')
+          .select('id, card_id, distribution_set_id, print_code, variant_type')
+          .in('id', idsChunk)
+
+        if (printsError) {
+          setError(printsError.message)
+          setLoading(false)
+          return
+        }
+
+        prints.push(...(((printsData as CardPrintRow[] | null) || []) as CardPrintRow[]))
+      }
+
+      const cardIds = [...new Set(prints.map((row) => row.card_id))]
+      for (const idsChunk of chunkArray(cardIds, 500)) {
+        const { data: cardsData, error: cardsError } = await supabase
+          .from('cards')
+          .select(
+            `
+              id,
+              rarity,
+              type,
+              card_translations (
+                locale,
+                name
+              )
+            `
+          )
+          .in('id', idsChunk)
+
+        if (cardsError) {
+          setError(cardsError.message)
+          setLoading(false)
+          return
+        }
+
+        ;(((cardsData as CardRow[] | null) || []) as CardRow[]).forEach((row) => {
+          cardsById.set(row.id, row)
+        })
+      }
+
       const canGiveToMe: TradeItem[] = []
       const canGiveToFriend: TradeItem[] = []
 
@@ -171,10 +210,11 @@ export default function FriendTradePage() {
 
         const card = cardsById.get(print.card_id)
         const setCode = setById.get(print.distribution_set_id) || '?'
+        const fallbackName = getDisplayPrintCode(print) || (print.print_code || 'Carte')
         const name =
           card?.card_translations?.find((t) => t.locale === DEFAULT_LOCALE)?.name ||
           card?.card_translations?.[0]?.name ||
-          'Carte inconnue'
+          fallbackName
 
         const baseItem: Omit<TradeItem, 'giverQty' | 'needQty'> = {
           id: print.id,
