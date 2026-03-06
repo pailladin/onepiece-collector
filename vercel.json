@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/cardmarket-price-guide",
       "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/cron/cardmarket-catalog",
+      "schedule": "30 3 * * *"
     }
   ]
 }

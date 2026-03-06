@@ -41,8 +41,11 @@ This repo contains a Vercel cron endpoint that downloads the One Piece Cardmarke
 
 Files:
 - `src/app/api/cron/cardmarket-price-guide/route.ts`
+- `src/app/api/cron/cardmarket-catalog/route.ts`
 - `vercel.json`
 - `supabase/cardmarket-price-guide-table.sql`
+- `supabase/cardmarket-print-links.sql`
+- `supabase/cardmarket-catalog-table.sql`
 
 Required Vercel env vars:
 - `CRON_SECRET`
@@ -51,8 +54,12 @@ Required Vercel env vars:
 - `CARDMARKET_PRICE_GUIDE_BUCKET=cron` (optional, defaults to `cron`)
 - `CARDMARKET_PRICE_GUIDE_SOURCE_URL=https://www.cardmarket.com/en/Spoils/Data/Price-Guide` (optional)
 - `CARDMARKET_PRICE_GUIDE_DIRECT_URL=<direct price_guide_18.json url>` (optional fallback if source page returns 403)
+- `CARDMARKET_CATALOG_URL=https://downloads.s3.cardmarket.com/productCatalog/productList/products_singles_18.json` (optional)
 
-Before enabling cron, run `supabase/cardmarket-price-guide-table.sql` in the Supabase SQL Editor to create the table `public.cardmarket_price_guide_entries`.
+Before enabling cron, run these SQL files in Supabase SQL Editor:
+- `supabase/cardmarket-price-guide-table.sql` (table fed by daily cron JSON)
+- `supabase/cardmarket-catalog-table.sql` (table fed by daily catalog JSON)
+- `supabase/cardmarket-print-links.sql` (manual/assisted mapping table between local prints and Cardmarket product ids)
 
 Manual test:
 
@@ -68,3 +75,9 @@ Uploaded files:
 Database refresh:
 - Daily upsert into `public.cardmarket_price_guide_entries`
 - Rows not seen in the latest JSON are deleted automatically
+- Daily upsert into `public.cardmarket_catalog_entries`
+- Rows not seen in the latest catalog JSON are deleted automatically
+
+Admin mapping UI:
+- `/admin/cardmarket-links`
+- Workflow: choose a set, load unlinked prints, click "Charger suggestions" to use catalog candidates, click one image/candidate to fill `idProduct`, then validate manually with "Associer"

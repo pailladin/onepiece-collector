@@ -161,6 +161,21 @@ export default function AdminPage() {
         >
           Gerer les utilisateurs
         </Link>
+        <Link
+          href="/admin/cardmarket-links"
+          style={{
+            background: '#1d4ed8',
+            color: '#fff',
+            padding: '6px 10px',
+            borderRadius: 4,
+            textDecoration: 'none',
+            display: 'inline-flex',
+            alignItems: 'center',
+            marginLeft: 8
+          }}
+        >
+          Lier cartes Cardmarket
+        </Link>
       </div>
 
       {apiSets.map((set: any) => {
