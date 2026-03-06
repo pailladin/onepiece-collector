@@ -58,10 +58,39 @@ function asInt(value: unknown): number | null {
 function parseCatalog(fileBuffer: ArrayBuffer): CatalogItem[] {
   const jsonText = new TextDecoder('utf-8').decode(fileBuffer)
   const parsed = JSON.parse(jsonText) as unknown
-  if (!Array.isArray(parsed)) {
-    throw new Error('Catalog JSON is not an array')
+  if (Array.isArray(parsed)) {
+    return parsed as CatalogItem[]
   }
-  return parsed as CatalogItem[]
+
+  if (!parsed || typeof parsed !== 'object') {
+    throw new Error('Catalog JSON has unsupported format')
+  }
+
+  const root = parsed as Record<string, unknown>
+  const directKeys = ['products', 'product', 'data', 'items', 'rows', 'result']
+
+  for (const key of directKeys) {
+    const value = root[key]
+    if (Array.isArray(value)) {
+      return value as CatalogItem[]
+    }
+  }
+
+  for (const value of Object.values(root)) {
+    if (Array.isArray(value)) {
+      return value as CatalogItem[]
+    }
+    if (value && typeof value === 'object') {
+      const nested = value as Record<string, unknown>
+      for (const nestedValue of Object.values(nested)) {
+        if (Array.isArray(nestedValue)) {
+          return nestedValue as CatalogItem[]
+        }
+      }
+    }
+  }
+
+  throw new Error('Catalog JSON is not an array and no array field was found')
 }
 
 function toDbRows(items: CatalogItem[], refreshDate: string) {
