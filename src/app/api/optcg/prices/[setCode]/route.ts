@@ -20,6 +20,7 @@ function normalizeSetCode(value: string): string {
 }
 
 type PriceSource = 'cardmarket' | 'us'
+type CardmarketRange = { low: number | null; avg: number | null }
 
 export async function GET(
   _request: Request,
@@ -47,6 +48,7 @@ export async function GET(
     const prices: Record<string, number> = {}
     const sources: Record<string, PriceSource> = {}
     const cardmarketProductIds: Record<string, string> = {}
+    const cardmarketRanges: Record<string, CardmarketRange> = {}
 
     for (const card of cards) {
       const key = normalizePrintCode(card?.card_image_id)
@@ -95,35 +97,63 @@ export async function GET(
         if (productIds.length > 0) {
           const { data: catalogPriceData } = await supabaseServiceServer
             .from('cardmarket_price_guide_entries')
-            .select('product_id, avg_price')
+            .select('product_id, avg_price, low_price, avg, low')
             .in('product_id', productIds)
 
-          const avgPriceByProductId = new Map<string, number>()
+          const byProductId = new Map<string, CardmarketRange>()
           for (const row of
-            ((catalogPriceData as Array<{ product_id: string; avg_price: number | null }> | null) ||
+            ((catalogPriceData as Array<{
+              product_id: string
+              avg_price: number | null
+              low_price: number | null
+              avg: number | null
+              low: number | null
+            }> | null) ||
               [])) {
-            const avgPrice = Number(row.avg_price)
-            if (!row.product_id || !Number.isFinite(avgPrice)) continue
-            avgPriceByProductId.set(row.product_id, avgPrice)
+            if (!row.product_id) continue
+            const avgFromJson = Number(row.avg)
+            const avgFromLegacy = Number(row.avg_price)
+            const lowFromJson = Number(row.low)
+            const lowFromLegacy = Number(row.low_price)
+
+            const avg = Number.isFinite(avgFromJson)
+              ? avgFromJson
+              : Number.isFinite(avgFromLegacy)
+                ? avgFromLegacy
+                : null
+            const low = Number.isFinite(lowFromJson)
+              ? lowFromJson
+              : Number.isFinite(lowFromLegacy)
+                ? lowFromLegacy
+                : null
+
+            byProductId.set(row.product_id, { low, avg })
           }
 
           for (const link of links) {
             const printCode = printCodeById.get(link.card_print_id)
             if (!printCode) continue
-            const cmAvgPrice = avgPriceByProductId.get(link.cardmarket_product_id)
-            if (cmAvgPrice != null && Number.isFinite(cmAvgPrice)) {
-              prices[printCode] = cmAvgPrice
+            const range = byProductId.get(link.cardmarket_product_id)
+            const low = range?.low ?? null
+            const avg = range?.avg ?? null
+            const calcPrice = low ?? avg
+
+            if (calcPrice != null && Number.isFinite(calcPrice)) {
+              prices[printCode] = calcPrice
               sources[printCode] = 'cardmarket'
             }
             if (link.cardmarket_product_id) {
               cardmarketProductIds[printCode] = link.cardmarket_product_id
+            }
+            if (range) {
+              cardmarketRanges[printCode] = range
             }
           }
         }
       }
     }
 
-    return NextResponse.json({ prices, sources, cardmarketProductIds })
+    return NextResponse.json({ prices, sources, cardmarketProductIds, cardmarketRanges })
   } catch {
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 })
   }

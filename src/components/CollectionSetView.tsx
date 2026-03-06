@@ -34,6 +34,8 @@ type PriceDetail = {
   totalPrice: number
   source: PriceSource
   cardmarketProductId: string | null
+  cardmarketLow: number | null
+  cardmarketAvg: number | null
 }
 
 type DoubleDetail = {
@@ -44,6 +46,8 @@ type DoubleDetail = {
   quantity: number
   unitPrice: number | null
   source: PriceSource | null
+  cardmarketLow: number | null
+  cardmarketAvg: number | null
 }
 
 const RARITY_PRIORITY: Record<string, number> = {
@@ -385,7 +389,9 @@ export function CollectionSetView({
             name,
             quantity,
             unitPrice: null,
-            source: null
+            source: null,
+            cardmarketLow: null,
+            cardmarketAvg: null
           }
         })
         .sort((a, b) => b.quantity - a.quantity || a.displayCode.localeCompare(b.displayCode)),
@@ -425,6 +431,8 @@ export function CollectionSetView({
       const prices: Record<string, number> = data?.prices || {}
       const priceSources: Record<string, PriceSource> = data?.sources || {}
       const cardmarketProductIds: Record<string, string> = data?.cardmarketProductIds || {}
+      const cardmarketRanges: Record<string, { low: number | null; avg: number | null }> =
+        data?.cardmarketRanges || {}
       let total = 0
       let matched = 0
       const details: PriceDetail[] = []
@@ -435,6 +443,7 @@ export function CollectionSetView({
         const unitPrice = prices[printCode]
         if (!Number.isFinite(unitPrice)) continue
         const source: PriceSource = priceSources[printCode] === 'cardmarket' ? 'cardmarket' : 'us'
+        const range = cardmarketRanges[printCode]
         const quantity = mode === 'owned' ? item.quantity || 0 : 1
         const totalPrice = unitPrice * quantity
         const name =
@@ -452,7 +461,9 @@ export function CollectionSetView({
           unitPrice,
           totalPrice,
           source,
-          cardmarketProductId: cardmarketProductIds[printCode] || null
+          cardmarketProductId: cardmarketProductIds[printCode] || null,
+          cardmarketLow: Number.isFinite(range?.low) ? Number(range.low) : null,
+          cardmarketAvg: Number.isFinite(range?.avg) ? Number(range.avg) : null
         })
       }
 
@@ -501,10 +512,13 @@ export function CollectionSetView({
       const data = await res.json().catch(() => ({}))
       const prices: Record<string, number> = res.ok ? data?.prices || {} : {}
       const priceSources: Record<string, PriceSource> = res.ok ? data?.sources || {} : {}
+      const cardmarketRanges: Record<string, { low: number | null; avg: number | null }> =
+        res.ok ? data?.cardmarketRanges || {} : {}
       const enriched: DoubleDetail[] = doublesDetails
         .map((row) => {
           const priceValue = prices[row.printCode]
           const unitPrice = Number.isFinite(priceValue) ? priceValue : null
+          const range = cardmarketRanges[row.printCode]
           const source: PriceSource | null =
             unitPrice == null
               ? null
@@ -514,7 +528,9 @@ export function CollectionSetView({
           return {
             ...row,
             unitPrice,
-            source
+            source,
+            cardmarketLow: Number.isFinite(range?.low) ? Number(range.low) : null,
+            cardmarketAvg: Number.isFinite(range?.avg) ? Number(range.avg) : null
           }
         })
         .sort(
@@ -1254,11 +1270,15 @@ export function CollectionSetView({
                   <div
                     title={
                       row.source === 'cardmarket'
-                        ? 'Prix Cardmarket (avg_price)'
+                        ? 'Prix Cardmarket: affichage low->avg, calcul base sur low'
                         : 'Prix US (source externe), un ecart peut exister'
                     }
                   >
-                    {formatCurrency(row.unitPrice)}
+                    {row.source === 'cardmarket' &&
+                    row.cardmarketLow != null &&
+                    row.cardmarketAvg != null
+                      ? `${formatCurrency(row.cardmarketLow)} - ${formatCurrency(row.cardmarketAvg)}`
+                      : formatCurrency(row.unitPrice)}
                     {row.source !== 'cardmarket' ? '*' : ''}
                   </div>
                   <div style={{ fontWeight: 700 }}>{formatCurrency(row.totalPrice)}</div>
@@ -1276,7 +1296,7 @@ export function CollectionSetView({
               ))}
               </div>
               <div style={{ fontSize: 12, color: '#64748b', padding: '0 8px 10px' }}>
-                * Prix US (source externe), un ecart peut exister avec Cardmarket.
+                Prix Cardmarket: fourchette low {'->'} avg (calcul base sur low). * Prix US (source externe), un ecart peut exister avec Cardmarket.
               </div>
             </div>
         </div>
@@ -1372,7 +1392,13 @@ export function CollectionSetView({
                       <div style={{ color: '#334155' }}>{row.printCode}</div>
                       <div>x{row.quantity}</div>
                       <div style={{ fontWeight: 700 }}>
-                        {row.unitPrice == null ? '-' : `${formatCurrency(row.unitPrice)}${row.source !== 'cardmarket' ? '*' : ''}`}
+                        {row.unitPrice == null
+                          ? '-'
+                          : row.source === 'cardmarket' &&
+                              row.cardmarketLow != null &&
+                              row.cardmarketAvg != null
+                            ? `${formatCurrency(row.cardmarketLow)} - ${formatCurrency(row.cardmarketAvg)}`
+                            : `${formatCurrency(row.unitPrice)}${row.source !== 'cardmarket' ? '*' : ''}`}
                       </div>
                     </div>
                   ))}
