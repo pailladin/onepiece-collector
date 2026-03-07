@@ -73,21 +73,20 @@ export default function RootLayout({
                 <Link
                   href="/"
                   style={{
-                    color: 'white',
                     textDecoration: 'none',
-                    padding: '18px 14px',
-                    borderRadius: 999,
-                    background: 'rgba(15,23,42,0.34)',
-                    border: '1px solid rgba(255,255,255,0.22)',
-                    fontWeight: 700,
-                    fontSize: 16,
                     display: 'inline-flex',
                     alignItems: 'center',
-                    gap: 7
+                    padding: 0,
+                    lineHeight: 0
                   }}
                 >
-                  <Image src="/op-hat.svg" alt="" width={16} height={11} />
-                  Accueil
+                  <Image
+                    src="/bouton_accueil.png?v=3"
+                    alt="Accueil"
+                    width={96}
+                    height={64}
+                    unoptimized
+                  />
                 </Link>
 
                 <Link
