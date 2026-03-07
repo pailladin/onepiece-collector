@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 88">
+  <defs>
+    <linearGradient id="bgTop" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#0b2a6c"/>
+      <stop offset="100%" stop-color="#1d4ed8"/>
+    </linearGradient>
+    <linearGradient id="bgBottom" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1d4ed8"/>
+      <stop offset="100%" stop-color="#1e40af"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="216" height="84" rx="22" fill="url(#bgBottom)" stroke="#60a5fa" stroke-opacity=".65"/>
+  <clipPath id="topClip">
+    <rect x="8" y="8" width="204" height="40" rx="16"/>
+  </clipPath>
+  <rect x="8" y="8" width="204" height="40" rx="16" fill="url(#bgTop)"/>
+  <g clip-path="url(#topClip)">
+    <circle cx="62" cy="37" r="20" fill="#86efac"/>
+    <circle cx="110" cy="34" r="22" fill="#fbbf24"/>
+    <circle cx="158" cy="37" r="20" fill="#fde68a"/>
+    <rect x="42" y="46" width="40" height="18" rx="9" fill="#16a34a"/>
+    <rect x="87" y="46" width="46" height="20" rx="10" fill="#f59e0b"/>
+    <rect x="138" y="46" width="40" height="18" rx="9" fill="#eab308"/>
+  </g>
+  <text x="110" y="73" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="30" font-weight="700" fill="#f8fafc">Amis</text>
+</svg>
