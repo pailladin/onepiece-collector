@@ -143,10 +143,18 @@ export async function POST(
   const type = String(body?.type || '').trim()
   const variantType = String(body?.variantType || 'normal').trim() || 'normal'
   const imageUrl = String(body?.imageUrl || '').trim()
+  const cardmarketProductId = String(body?.cardmarketProductId || '').trim()
 
   if (!baseCode || !printCodeRaw || !name) {
     return NextResponse.json(
       { error: 'baseCode, printCode et name sont obligatoires' },
+      { status: 400 }
+    )
+  }
+
+  if (cardmarketProductId && !/^\d+$/.test(cardmarketProductId)) {
+    return NextResponse.json(
+      { error: 'ID Cardmarket invalide (chiffres uniquement)' },
       { status: 400 }
     )
   }
@@ -251,6 +259,42 @@ export async function POST(
     )
   }
 
+  let linkedCardmarketProductId: string | null = null
+  if (cardmarketProductId) {
+    const { data: printData, error: printLookupError } = await supabase
+      .from('card_prints')
+      .select('id')
+      .eq('print_code', printCode)
+      .single()
+
+    if (printLookupError || !printData) {
+      return NextResponse.json(
+        { error: 'Print cree mais introuvable pour liaison Cardmarket' },
+        { status: 500 }
+      )
+    }
+
+    const { error: linkError } = await supabase.from('cardmarket_print_links').upsert(
+      {
+        card_print_id: printData.id,
+        cardmarket_product_id: cardmarketProductId,
+        source: 'manual',
+        confidence: 100,
+        created_by: userResult.user.id
+      },
+      { onConflict: 'card_print_id' }
+    )
+
+    if (linkError) {
+      return NextResponse.json(
+        { error: `Carte creee mais erreur liaison Cardmarket: ${linkError.message}` },
+        { status: 500 }
+      )
+    }
+
+    linkedCardmarketProductId = cardmarketProductId
+  }
+
   return NextResponse.json({
     ok: true,
     card: {
@@ -258,7 +302,8 @@ export async function POST(
       printCode,
       name,
       variantType,
-      imagePath: finalImagePath
+      imagePath: finalImagePath,
+      cardmarketProductId: linkedCardmarketProductId
     }
   })
 }

@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "cardmarket:extract-local": "node scripts/cardmarket-extract-local.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.97.0",
@@ -22,6 +23,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9.39.3",
     "eslint-config-next": "16.1.6",
+    "playwright": "^1.58.2",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
