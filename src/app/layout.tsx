@@ -57,38 +57,26 @@ export default function RootLayout({
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                <Link href="/" style={{ display: 'inline-flex', alignItems: 'center' }}>
-                  <Image
-                    src="/logo-opc-badge.svg"
-                    alt="One Piece Collector"
-                    width={170}
-                    height={42}
-                    priority
-                  />
-                </Link>
-              </div>
+              <Link
+                href="/"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  textDecoration: 'none',
+                  marginRight: 14,
+                  lineHeight: 0
+                }}
+              >
+                <Image
+                  src="/maison_pirate.png?v=1"
+                  alt="Accueil"
+                  width={96}
+                  height={64}
+                  unoptimized
+                />
+              </Link>
 
               <nav style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                <Link
-                  href="/"
-                  style={{
-                    textDecoration: 'none',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    padding: 0,
-                    lineHeight: 0
-                  }}
-                >
-                  <Image
-                    src="/bouton_accueil.png?v=3"
-                    alt="Accueil"
-                    width={96}
-                    height={64}
-                    unoptimized
-                  />
-                </Link>
-
                 <Link
                   href="/catalogue"
                   style={{
