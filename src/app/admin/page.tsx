@@ -26,6 +26,16 @@ export default function AdminPage() {
     }>
   >([])
   const [cronLoading, setCronLoading] = useState(false)
+  const [backupLoading, setBackupLoading] = useState(false)
+  const [backupResult, setBackupResult] = useState<{
+    ok: boolean
+    bucket?: string
+    filePath?: string
+    bytes?: number
+    generatedAt?: string
+    tableCounts?: Record<string, number>
+    error?: string
+  } | null>(null)
   const [deleteDialog, setDeleteDialog] = useState<{
     open: boolean
     code: string
@@ -62,7 +72,15 @@ export default function AdminPage() {
     })
     const cronData = await cronRes.json().catch(() => ({}))
 
-    setApiSets(apiData)
+    const baseSets = Array.isArray(apiData) ? apiData : []
+    const hasPromoSet = baseSets.some(
+      (set: any) => String(set?.set_id || '').replace('-', '').toUpperCase() === 'PROMO'
+    )
+    const mergedSets = hasPromoSet
+      ? baseSets
+      : [...baseSets, { set_id: 'PROMO', set_name: 'Promos Speciales' }]
+
+    setApiSets(mergedSets)
     setDbSets(setsData?.map((s) => s.code) || [])
     setCronRows(Array.isArray(cronData?.rows) ? cronData.rows : [])
     setCronLoading(false)
@@ -210,6 +228,34 @@ export default function AdminPage() {
     await executeDeleteSet(deleteDialog.code, deleteDialog.forceDelete, token)
   }
 
+  const runDatabaseBackup = async () => {
+    setBackupLoading(true)
+    setBackupResult(null)
+
+    try {
+      const authHeaders = await getAuthHeader()
+      const res = await fetch('/api/admin/backup/database', {
+        method: 'POST',
+        headers: {
+          ...authHeaders,
+          'Content-Type': 'application/json'
+        }
+      })
+      const data = await res.json().catch(() => ({}))
+      setBackupResult({
+        ok: Boolean(data?.ok),
+        bucket: data?.bucket,
+        filePath: data?.filePath,
+        bytes: data?.bytes,
+        generatedAt: data?.generatedAt,
+        tableCounts: data?.tableCounts,
+        error: data?.error || (!res.ok ? 'Erreur sauvegarde' : undefined)
+      })
+    } finally {
+      setBackupLoading(false)
+    }
+  }
+
   if (authLoading || loading) return <div style={{ padding: 40 }}>Chargement...</div>
   if (!canAccessAdmin) return <div style={{ padding: 40 }}>Acces refuse.</div>
 
@@ -301,8 +347,56 @@ export default function AdminPage() {
         </div>
       </div>
 
+      <div
+        style={{
+          marginBottom: 16,
+          border: '1px solid #d1d5db',
+          borderRadius: 8,
+          padding: 12,
+          background: '#fff'
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h2 style={{ margin: 0, fontSize: 18 }}>Sauvegarde base</h2>
+          <button onClick={runDatabaseBackup} disabled={backupLoading}>
+            {backupLoading ? 'Sauvegarde en cours...' : 'Sauvegarder maintenant'}
+          </button>
+        </div>
+
+        {backupResult && (
+          <div
+            style={{
+              marginTop: 10,
+              fontSize: 13,
+              color: backupResult.ok ? '#166534' : '#b91c1c'
+            }}
+          >
+            {backupResult.ok ? (
+              <>
+                <div>Bucket: {backupResult.bucket}</div>
+                <div>Fichier: {backupResult.filePath}</div>
+                <div>Taille: {backupResult.bytes} bytes</div>
+                <div>Date: {backupResult.generatedAt}</div>
+                <div>
+                  Tables:{' '}
+                  {backupResult.tableCounts
+                    ? Object.entries(backupResult.tableCounts)
+                        .map(([table, count]) => `${table}=${count}`)
+                        .join(', ')
+                    : 'N/A'}
+                </div>
+              </>
+            ) : (
+              <div>Erreur: {backupResult.error || 'Erreur inconnue'}</div>
+            )}
+          </div>
+        )}
+      </div>
+
       {apiSets.map((set: any) => {
-        const code = set.set_id.replace('-', '')
+        const code = String(set?.set_id || '').replace('-', '').toUpperCase()
+        const setName = String(set?.set_name || '')
+        if (!code) return null
         const exists = dbSets.includes(code)
 
         return (
@@ -315,7 +409,10 @@ export default function AdminPage() {
               alignItems: 'center'
             }}
           >
-            <div>{code}</div>
+            <div>
+              <strong>{code}</strong>
+              {setName ? <span style={{ marginLeft: 8, color: '#64748b' }}>{setName}</span> : null}
+            </div>
 
             {exists ? (
               <div style={{ display: 'flex', gap: 10 }}>

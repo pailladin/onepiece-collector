@@ -8,6 +8,16 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
+const IN_CHUNK_SIZE = 200
+
+function chunkArray<T>(items: T[], size: number): T[][] {
+  const chunks: T[][] = []
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size))
+  }
+  return chunks
+}
+
 export async function POST(
   request: Request,
   context: { params: Promise<{ code: string }> }
@@ -83,17 +93,28 @@ export async function POST(
     logs.push(`${printIds.length} prints trouves`)
 
     if (printIds.length > 0) {
-      const { data: linkedCollections, error: collectionsError } = await supabase
-        .from('collections')
-        .select('user_id, quantity')
-        .in('card_print_id', printIds)
+      let collectionRows: Array<{ user_id: string; quantity: number | null }> = []
+      for (const idsChunk of chunkArray(printIds, IN_CHUNK_SIZE)) {
+        const { data: linkedCollections, error: collectionsError } = await supabase
+          .from('collections')
+          .select('user_id, quantity, card_print_id')
+          .in('card_print_id', idsChunk)
 
-      if (collectionsError) {
-        logs.push(`Erreur verification collections: ${collectionsError.message}`)
-        return NextResponse.json({ logs }, { status: 500 })
+        if (collectionsError) {
+          logs.push(`Erreur verification collections: ${collectionsError.message}`)
+          return NextResponse.json({ logs }, { status: 500 })
+        }
+
+        const rows = (linkedCollections || []).map((row) => ({
+          user_id: String(row.user_id || ''),
+          quantity:
+            row.quantity == null || Number.isNaN(Number(row.quantity))
+              ? null
+              : Number(row.quantity)
+        }))
+        collectionRows = collectionRows.concat(rows)
       }
 
-      const collectionRows = linkedCollections || []
       const positiveRows = collectionRows.filter((row) => (row.quantity || 0) > 0)
       const positiveUsers = new Set(positiveRows.map((row) => row.user_id)).size
 
@@ -108,26 +129,69 @@ export async function POST(
       }
 
       if (forceDelete && collectionRows.length > 0) {
-        await supabase.from('collections').delete().in('card_print_id', printIds)
+        let deletedCollections = 0
+        for (const idsChunk of chunkArray(printIds, IN_CHUNK_SIZE)) {
+          const { data: deletedRows, error: deleteCollectionsError } = await supabase
+            .from('collections')
+            .delete()
+            .in('card_print_id', idsChunk)
+            .select('card_print_id')
+
+          if (deleteCollectionsError) {
+            logs.push(`Erreur suppression collections: ${deleteCollectionsError.message}`)
+            return NextResponse.json({ logs }, { status: 500 })
+          }
+
+          deletedCollections += (deletedRows || []).length
+        }
         logs.push(
-          `Mode force: ${collectionRows.length} entree(s) de collection supprimee(s).`
+          `Mode force: ${deletedCollections} entree(s) de collection supprimee(s).`
         )
       }
     }
 
     // Aucun lien de collection: suppression complete autorisee.
-    await supabase.from('card_prints').delete().eq('distribution_set_id', setId)
+    const { error: deletePrintsError } = await supabase
+      .from('card_prints')
+      .delete()
+      .eq('distribution_set_id', setId)
+    if (deletePrintsError) {
+      logs.push(`Erreur suppression prints: ${deletePrintsError.message}`)
+      return NextResponse.json({ logs }, { status: 500 })
+    }
     logs.push('Prints supprimes')
 
     if (cardIds.length > 0) {
-      await supabase.from('card_translations').delete().in('card_id', cardIds)
+      for (const idsChunk of chunkArray(cardIds, IN_CHUNK_SIZE)) {
+        const { error: deleteTranslationsError } = await supabase
+          .from('card_translations')
+          .delete()
+          .in('card_id', idsChunk)
+        if (deleteTranslationsError) {
+          logs.push(`Erreur suppression traductions: ${deleteTranslationsError.message}`)
+          return NextResponse.json({ logs }, { status: 500 })
+        }
+      }
       logs.push('Traductions supprimees')
 
-      await supabase.from('cards').delete().in('id', cardIds)
+      for (const idsChunk of chunkArray(cardIds, IN_CHUNK_SIZE)) {
+        const { error: deleteCardsError } = await supabase
+          .from('cards')
+          .delete()
+          .in('id', idsChunk)
+        if (deleteCardsError) {
+          logs.push(`Erreur suppression cartes: ${deleteCardsError.message}`)
+          return NextResponse.json({ logs }, { status: 500 })
+        }
+      }
       logs.push('Cartes supprimees')
     }
 
-    await supabase.from('sets').delete().eq('id', setId)
+    const { error: deleteSetError } = await supabase.from('sets').delete().eq('id', setId)
+    if (deleteSetError) {
+      logs.push(`Erreur suppression set: ${deleteSetError.message}`)
+      return NextResponse.json({ logs }, { status: 500 })
+    }
     logs.push('Set supprime')
     logs.push('Suppression terminee')
 

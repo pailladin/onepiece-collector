@@ -41,7 +41,8 @@ export function CollectionSetsGrid({
         style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
-          gap: 25,
+          columnGap: 32,
+          rowGap: 48,
         }}
       >
         {sets.map((set) => {
@@ -62,17 +63,30 @@ export function CollectionSetsGrid({
                   padding: 15,
                   background: '#fff',
                   cursor: 'pointer',
+                  height: '100%',
                 }}
               >
-                <img
-                  src={imageUrl}
-                  alt={set.code}
+                <div
                   style={{
+                    height: 300,
                     width: '100%',
-                    height: 'auto',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
                     marginBottom: 12,
+                    overflow: 'hidden',
                   }}
-                />
+                >
+                  <img
+                    src={imageUrl}
+                    alt={set.code}
+                    style={{
+                      maxWidth: '100%',
+                      maxHeight: '100%',
+                      objectFit: 'contain',
+                    }}
+                  />
+                </div>
 
                 <div style={{ fontWeight: 'bold', fontSize: 18 }}>
                   {set.code}

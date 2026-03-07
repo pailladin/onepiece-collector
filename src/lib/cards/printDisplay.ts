@@ -13,6 +13,7 @@ export function normalizeVariantType(value: string | null | undefined): string {
   if (lower === 'sp' || lower.includes(' sp')) return 'SP'
   if (lower.includes('manga')) return 'Manga'
   if (lower.includes('wanted poster')) return 'Wanted Poster'
+  if (lower.startsWith('promo ')) return raw
 
   // Ignore unknown labels (nicknames, notes, etc.) so they don't become variants.
   return 'normal'

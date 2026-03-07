@@ -12,8 +12,12 @@ const supabase = createClient(
 
 const BUCKET = 'cards-images'
 const MISSING_IMAGE_PATH = '__missing__'
+const PROMO_IMPORT_CODE = 'PROMO'
+const PROMO_SET_NAME = 'Promos Speciales'
 
 function formatApiCode(code: string) {
+  if (normalizeSetCode(code) === PROMO_IMPORT_CODE) return PROMO_IMPORT_CODE
+
   const raw = (code || '').trim().toUpperCase().replace(/-/g, '')
 
   // Special products like OP14-EB04 are stored as OP14EB04 in DB/UI.
@@ -25,6 +29,58 @@ function formatApiCode(code: string) {
   const prefix = raw.slice(0, -2)
   const suffix = raw.slice(-2)
   return `${prefix}-${suffix}`
+}
+
+function asTrimmedString(value: unknown) {
+  if (typeof value === 'string') return value.trim()
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value)
+  return ''
+}
+
+function normalizePromoApiCard(rawCard: unknown, fallbackIndex: number) {
+  const row =
+    rawCard && typeof rawCard === 'object'
+      ? (rawCard as Record<string, unknown>)
+      : null
+  if (!row) return null
+
+  const cardSetId =
+    asTrimmedString(row.card_set_id) ||
+    asTrimmedString(row.cardSetId) ||
+    asTrimmedString(row.print_code) ||
+    asTrimmedString(row.printCode) ||
+    asTrimmedString(row.card_id) ||
+    asTrimmedString(row.cardId) ||
+    asTrimmedString(row.id)
+
+  if (!cardSetId) return null
+
+  const cardImage =
+    asTrimmedString(row.card_image) ||
+    asTrimmedString(row.cardImage) ||
+    asTrimmedString(row.image) ||
+    asTrimmedString(row.image_url) ||
+    asTrimmedString(row.imageUrl)
+
+  return {
+    set_id: PROMO_IMPORT_CODE,
+    set_name: PROMO_SET_NAME,
+    card_set_id: cardSetId.toUpperCase(),
+    card_name:
+      asTrimmedString(row.card_name) ||
+      asTrimmedString(row.cardName) ||
+      asTrimmedString(row.name_en) ||
+      asTrimmedString(row.name) ||
+      `Promo ${fallbackIndex + 1}`,
+    rarity: asTrimmedString(row.rarity) || 'Promo',
+    card_type: asTrimmedString(row.card_type) || asTrimmedString(row.type) || 'Promo',
+    card_image: cardImage,
+    card_image_id:
+      asTrimmedString(row.card_image_id) ||
+      asTrimmedString(row.cardImageId) ||
+      extractPrintCodeFromImageUrl(cardImage) ||
+      null
+  }
 }
 
 function extractNumber(cardSetId: string) {
@@ -265,15 +321,42 @@ export async function POST(
         }
 
         const apiCode = formatApiCode(code)
-        const res = await fetch(`https://www.optcgapi.com/api/sets/${apiCode}/`)
+        const isPromoImport = apiCode === PROMO_IMPORT_CODE
+        let apiCards: any[] = []
 
-        if (!res.ok) {
-          push(`Erreur API ${res.status}`)
-          return
+        if (isPromoImport) {
+          const promoRes = await fetch('https://www.optcgapi.com/api/allPromos/')
+          if (!promoRes.ok) {
+            push(`Erreur API promos ${promoRes.status}`)
+            return
+          }
+
+          const promoRaw = await promoRes.json()
+          if (!Array.isArray(promoRaw)) {
+            push('Format API promos invalide')
+            return
+          }
+
+          apiCards = promoRaw
+            .map((card, index) => normalizePromoApiCard(card, index))
+            .filter(Boolean) as any[]
+        } else {
+          const res = await fetch(`https://www.optcgapi.com/api/sets/${apiCode}/`)
+
+          if (!res.ok) {
+            push(`Erreur API ${res.status}`)
+            return
+          }
+
+          const setCards = await res.json()
+          if (!Array.isArray(setCards)) {
+            push('Format API set invalide')
+            return
+          }
+          apiCards = setCards as any[]
         }
 
-        const apiCards = await res.json()
-        if (!Array.isArray(apiCards) || apiCards.length === 0) {
+        if (apiCards.length === 0) {
           push('Aucune carte recue')
           return
         }
@@ -281,7 +364,9 @@ export async function POST(
         const totalCards = apiCards.length
         push(`${totalCards} cartes recues`)
 
-        const setName = apiCards[0]?.set_name || code
+        const setName = isPromoImport
+          ? PROMO_SET_NAME
+          : asTrimmedString(apiCards[0]?.set_name) || code
 
         let { data: setData } = await supabase
           .from('sets')
@@ -362,7 +447,7 @@ export async function POST(
 
           for (const card of apiCards) {
             const apiSetCode = normalizeSetCode(card?.set_id)
-            if (apiSetCode && apiSetCode !== normalizedImportCode) {
+            if (!isPromoImport && apiSetCode && apiSetCode !== normalizedImportCode) {
               skippedWrongSetForImages += 1
               continue
             }
@@ -504,7 +589,7 @@ export async function POST(
         for (const [index, card] of apiCards.entries()) {
           const progress = `${index + 1}/${totalCards}`
           const apiSetCode = normalizeSetCode(card?.set_id)
-          if (apiSetCode && apiSetCode !== normalizedImportCode) {
+          if (!isPromoImport && apiSetCode && apiSetCode !== normalizedImportCode) {
             skippedWrongSet += 1
             push(
               `[${progress}] SKIP hors set ${code}: ${card?.card_image_id || card?.card_set_id || 'inconnu'} (set_id=${card?.set_id})`
@@ -523,6 +608,9 @@ export async function POST(
           const { variant: variantFromName, cleanName, variantTag } = parseCardName(
             card.card_name || ''
           )
+          const rawCardName = (card.card_name || '').toString().trim()
+          const translationName =
+            isPromoImport && rawCardName ? rawCardName : cleanName
           const resolved = resolvePrintCode({
             providedPrintCode: card.card_image_id?.toString().trim(),
             imageUrl,
@@ -591,16 +679,19 @@ export async function POST(
               {
                 card_id: newCard.id,
                 locale: 'fr',
-                name: cleanName
+                name: translationName
               },
               { onConflict: 'card_id,locale' }
             )
           }
 
           const suffix = (printCode || '').split('_')[1] || ''
+          const promoVariantTag = isPromoImport ? (variantTag || '').trim() : ''
           const variant =
             variantFromName !== 'normal'
               ? variantFromName
+              : promoVariantTag
+                ? `Promo ${promoVariantTag}`
               : /^p\d+$/i.test(suffix)
                 ? 'Parallel'
                 : 'normal'
