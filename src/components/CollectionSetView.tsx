@@ -30,9 +30,9 @@ type PriceDetail = {
   displayCode: string
   name: string
   quantity: number
-  unitPrice: number
-  totalPrice: number
-  source: PriceSource
+  unitPrice: number | null
+  totalPrice: number | null
+  source: PriceSource | null
   cardmarketProductId: string | null
   cardmarketLow: number | null
   cardmarketAvg: number | null
@@ -440,18 +440,29 @@ export function CollectionSetView({
 
       for (const item of targetItems) {
         const printCode = (item.print_code || '').trim().toUpperCase()
-        const unitPrice = prices[printCode]
-        if (!Number.isFinite(unitPrice)) continue
-        const source: PriceSource = priceSources[printCode] === 'cardmarket' ? 'cardmarket' : 'us'
+        const rawUnitPrice = prices[printCode]
+        const unitPrice = Number.isFinite(rawUnitPrice) ? rawUnitPrice : null
+        const source: PriceSource | null =
+          unitPrice == null
+            ? null
+            : priceSources[printCode] === 'cardmarket'
+              ? 'cardmarket'
+              : 'us'
         const range = cardmarketRanges[printCode]
         const quantity = mode === 'owned' ? item.quantity || 0 : 1
-        const totalPrice = unitPrice * quantity
+        const totalPrice = unitPrice == null ? null : unitPrice * quantity
         const name =
           item.card?.card_translations?.find((t: any) => t.locale === DEFAULT_LOCALE)
             ?.name || ''
+        const linkedProductId = cardmarketProductIds[printCode] || null
+        const hasCardmarketRange =
+          Number.isFinite(range?.low) || Number.isFinite(range?.avg)
 
-        total += totalPrice
-        matched += 1
+        if (unitPrice != null && totalPrice != null) {
+          total += totalPrice
+          matched += 1
+        }
+
         details.push({
           id: item.id,
           printCode,
@@ -461,7 +472,7 @@ export function CollectionSetView({
           unitPrice,
           totalPrice,
           source,
-          cardmarketProductId: cardmarketProductIds[printCode] || null,
+          cardmarketProductId: linkedProductId,
           cardmarketLow: Number.isFinite(range?.low) ? Number(range.low) : null,
           cardmarketAvg: Number.isFinite(range?.avg) ? Number(range.avg) : null
         })
@@ -478,8 +489,8 @@ export function CollectionSetView({
       setPriceDetails(
         details.sort(
           (a, b) =>
-            b.totalPrice - a.totalPrice ||
-            b.unitPrice - a.unitPrice ||
+            (b.totalPrice || -1) - (a.totalPrice || -1) ||
+            (b.unitPrice || -1) - (a.unitPrice || -1) ||
             a.name.localeCompare(b.name)
         )
       )
@@ -1269,19 +1280,25 @@ export function CollectionSetView({
                     <div>x{row.quantity}</div>
                   <div
                     title={
-                      row.source === 'cardmarket'
+                      row.source == null
+                        ? 'Carte liee Cardmarket mais prix indisponible dans le snapshot actuel'
+                        : row.source === 'cardmarket'
                         ? 'Prix Cardmarket: affichage low->avg, calcul base sur low'
                         : 'Prix US (source externe), un ecart peut exister'
                     }
                   >
-                    {row.source === 'cardmarket' &&
+                    {row.unitPrice == null
+                      ? '-'
+                      : row.source === 'cardmarket' &&
                     row.cardmarketLow != null &&
                     row.cardmarketAvg != null
                       ? `${formatCurrency(row.cardmarketLow)} - ${formatCurrency(row.cardmarketAvg)}`
                       : formatCurrency(row.unitPrice)}
-                    {row.source !== 'cardmarket' ? '*' : ''}
+                    {row.unitPrice != null && row.source !== 'cardmarket' ? '*' : ''}
                   </div>
-                  <div style={{ fontWeight: 700 }}>{formatCurrency(row.totalPrice)}</div>
+                  <div style={{ fontWeight: 700 }}>
+                    {row.totalPrice == null ? '-' : formatCurrency(row.totalPrice)}
+                  </div>
                   <a
                     href={cardmarketUrl}
                     target="_blank"

@@ -33,6 +33,16 @@ type LinkRow = {
   cardmarket_product_id: string
 }
 
+const IN_CHUNK_SIZE = 200
+
+function chunkArray<T>(items: T[], size: number): T[][] {
+  const chunks: T[][] = []
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size))
+  }
+  return chunks
+}
+
 function normalizeSetCode(value: string | null): string {
   return (value || '').trim().toUpperCase()
 }
@@ -54,6 +64,8 @@ export async function GET(request: Request) {
   const url = new URL(request.url)
   const setCode = normalizeSetCode(url.searchParams.get('setCode'))
   const onlyUnlinked = url.searchParams.get('onlyUnlinked') !== '0'
+  const query = (url.searchParams.get('q') || '').trim().toUpperCase()
+  const requireQuery = url.searchParams.get('requireQuery') === '1'
 
   if (!setCode) {
     return NextResponse.json({ error: 'setCode requis' }, { status: 400 })
@@ -69,11 +81,29 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Set introuvable' }, { status: 404 })
   }
 
-  const { data: printsData, error: printsError } = await supabase
+  if (requireQuery && !query) {
+    return NextResponse.json({
+      set: {
+        id: setData.id,
+        code: setData.code,
+        name: setData.name || setData.code
+      },
+      rows: []
+    })
+  }
+
+  let printsQuery = supabase
     .from('card_prints')
     .select('id, print_code, variant_type, image_path, card_id')
     .eq('distribution_set_id', setData.id)
-    .order('print_code', { ascending: true })
+
+  if (query) {
+    printsQuery = printsQuery.ilike('print_code', `%${query}%`)
+  }
+
+  const { data: printsData, error: printsError } = await printsQuery.order('print_code', {
+    ascending: true
+  })
 
   if (printsError) {
     return NextResponse.json(
@@ -89,9 +119,9 @@ export async function GET(request: Request) {
 
   const cardIds = [...new Set(prints.map((row) => row.card_id))]
   const printIds = prints.map((row) => row.id)
-
-  const [cardsResult, linksResult] = await Promise.all([
-    supabase
+  const cards: CardRow[] = []
+  for (const idsChunk of chunkArray(cardIds, IN_CHUNK_SIZE)) {
+    const cardsResult = await supabase
       .from('cards')
       .select(
         `
@@ -105,33 +135,39 @@ export async function GET(request: Request) {
         )
       `
       )
-      .in('id', cardIds),
-    supabase
+      .in('id', idsChunk)
+
+    if (cardsResult.error) {
+      return NextResponse.json(
+        { error: `Erreur lecture cards: ${cardsResult.error.message}` },
+        { status: 500 }
+      )
+    }
+
+    cards.push(...(((cardsResult.data as CardRow[] | null) || []) as CardRow[]))
+  }
+
+  const links: LinkRow[] = []
+  for (const idsChunk of chunkArray(printIds, IN_CHUNK_SIZE)) {
+    const linksResult = await supabase
       .from('cardmarket_print_links')
       .select('card_print_id, cardmarket_product_id')
-      .in('card_print_id', printIds)
-  ])
+      .in('card_print_id', idsChunk)
 
-  if (cardsResult.error) {
-    return NextResponse.json(
-      { error: `Erreur lecture cards: ${cardsResult.error.message}` },
-      { status: 500 }
-    )
+    if (linksResult.error) {
+      return NextResponse.json(
+        { error: `Erreur lecture mapping: ${linksResult.error.message}` },
+        { status: 500 }
+      )
+    }
+
+    links.push(...(((linksResult.data as LinkRow[] | null) || []) as LinkRow[]))
   }
 
-  if (linksResult.error) {
-    return NextResponse.json(
-      { error: `Erreur lecture mapping: ${linksResult.error.message}` },
-      { status: 500 }
-    )
-  }
-
-  const cards = (cardsResult.data as CardRow[] | null) || []
-  const links = (linksResult.data as LinkRow[] | null) || []
   const cardById = new Map(cards.map((row) => [row.id, row]))
   const linkByPrintId = new Map(links.map((row) => [row.card_print_id, row.cardmarket_product_id]))
 
-  const rows = prints
+  let rows = prints
     .map((print) => {
       const card = cardById.get(print.card_id)
       const name =
@@ -154,6 +190,19 @@ export async function GET(request: Request) {
       }
     })
     .filter((row) => (onlyUnlinked ? !row.linkedProductId : true))
+
+  if (query) {
+    rows = rows.filter((row) => {
+      const printCode = (row.printCode || '').toUpperCase()
+      const cardName = (row.cardName || '').toUpperCase()
+      const baseCode = (row.baseCode || '').toUpperCase()
+      return (
+        printCode.includes(query) ||
+        cardName.includes(query) ||
+        baseCode.includes(query)
+      )
+    })
+  }
 
   return NextResponse.json({
     set: {

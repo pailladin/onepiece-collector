@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { useAuth } from '@/lib/auth'
 import { supabase } from '@/lib/supabaseClient'
@@ -225,21 +226,36 @@ export default function CollectionPage() {
         stats={stats}
         getSetHref={(setCode) => `/collection/${setCode}`}
         headerActions={
-          <button
-            onClick={calculateCollectionPrice}
-            disabled={priceLoading || visibleSets.length === 0}
-            style={{
-              border: '1px solid #2563eb',
-              background: '#2563eb',
-              color: '#fff',
-              borderRadius: 8,
-              padding: '8px 12px',
-              cursor: priceLoading || visibleSets.length === 0 ? 'not-allowed' : 'pointer',
-              opacity: priceLoading || visibleSets.length === 0 ? 0.6 : 1
-            }}
-          >
-            {priceLoading ? 'Calcul en cours...' : 'Calculer prix collection'}
-          </button>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <Link
+              href="/collection/top10"
+              style={{
+                border: '1px solid #0f766e',
+                background: '#0f766e',
+                color: '#fff',
+                borderRadius: 8,
+                padding: '8px 12px',
+                textDecoration: 'none'
+              }}
+            >
+              TOP10 cartes
+            </Link>
+            <button
+              onClick={calculateCollectionPrice}
+              disabled={priceLoading || visibleSets.length === 0}
+              style={{
+                border: '1px solid #2563eb',
+                background: '#2563eb',
+                color: '#fff',
+                borderRadius: 8,
+                padding: '8px 12px',
+                cursor: priceLoading || visibleSets.length === 0 ? 'not-allowed' : 'pointer',
+                opacity: priceLoading || visibleSets.length === 0 ? 0.6 : 1
+              }}
+            >
+              {priceLoading ? 'Calcul en cours...' : 'Calculer prix collection'}
+            </button>
+          </div>
         }
       />
 

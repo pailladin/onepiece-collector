@@ -44,6 +44,7 @@ export default function AdminCardmarketLinksPage() {
 
   const [sets, setSets] = useState<SetOption[]>([])
   const [selectedSetCode, setSelectedSetCode] = useState('')
+  const [setSearch, setSetSearch] = useState('')
   const [onlyUnlinked, setOnlyUnlinked] = useState(true)
   const [rows, setRows] = useState<PrintRow[]>([])
   const [expansionIdOverride, setExpansionIdOverride] = useState('')
@@ -86,16 +87,25 @@ export default function AdminCardmarketLinksPage() {
 
   const loadRows = useCallback(async () => {
     if (!selectedSetCode) return
+    const isPromoSet = selectedSetCode.toUpperCase() === 'PROMO'
 
     setLoadingRows(true)
     setError(null)
 
     try {
       const authHeaders = await getAuthHeaders()
+      const params = new URLSearchParams({
+        setCode: selectedSetCode,
+        onlyUnlinked: onlyUnlinked ? '1' : '0'
+      })
+      if (setSearch.trim()) {
+        params.set('q', setSearch.trim())
+      }
+      if (isPromoSet) {
+        params.set('requireQuery', '1')
+      }
       const res = await fetch(
-        `/api/admin/cardmarket-links/prints?setCode=${encodeURIComponent(selectedSetCode)}&onlyUnlinked=${
-          onlyUnlinked ? '1' : '0'
-        }`,
+        `/api/admin/cardmarket-links/prints?${params.toString()}`,
         {
           headers: authHeaders
         }
@@ -116,7 +126,7 @@ export default function AdminCardmarketLinksPage() {
     } finally {
       setLoadingRows(false)
     }
-  }, [getAuthHeaders, onlyUnlinked, selectedSetCode])
+  }, [getAuthHeaders, onlyUnlinked, selectedSetCode, setSearch])
 
   const loadCandidates = useCallback(async (printId: string) => {
     setLoadingCandidatesFor(printId)
@@ -232,6 +242,7 @@ export default function AdminCardmarketLinksPage() {
   const selectedCandidates = selectedPrintId ? candidatesByPrintId[selectedPrintId] || [] : []
   const selectedSearchUrl = selectedPrintId ? searchUrlByPrintId[selectedPrintId] || null : null
   const selectedBlockedStatus = selectedPrintId ? blockedStatusByPrintId[selectedPrintId] : undefined
+  const isPromoSet = selectedSetCode.toUpperCase() === 'PROMO'
 
   const extractProductIdFromText = (value: string): string | null => {
     const raw = value.trim()
@@ -316,10 +327,27 @@ export default function AdminCardmarketLinksPage() {
           />
         </label>
 
+        <label style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+          Recherche:
+          <input
+            type="text"
+            value={setSearch}
+            onChange={(e) => setSetSearch(e.target.value)}
+            placeholder={isPromoSet ? 'Obligatoire pour PROMO (code ou nom)' : 'Code ou nom'}
+            style={{ width: 240, padding: 4 }}
+          />
+        </label>
+
         <button onClick={loadRows} disabled={loadingRows}>
           {loadingRows ? 'Chargement...' : 'Rafraichir'}
         </button>
       </div>
+
+      {isPromoSet && !setSearch.trim() && (
+        <div style={{ marginBottom: 12, color: '#92400e', fontSize: 13 }}>
+          Set PROMO: la liste est volontairement vide tant que tu n as pas saisi une recherche.
+        </div>
+      )}
 
       {error && (
         <div style={{ marginBottom: 12, color: '#b91c1c', fontSize: 14 }}>
