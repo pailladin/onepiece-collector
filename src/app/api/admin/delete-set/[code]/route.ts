@@ -28,7 +28,23 @@ export async function POST(
   const { code } = await context.params
   const body = await request.json().catch(() => ({}))
   const forceDelete = Boolean(body?.forceDelete)
+  const deleteToken = String(body?.deleteToken || '').trim()
   const logs: string[] = []
+
+  const expectedDeleteToken = String(process.env.CRON_SECRET || '').trim()
+  if (!expectedDeleteToken) {
+    return NextResponse.json(
+      { logs: ['Configuration manquante: CRON_SECRET non defini'] },
+      { status: 500 }
+    )
+  }
+
+  if (!deleteToken || deleteToken !== expectedDeleteToken) {
+    return NextResponse.json(
+      { logs: ['Token de suppression invalide'] },
+      { status: 403 }
+    )
+  }
 
   try {
     logs.push(`Suppression du set ${code}`)

@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { useAuth } from '@/lib/auth'
 import { supabase } from '@/lib/supabaseClient'
 import { isAdminEmail, parseAdminEmails } from '@/lib/admin'
@@ -32,7 +33,16 @@ export default function RootLayout({
             alignItems: 'center',
           }}
         >
-          <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <Link href="/" style={{ display: 'inline-flex', alignItems: 'center' }}>
+              <Image
+                src="/logo-opc.svg"
+                alt="One Piece Collector"
+                width={132}
+                height={34}
+                priority
+              />
+            </Link>
             <Link href="/" style={{ color: 'white', marginRight: 20 }}>
               Accueil
             </Link>
