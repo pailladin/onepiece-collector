@@ -25,6 +25,11 @@ type WeekRow = {
   }>
 }
 
+type SetOption = {
+  code: string
+  name: string
+}
+
 function formatCurrency(value: number, currency = 'USD') {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
@@ -39,22 +44,48 @@ function shortDate(value: string) {
 export default function CollectionHistoryPage() {
   const { user, loading: authLoading } = useAuth()
   const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [weeks, setWeeks] = useState<WeekRow[]>([])
+  const [selectedSetCode, setSelectedSetCode] = useState('TOTAL')
 
-  const totals = useMemo(
+  const setOptions = useMemo<SetOption[]>(
+    () => {
+      const map = new Map<string, string>()
+      for (const week of weeks) {
+        for (const row of week.sets) {
+          if (!map.has(row.setCode)) {
+            map.set(row.setCode, row.setName || row.setCode)
+          }
+        }
+      }
+      return [...map.entries()]
+        .map(([code, name]) => ({ code, name }))
+        .sort((a, b) => a.code.localeCompare(b.code))
+    },
+    [weeks]
+  )
+
+  const series = useMemo(
     () =>
       weeks
         .map((week) => ({
           x: week.periodStart,
-          value: week.total?.value || 0
+          value:
+            selectedSetCode === 'TOTAL'
+              ? week.total?.value || 0
+              : week.sets.find((row) => row.setCode === selectedSetCode)?.value || 0,
+          currency: week.total?.currency || 'USD'
         }))
         .reverse(),
-    [weeks]
+    [weeks, selectedSetCode]
   )
 
-  const maxValue = Math.max(1, ...totals.map((row) => row.value))
+  const maxValue = Math.max(1, ...series.map((row) => row.value))
+  const minValue = Math.min(...series.map((row) => row.value), maxValue)
+  const selectedSetLabel =
+    selectedSetCode === 'TOTAL'
+      ? 'Collection complete'
+      : setOptions.find((row) => row.code === selectedSetCode)?.name || selectedSetCode
 
   const loadHistory = async () => {
     if (!user) return
@@ -70,37 +101,14 @@ export default function CollectionHistoryPage() {
       if (!res.ok) {
         setError(payload?.error || 'Erreur chargement historique')
         setWeeks([])
+        setSelectedSetCode('TOTAL')
         return
       }
-      setWeeks(Array.isArray(payload?.weeks) ? payload.weeks : [])
+      const nextWeeks = Array.isArray(payload?.weeks) ? payload.weeks : []
+      setWeeks(nextWeeks)
+      setSelectedSetCode((prev) => (prev ? prev : 'TOTAL'))
     } finally {
       setLoading(false)
-    }
-  }
-
-  const saveSnapshot = async () => {
-    if (!user || saving) return
-    setSaving(true)
-    setError(null)
-    try {
-      const { data } = await supabase.auth.getSession()
-      const token = data.session?.access_token
-      const res = await fetch('/api/collection/value-history/snapshot', {
-        method: 'POST',
-        headers: token
-          ? {
-              Authorization: `Bearer ${token}`
-            }
-          : {}
-      })
-      const payload = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        setError(payload?.error || 'Erreur sauvegarde snapshot')
-        return
-      }
-      await loadHistory()
-    } finally {
-      setSaving(false)
     }
   }
 
@@ -126,25 +134,10 @@ export default function CollectionHistoryPage() {
         <div>
           <h1 style={{ margin: 0 }}>Suivi valeur collection</h1>
           <div style={{ marginTop: 4, color: '#475569', fontSize: 14 }}>
-            Historique hebdomadaire par set + total.
+            Evolution hebdomadaire par set.
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button
-            onClick={saveSnapshot}
-            disabled={saving}
-            style={{
-              border: '1px solid #2563eb',
-              background: '#2563eb',
-              color: '#fff',
-              borderRadius: 8,
-              padding: '8px 12px',
-              cursor: saving ? 'not-allowed' : 'pointer',
-              opacity: saving ? 0.7 : 1
-            }}
-          >
-            {saving ? 'Sauvegarde...' : 'Sauvegarder cette semaine'}
-          </button>
           <Link href="/collection" style={{ color: '#1d4ed8', textDecoration: 'none', alignSelf: 'center' }}>
             Retour collection
           </Link>
@@ -158,75 +151,75 @@ export default function CollectionHistoryPage() {
       )}
 
       <div style={{ border: '1px solid #cbd5e1', borderRadius: 12, padding: 14, background: '#fff' }}>
-        <div style={{ fontWeight: 700, marginBottom: 8 }}>Evolution du total</div>
-        {totals.length === 0 ? (
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12, flexWrap: 'wrap' }}>
+          <div style={{ fontWeight: 700 }}>Set</div>
+          <select
+            value={selectedSetCode}
+            onChange={(event) => setSelectedSetCode(event.target.value)}
+            style={{ minWidth: 240, padding: '6px 8px' }}
+          >
+            <option value="TOTAL">Collection complete</option>
+            {setOptions.map((row) => (
+              <option key={row.code} value={row.code}>
+                {row.code} - {row.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div style={{ fontWeight: 700, marginBottom: 8 }}>Evolution: {selectedSetLabel}</div>
+        {series.length === 0 ? (
           <div style={{ color: '#64748b' }}>Aucune semaine sauvegardee.</div>
         ) : (
-          <div style={{ display: 'grid', gap: 8 }}>
-            {totals.map((row) => (
-              <div key={row.x} style={{ display: 'grid', gridTemplateColumns: '130px 1fr 120px', gap: 10, alignItems: 'center' }}>
-                <div style={{ color: '#475569', fontSize: 13 }}>{shortDate(row.x)}</div>
-                <div style={{ height: 10, background: '#e2e8f0', borderRadius: 999, overflow: 'hidden' }}>
-                  <div
-                    style={{
-                      width: `${Math.max(2, Math.round((row.value / maxValue) * 100))}%`,
-                      height: '100%',
-                      background: 'linear-gradient(90deg, #0ea5e9, #2563eb)'
-                    }}
-                  />
+          <div>
+            <svg viewBox="0 0 760 260" style={{ width: '100%', height: 'auto', display: 'block' }}>
+              <rect x="0" y="0" width="760" height="260" fill="#f8fafc" rx="10" />
+              <line x1="56" y1="20" x2="56" y2="220" stroke="#cbd5e1" />
+              <line x1="56" y1="220" x2="740" y2="220" stroke="#cbd5e1" />
+              {(() => {
+                const points = series.map((row, index) => {
+                  const x = 56 + (series.length === 1 ? 0 : (index / (series.length - 1)) * 684)
+                  const span = Math.max(1, maxValue - minValue)
+                  const y = 220 - ((row.value - minValue) / span) * 180
+                  return { x, y, row }
+                })
+                const polyline = points.map((p) => `${p.x},${p.y}`).join(' ')
+                return (
+                  <>
+                    <polyline
+                      points={polyline}
+                      fill="none"
+                      stroke="#2563eb"
+                      strokeWidth="3"
+                      strokeLinejoin="round"
+                      strokeLinecap="round"
+                    />
+                    {points.map((p) => (
+                      <g key={p.row.x}>
+                        <circle cx={p.x} cy={p.y} r="4" fill="#0ea5e9" />
+                        <text x={p.x} y={238} textAnchor="middle" fontSize="10" fill="#475569">
+                          {p.row.x.slice(5)}
+                        </text>
+                      </g>
+                    ))}
+                  </>
+                )
+              })()}
+              <text x="8" y="24" fontSize="11" fill="#334155">
+                {formatCurrency(maxValue, series[0]?.currency || 'USD')}
+              </text>
+              <text x="8" y="222" fontSize="11" fill="#334155">
+                {formatCurrency(minValue, series[0]?.currency || 'USD')}
+              </text>
+            </svg>
+            <div style={{ marginTop: 8, display: 'grid', gap: 4 }}>
+              {series.map((row) => (
+                <div key={`legend-${row.x}`} style={{ fontSize: 12, color: '#334155' }}>
+                  {shortDate(row.x)}: <strong>{formatCurrency(row.value, row.currency)}</strong>
                 </div>
-                <div style={{ textAlign: 'right', fontWeight: 700, fontSize: 13 }}>{formatCurrency(row.value)}</div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div style={{ border: '1px solid #cbd5e1', borderRadius: 12, overflow: 'hidden' }}>
-        <div style={{ padding: '10px 12px', background: '#f8fafc', fontWeight: 700 }}>Details hebdomadaires</div>
-        {weeks.length === 0 ? (
-          <div style={{ padding: 12, color: '#64748b' }}>Aucune donnee.</div>
-        ) : (
-          weeks.map((week) => (
-            <div key={week.periodStart} style={{ borderTop: '1px solid #e2e8f0', padding: 12 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', marginBottom: 8 }}>
-                <div>
-                  <strong>Semaine {week.periodStart}</strong>
-                  <div style={{ fontSize: 12, color: '#64748b' }}>jusqu au {week.periodEnd}</div>
-                </div>
-                <div style={{ fontWeight: 700 }}>
-                  {formatCurrency(week.total?.value || 0, week.total?.currency || 'USD')}
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gap: 6 }}>
-                {week.sets.slice(0, 12).map((setRow) => (
-                  <div
-                    key={`${week.periodStart}-${setRow.setCode}`}
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: '110px 1fr 130px 130px',
-                      gap: 8,
-                      alignItems: 'center',
-                      fontSize: 13
-                    }}
-                  >
-                    <div>
-                      <strong>{setRow.setCode}</strong>
-                    </div>
-                    <div>{setRow.setName}</div>
-                    <div style={{ color: '#475569' }}>
-                      {setRow.pricedCount}/{setRow.expectedCount}
-                    </div>
-                    <div style={{ textAlign: 'right', fontWeight: 700 }}>
-                      {formatCurrency(setRow.value, week.total?.currency || 'USD')}
-                      {setRow.usFallbackCount > 0 ? '*' : ''}
-                    </div>
-                  </div>
-                ))}
-              </div>
+              ))}
             </div>
-          ))
+          </div>
         )}
       </div>
     </div>
