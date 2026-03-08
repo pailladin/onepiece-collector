@@ -35,6 +35,16 @@ type CardRow = {
   }> | null
 }
 
+const CARD_IDS_CHUNK_SIZE = 100
+
+function chunkArray<T>(values: T[], size: number): T[][] {
+  const chunks: T[][] = []
+  for (let i = 0; i < values.length; i += size) {
+    chunks.push(values.slice(i, i + size))
+  }
+  return chunks
+}
+
 export async function GET(
   request: Request,
   context: { params: Promise<{ code: string }> }
@@ -78,32 +88,41 @@ export async function GET(
   const prints = (printsData as PrintRow[] | null) || []
   const cardIds = [...new Set(prints.map((row) => row.card_id))]
 
-  const { data: cardsData, error: cardsError } = await supabase
-    .from('cards')
-    .select(
-      `
-      id,
-      base_code,
-      number,
-      rarity,
-      type,
-      card_translations (
-        name,
-        locale
-      )
-    `
-    )
-    .in('id', cardIds)
+  if (cardIds.length === 0) {
+    return NextResponse.json({ prints: [] })
+  }
 
-  if (cardsError) {
-    return NextResponse.json(
-      { error: `Erreur lecture cards: ${cardsError.message}` },
-      { status: 500 }
-    )
+  const cardsRows: CardRow[] = []
+  for (const chunk of chunkArray(cardIds, CARD_IDS_CHUNK_SIZE)) {
+    const { data: cardsData, error: cardsError } = await supabase
+      .from('cards')
+      .select(
+        `
+        id,
+        base_code,
+        number,
+        rarity,
+        type,
+        card_translations (
+          name,
+          locale
+        )
+      `
+      )
+      .in('id', chunk)
+
+    if (cardsError) {
+      return NextResponse.json(
+        { error: `Erreur lecture cards: ${cardsError.message}` },
+        { status: 500 }
+      )
+    }
+
+    cardsRows.push(...(((cardsData as CardRow[] | null) || []) as CardRow[]))
   }
 
   const cardsById = new Map<string, CardRow>(
-    (((cardsData as CardRow[] | null) || []) as CardRow[]).map((row) => [row.id, row])
+    cardsRows.map((row) => [row.id, row])
   )
 
   const payload = prints
@@ -132,4 +151,3 @@ export async function GET(
 
   return NextResponse.json({ prints: payload })
 }
-

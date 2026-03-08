@@ -20,6 +20,11 @@ type SetPrintOption = {
   name: string
 }
 
+type SetOption = {
+  code: string
+  name: string | null
+}
+
 const STORAGE_BASE_URL = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/cards-images`
 
 export default function AdminEditCardPage() {
@@ -32,7 +37,9 @@ export default function AdminEditCardPage() {
 
   const [loading, setLoading] = useState(true)
   const [printOptions, setPrintOptions] = useState<SetPrintOption[]>([])
+  const [setOptions, setSetOptions] = useState<SetOption[]>([])
   const [editPrintId, setEditPrintId] = useState('')
+  const [editTargetSetCode, setEditTargetSetCode] = useState('')
   const [editBaseCode, setEditBaseCode] = useState('')
   const [editPrintCode, setEditPrintCode] = useState('')
   const [editName, setEditName] = useState('')
@@ -80,13 +87,33 @@ export default function AdminEditCardPage() {
 
     if (prints.length === 0) {
       setEditPrintId('')
+      setEditTargetSetCode(code)
       setLoading(false)
       return
     }
 
     setEditPrintId((prev) => (prev && prints.some((p) => p.id === prev) ? prev : prints[0].id))
+    setEditTargetSetCode(code)
     setLoading(false)
   }, [code, getAuthHeader])
+
+  const loadSetOptions = useCallback(async () => {
+    const { data, error } = await supabase
+      .from('sets')
+      .select('code, name')
+      .order('code', { ascending: true })
+
+    if (error) {
+      setLogs((prev) => [...prev, `Erreur chargement sets: ${error.message}`])
+      return
+    }
+
+    const rows = ((data || []) as Array<{ code: string; name: string | null }>).map((row) => ({
+      code: String(row.code || '').toUpperCase(),
+      name: row.name
+    }))
+    setSetOptions(rows)
+  }, [])
 
   useEffect(() => {
     const selectedPrint = printOptions.find((row) => row.id === editPrintId)
@@ -107,8 +134,9 @@ export default function AdminEditCardPage() {
       return
     }
     if (!code) return
+    loadSetOptions()
     loadSetPrints()
-  }, [canAccessAdmin, code, loadSetPrints])
+  }, [canAccessAdmin, code, loadSetOptions, loadSetPrints])
 
   const updateSelectedPrint = async () => {
     if (!editPrintId || isUpdatingCard) return
@@ -132,6 +160,7 @@ export default function AdminEditCardPage() {
           rarity: editRarity.trim(),
           type: editType.trim(),
           variantType: editVariantType.trim() || 'normal',
+          targetSetCode: editTargetSetCode.trim().toUpperCase() || code,
           imageUrl: editImageUrl.trim(),
           setMissingImage: editSetMissingImage
         })
@@ -143,7 +172,14 @@ export default function AdminEditCardPage() {
         return
       }
 
-      setLogs([`Carte modifiee: ${data?.updated?.printCode || editPrintCode}`])
+      const movedToSet = String(data?.updated?.setCode || code).toUpperCase()
+      if (movedToSet !== code) {
+        setLogs([
+          `Carte deplacee: ${data?.updated?.printCode || editPrintCode} vers ${movedToSet}`
+        ])
+      } else {
+        setLogs([`Carte modifiee: ${data?.updated?.printCode || editPrintCode}`])
+      }
       setImageVersion(Date.now())
       await loadSetPrints()
     } finally {
@@ -228,6 +264,17 @@ export default function AdminEditCardPage() {
                 value={editVariantType}
                 onChange={(e) => setEditVariantType(e.target.value)}
               />
+              <select
+                value={editTargetSetCode}
+                onChange={(e) => setEditTargetSetCode(e.target.value.toUpperCase())}
+              >
+                {(setOptions.length > 0 ? setOptions : [{ code, name: null }]).map((row) => (
+                  <option key={row.code} value={row.code}>
+                    {row.code}
+                    {row.name ? ` - ${row.name}` : ''}
+                  </option>
+                ))}
+              </select>
               <input
                 readOnly
                 value={currentImageUrl}

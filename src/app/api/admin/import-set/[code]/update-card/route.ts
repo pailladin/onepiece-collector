@@ -143,6 +143,17 @@ export async function POST(
     return NextResponse.json({ error: 'Print introuvable dans ce set' }, { status: 404 })
   }
 
+  const targetSetCode = normalizeCode(body?.targetSetCode || setCode)
+  const { data: targetSetData, error: targetSetError } = await supabase
+    .from('sets')
+    .select('id')
+    .eq('code', targetSetCode)
+    .single()
+
+  if (targetSetError || !targetSetData) {
+    return NextResponse.json({ error: 'Set de destination introuvable' }, { status: 404 })
+  }
+
   const baseCodeInput = String(body?.baseCode || '').trim()
   const nameInput = String(body?.name || '').trim()
   const rarityInput = String(body?.rarity || '').trim()
@@ -179,6 +190,7 @@ export async function POST(
   }
   if ('rarity' in body) cardUpdate.rarity = rarityInput || null
   if ('type' in body) cardUpdate.type = typeInput || null
+  if (targetSetData.id !== setData.id) cardUpdate.base_set_id = targetSetData.id
 
   if (Object.keys(cardUpdate).length > 0) {
     const { error: updateCardError } = await supabase
@@ -217,6 +229,9 @@ export async function POST(
   if (nextPrintCode !== normalizeCode(printData.print_code)) {
     printUpdate.print_code = nextPrintCode
   }
+  if (targetSetData.id !== setData.id) {
+    printUpdate.distribution_set_id = targetSetData.id
+  }
 
   if (setMissingImage) {
     printUpdate.image_path = MISSING_IMAGE_PATH
@@ -225,7 +240,7 @@ export async function POST(
     try {
       const uploadedFileName = await uploadImageToSupabase(
         imageUrl,
-        `${setCode}/${nextImagePath}`
+        `${targetSetCode}/${nextImagePath}`
       )
       printUpdate.image_path = uploadedFileName.split('/').pop() || nextImagePath
     } catch (error: unknown) {
@@ -236,6 +251,26 @@ export async function POST(
         },
         { status: 502 }
       )
+    }
+  } else if (
+    targetSetData.id !== setData.id &&
+    printData.image_path &&
+    printData.image_path !== MISSING_IMAGE_PATH
+  ) {
+    const sourcePath = `${setCode}/${printData.image_path}`
+    const targetPath = `${targetSetCode}/${printData.image_path}`
+
+    if (sourcePath !== targetPath) {
+      const { error: copyError } = await supabase.storage
+        .from(BUCKET)
+        .copy(sourcePath, targetPath)
+
+      if (copyError && !/already exists/i.test(copyError.message || '')) {
+        return NextResponse.json(
+          { error: `Erreur copie image vers le nouveau set: ${copyError.message}` },
+          { status: 500 }
+        )
+      }
     }
   }
 
@@ -258,7 +293,8 @@ export async function POST(
     ok: true,
     updated: {
       printId,
-      printCode: nextPrintCode
+      printCode: nextPrintCode,
+      setCode: targetSetCode
     }
   })
 }

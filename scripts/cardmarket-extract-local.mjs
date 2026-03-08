@@ -69,6 +69,68 @@ function cleanProductName(value) {
   return normalizeWhitespace(String(value || '').replace(/\s+-\s+Singles?$/i, ''))
 }
 
+function slugPart(value) {
+  return normalizeWhitespace(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
+function parseDonMetaFromName(name) {
+  const clean = cleanProductName(name)
+  if (!/^DON!!?/i.test(clean)) return null
+
+  const groups = [...clean.matchAll(/\(([^)]+)\)/g)].map((m) => normalizeWhitespace(m[1]))
+  if (groups.length === 0) {
+    return {
+      setHint: null,
+      character: 'DON',
+      version: null
+    }
+  }
+
+  const first = groups[0] || ''
+  const second = groups[1] || ''
+
+  // First group often contains "<Character> <SET>"
+  // Example: "Robin EB03"
+  let setHint = null
+  const setMatch = first.match(/\b([A-Z]{2}\d{2}|OP\d{2}|ST\d{2}|PRB\d{2}|P-\d{2,4})\b/i)
+  if (setMatch?.[1]) {
+    setHint = setMatch[1].toUpperCase().replace(/[^A-Z0-9-]/g, '')
+  }
+
+  const character = normalizeWhitespace(
+    first.replace(/\b([A-Z]{2}\d{2}|OP\d{2}|ST\d{2}|PRB\d{2}|P-\d{2,4})\b/gi, '')
+  )
+
+  let version = null
+  const versionMatch = second.match(/\bV\.?\s*([0-9]+)\b/i)
+  if (versionMatch?.[1]) version = `V${versionMatch[1]}`
+
+  return {
+    setHint,
+    character: character || 'DON',
+    version
+  }
+}
+
+function buildDonCodes(name) {
+  const meta = parseDonMetaFromName(name)
+  if (!meta) return null
+
+  const setPart = slugPart(meta.setHint || 'GEN')
+  const charPart = slugPart(meta.character || 'DON')
+  const versionPart = slugPart(meta.version || 'V1')
+  const code = `DON-${setPart}-${charPart}-${versionPart}`
+  return {
+    baseCode: code,
+    printCode: code
+  }
+}
+
 function normalizeRarity(value) {
   const raw = normalizeWhitespace(value)
   if (!raw) return ''
@@ -300,12 +362,18 @@ async function run() {
       if (rarityLike) rarity = normalizeRarity(rarityLike)
     }
 
+    const cleanName = cleanProductName(data.title) || ''
+    const donCodes = buildDonCodes(cleanName)
+    const finalRarity = rarity || (donCodes ? 'DON!!' : '')
+    const detectedType = normalizeWhitespace(data.cardType || typeFromHtml || '')
+    const finalType = donCodes ? 'DON' : detectedType
+
     const simpleResult = {
-      base_code: printCode,
-      print_code: printCode,
-      name: cleanProductName(data.title) || '',
-      rarity,
-      type: normalizeWhitespace(data.cardType || typeFromHtml || ''),
+      base_code: donCodes?.baseCode || printCode,
+      print_code: donCodes?.printCode || printCode,
+      name: cleanName,
+      rarity: finalRarity,
+      type: finalType,
       variant_type: 'normal',
       image_url: data.ogImage || null,
       cardmarket_product_id: productId

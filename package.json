@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "cardmarket:extract-local": "node scripts/cardmarket-extract-local.mjs"
+    "cardmarket:extract-local": "node scripts/cardmarket-extract-local.mjs",
+    "cardmarket:extract-list-local": "node scripts/cardmarket-extract-list-local.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.97.0",
