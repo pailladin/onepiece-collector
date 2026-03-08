@@ -8,6 +8,7 @@ import { isAdminEmail, parseAdminEmails } from '@/lib/admin'
 import { supabase } from '@/lib/supabaseClient'
 
 type SetOption = {
+  id: string
   code: string
   name: string | null
 }
@@ -74,14 +75,49 @@ export default function AdminCardmarketLinksPage() {
   }, [])
 
   const loadSets = useCallback(async () => {
-    const { data } = await supabase.from('sets').select('code, name').order('code')
-    const next = ((data as SetOption[] | null) || []).map((row) => ({
+    const { data: setsData } = await supabase
+      .from('sets')
+      .select('id, code, name')
+      .order('code')
+    const { data: printsData } = await supabase
+      .from('card_prints')
+      .select('id, distribution_set_id')
+    const { data: linksData } = await supabase
+      .from('cardmarket_print_links')
+      .select('card_print_id')
+
+    const allSets = ((setsData as SetOption[] | null) || []).map((row) => ({
+      id: row.id,
       code: row.code,
       name: row.name
     }))
+
+    const linkedPrintIds = new Set(
+      (((linksData as Array<{ card_print_id: string }> | null) || []) as Array<{
+        card_print_id: string
+      }>).map((row) => row.card_print_id)
+    )
+
+    const unlinkedCountBySetId = new Map<string, number>()
+    for (const print of
+      (((printsData as Array<{ id: string; distribution_set_id: string }> | null) ||
+        []) as Array<{ id: string; distribution_set_id: string }>)) {
+      if (linkedPrintIds.has(print.id)) continue
+      unlinkedCountBySetId.set(
+        print.distribution_set_id,
+        (unlinkedCountBySetId.get(print.distribution_set_id) || 0) + 1
+      )
+    }
+
+    const next = allSets.filter((set) => (unlinkedCountBySetId.get(set.id) || 0) > 0)
     setSets(next)
     if (!selectedSetCode && next.length > 0) {
       setSelectedSetCode(next[0].code)
+    } else if (
+      selectedSetCode &&
+      !next.some((set) => set.code === selectedSetCode)
+    ) {
+      setSelectedSetCode(next[0]?.code || '')
     }
   }, [selectedSetCode])
 

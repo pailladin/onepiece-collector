@@ -65,6 +65,51 @@ function inferPrintCode(text) {
   return null
 }
 
+function cleanProductName(value) {
+  return normalizeWhitespace(String(value || '').replace(/\s+-\s+Singles?$/i, ''))
+}
+
+function normalizeRarity(value) {
+  const raw = normalizeWhitespace(value)
+  if (!raw) return ''
+
+  const upper = raw.toUpperCase()
+  const compact = upper.replace(/\s+/g, ' ')
+  const noSpace = upper.replace(/\s+/g, '')
+
+  const blocked = new Set([
+    'ENGLISH',
+    'FRENCH',
+    'GERMAN',
+    'ITALIAN',
+    'SPANISH',
+    'PORTUGUESE',
+    'JAPANESE',
+    'KOREAN'
+  ])
+  if (blocked.has(compact)) return ''
+
+  if (/^DON!?!?$/.test(noSpace)) return 'DON!!'
+  if (/^TREASURERARE$/.test(noSpace)) return 'TR'
+  if (/^WANTEDPOSTER$/.test(noSpace)) return 'WP'
+
+  const allowed = new Set([
+    'C',
+    'UC',
+    'R',
+    'SR',
+    'SEC',
+    'L',
+    'SP',
+    'TR',
+    'DON!!',
+    'DON!'
+  ])
+  if (allowed.has(compact)) return compact === 'DON!' ? 'DON!!' : compact
+
+  return ''
+}
+
 async function run() {
   const { url, outFile, headful } = parseArgs(process.argv.slice(2))
   if (!url) {
@@ -105,6 +150,57 @@ async function run() {
       const txt = (v) => (v || '').replace(/\s+/g, ' ').trim()
       const q = (sel) => document.querySelector(sel)
       const qa = (sel) => [...document.querySelectorAll(sel)]
+      const cleanKey = (v) =>
+        txt(v)
+          .toLowerCase()
+          .replace(/\s+/g, ' ')
+          .replace(/[:\-]+$/g, '')
+
+      const extractByLabels = (labels) => {
+        const wanted = new Set(labels.map((v) => cleanKey(v)))
+        // 1) Structured rows where first item is the label.
+        for (const row of qa('tr, li, .row, .product-info-row, .product-attributes-row, .specification-row')) {
+          const cells = [...row.querySelectorAll('th, td, dt, dd, div, span, strong, b')]
+            .map((c) => txt(c.textContent))
+            .filter(Boolean)
+          if (cells.length < 2) continue
+          const key = cleanKey(cells[0])
+          if (wanted.has(key)) {
+            const value = cells.find((c, idx) => idx > 0 && cleanKey(c) !== key) || ''
+            if (value) return value
+          }
+        }
+
+        // 2) Fallback: label element then next sibling text.
+        for (const el of qa('th, dt, strong, b, span, div')) {
+          const key = cleanKey(el.textContent)
+          if (!wanted.has(key)) continue
+          const next = el.nextElementSibling
+          if (next) {
+            const value = txt(next.textContent)
+            if (value && !wanted.has(cleanKey(value))) return value
+          }
+        }
+
+        return ''
+      }
+
+      const extractAriaByLabel = (labels) => {
+        const wanted = new Set(labels.map((v) => cleanKey(v)))
+        for (const row of qa('tr, li, .row, .product-info-row, .product-attributes-row, .specification-row')) {
+          const rowText = txt(row.textContent)
+          if (!rowText) continue
+          const cells = [...row.querySelectorAll('th, td, dt, dd, div, span, strong, b')]
+            .map((c) => txt(c.textContent))
+            .filter(Boolean)
+          const first = cleanKey(cells[0] || '')
+          if (!wanted.has(first)) continue
+          const ariaNode = row.querySelector('[aria-label]')
+          const ariaValue = txt(ariaNode?.getAttribute('aria-label'))
+          if (ariaValue) return ariaValue
+        }
+        return ''
+      }
 
       const title =
         txt(q('h1')?.textContent) ||
@@ -141,6 +237,15 @@ async function run() {
         canonicalUrl,
         pageUrl: window.location.href,
         ogImage,
+        rarity:
+          extractByLabels(['Rarity', 'Rarete']) ||
+          extractAriaByLabel(['Rarity', 'Rarete']) ||
+          txt(q('[data-field="rarity"]')?.textContent) ||
+          null,
+        cardType:
+          extractByLabels(['Card Type', 'Type', 'Categorie']) ||
+          txt(q('[data-field="cardType"]')?.textContent) ||
+          null,
         breadcrumb,
         allLinks,
         snippetPriceText: fromLabel || null,
@@ -168,12 +273,39 @@ async function run() {
       ? `https://www.cardmarket.com/en/OnePiece/Products?idProduct=${productId}`
       : null
 
+    const rarityFromHtml =
+      String(data.html || '').match(/>\s*Rarity\s*<\s*\/[^>]+>\s*<[^>]*>\s*([^<]{1,24})\s*</i)?.[1] ||
+      String(data.html || '').match(/Rarity[\s\S]{0,900}?aria-label=["']([^"']{1,24})["']/i)?.[1] ||
+      String(data.html || '').match(/["']Rarity["']\s*[:,]\s*["']([^"']{1,24})["']/i)?.[1] ||
+      null
+    const typeFromHtml =
+      String(data.html || '').match(/>\s*(?:Card\s*Type|Type)\s*<\s*\/[^>]+>\s*<[^>]*>\s*([^<]{1,24})\s*</i)?.[1] ||
+      null
+
+    const cleanedRarity = normalizeWhitespace(data.rarity || rarityFromHtml || '')
+    let rarity =
+      /printed in|language|seller|price/i.test(cleanedRarity)
+        ? ''
+        : normalizeRarity(cleanedRarity)
+
+    if (!rarity) {
+      const ariaCandidates = [
+        ...String(data.html || '').matchAll(/aria-label=["']([^"']{1,24})["']/gi)
+      ]
+        .map((m) => normalizeWhitespace(m[1]))
+        .filter(Boolean)
+      const rarityLike = ariaCandidates.find((v) =>
+        Boolean(normalizeRarity(v))
+      )
+      if (rarityLike) rarity = normalizeRarity(rarityLike)
+    }
+
     const simpleResult = {
       base_code: printCode,
       print_code: printCode,
-      name: normalizeWhitespace(data.title) || '',
-      rarity: '',
-      type: '',
+      name: cleanProductName(data.title) || '',
+      rarity,
+      type: normalizeWhitespace(data.cardType || typeFromHtml || ''),
       variant_type: 'normal',
       image_url: data.ogImage || null,
       cardmarket_product_id: productId
