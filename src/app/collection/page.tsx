@@ -228,6 +228,19 @@ export default function CollectionPage() {
         headerActions={
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <Link
+              href="/collection/history"
+              style={{
+                border: '1px solid #1d4ed8',
+                background: '#1d4ed8',
+                color: '#fff',
+                borderRadius: 8,
+                padding: '8px 12px',
+                textDecoration: 'none'
+              }}
+            >
+              Suivi valeur
+            </Link>
+            <Link
               href="/collection/top10"
               style={{
                 border: '1px solid #0f766e',

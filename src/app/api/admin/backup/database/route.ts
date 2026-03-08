@@ -25,7 +25,8 @@ const TABLES = [
   'cardmarket_oauth_states',
   'cardmarket_print_links',
   'cardmarket_catalog_entries',
-  'cardmarket_price_guide_entries'
+  'cardmarket_price_guide_entries',
+  'collection_value_history'
 ] as const
 
 async function fetchAllRows(table: string) {
