@@ -31,6 +31,30 @@ type SetPriceRow = {
   usFallbackCount: number
 }
 
+type OpportunityTrend = {
+  direction: 'up' | 'down' | 'flat' | 'unknown'
+  score: number | null
+  pct1d: number | null
+  pct7d: number | null
+  pct30d: number | null
+}
+
+type OpportunityRow = {
+  id: string
+  setCode: string
+  printCode: string
+  cardName: string
+  cardmarketProductId: string | null
+  unitPrice: number
+  low: number | null
+  avg: number | null
+  trend: OpportunityTrend
+  dropScore: number
+  spreadScore: number
+  priceAccessibility: number
+  interestIndex: number
+}
+
 function chunkArray<T>(items: T[], size: number) {
   const chunks: T[][] = []
   for (let i = 0; i < items.length; i += size) {
@@ -51,6 +75,10 @@ export default function CollectionPage() {
   const [priceSetRows, setPriceSetRows] = useState<SetPriceRow[]>([])
   const [pricePricedCount, setPricePricedCount] = useState(0)
   const [priceExpectedCount, setPriceExpectedCount] = useState(0)
+  const [opportunityLoading, setOpportunityLoading] = useState(false)
+  const [opportunityError, setOpportunityError] = useState<string | null>(null)
+  const [showOpportunityModal, setShowOpportunityModal] = useState(false)
+  const [opportunityRows, setOpportunityRows] = useState<OpportunityRow[]>([])
 
   useEffect(() => {
     const fetchData = async () => {
@@ -81,10 +109,54 @@ export default function CollectionPage() {
 
   const visibleSets = sets.filter((set) => (stats[set.code]?.owned || 0) > 0)
   const formatCurrency = (value: number) =>
-    new Intl.NumberFormat('en-US', {
+    new Intl.NumberFormat('fr-FR', {
       style: 'currency',
-      currency: 'USD'
+      currency: 'EUR'
     }).format(value)
+  const formatPercent = (value: number) =>
+    `${value >= 0 ? '+' : ''}${new Intl.NumberFormat('fr-FR', {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1
+    }).format(value * 100)}%`
+
+  const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
+  const asFinite = (value: unknown) => {
+    const num = Number(value)
+    return Number.isFinite(num) ? num : null
+  }
+  const getDropMagnitude = (value: number | null) => (value != null && value < 0 ? -value : 0)
+
+  const calculateInterestIndex = (params: {
+    trend: OpportunityTrend
+    low: number | null
+    avg: number | null
+    unitPrice: number
+  }) => {
+    const baseDrop = getDropMagnitude(params.trend.score)
+    const drop1d = getDropMagnitude(params.trend.pct1d)
+    const drop7d = getDropMagnitude(params.trend.pct7d)
+    const drop30d = getDropMagnitude(params.trend.pct30d)
+    const snapshotDrop = drop1d * 0.5 + drop7d * 0.3 + drop30d * 0.2
+    const dropScore = baseDrop * 0.7 + snapshotDrop * 0.3
+
+    const spreadScore =
+      params.avg && params.avg > 0 && params.low != null && params.low >= 0
+        ? clamp((params.avg - params.low) / params.avg, 0, 0.6)
+        : 0
+
+    // Favor cards that are still affordable for quick buy opportunities.
+    const priceAccessibility = clamp(1 / (1 + params.unitPrice / 60), 0, 1)
+
+    const interestRaw = dropScore * 0.75 + spreadScore * 0.15 + priceAccessibility * 0.1
+    const interestIndex = clamp(Math.round(interestRaw * 1000) / 10, 0, 100)
+
+    return {
+      dropScore,
+      spreadScore,
+      priceAccessibility,
+      interestIndex
+    }
+  }
 
   const calculateCollectionPrice = async () => {
     if (!user) return
@@ -218,6 +290,162 @@ export default function CollectionPage() {
     }
   }
 
+  const calculateOpportunities = async () => {
+    if (!user || visibleSets.length === 0) return
+
+    setOpportunityLoading(true)
+    setOpportunityError(null)
+    setShowOpportunityModal(false)
+
+    try {
+      const rowsBySet = await Promise.all(
+        visibleSets.map(async (setRow) => {
+          const { data: printsData, error: printsError } = await supabase
+            .from('card_prints')
+            .select('id, print_code, card_id')
+            .eq('distribution_set_id', setRow.id)
+
+          if (printsError) throw new Error(`Erreur prints (${setRow.code}): ${printsError.message}`)
+
+          const prints =
+            ((printsData as Array<{ id: string; print_code: string | null; card_id: string }> | null) ||
+              []) as Array<{ id: string; print_code: string | null; card_id: string }>
+          if (prints.length === 0) return [] as OpportunityRow[]
+
+          const printIds = prints.map((row) => row.id)
+          const ownedByPrintId = new Map<string, number>()
+          for (const idsChunk of chunkArray(printIds, 400)) {
+            const { data: ownedData, error: ownedError } = await supabase
+              .from('collections')
+              .select('card_print_id, quantity')
+              .eq('user_id', user.id)
+              .in('card_print_id', idsChunk)
+
+            if (ownedError) {
+              throw new Error(`Erreur collection (${setRow.code}): ${ownedError.message}`)
+            }
+            ;(
+              ((ownedData as Array<{ card_print_id: string; quantity: number }> | null) || []) as Array<{
+                card_print_id: string
+                quantity: number
+              }>
+            ).forEach((row) => {
+              ownedByPrintId.set(row.card_print_id, row.quantity || 0)
+            })
+          }
+
+          const cardIds = [...new Set(prints.map((row) => row.card_id).filter(Boolean))]
+          const cardNameById = new Map<string, string>()
+          for (const idsChunk of chunkArray(cardIds, 300)) {
+            const { data: cardsData, error: cardsError } = await supabase
+              .from('cards')
+              .select('id, base_code, card_translations(name, locale)')
+              .in('id', idsChunk)
+            if (cardsError) throw new Error(`Erreur cards (${setRow.code}): ${cardsError.message}`)
+
+            ;(
+              ((cardsData as Array<{
+                id: string
+                base_code: string | null
+                card_translations?: Array<{ name: string; locale: string }> | null
+              }> | null) || []) as Array<{
+                id: string
+                base_code: string | null
+                card_translations?: Array<{ name: string; locale: string }> | null
+              }>
+            ).forEach((card) => {
+              const fr =
+                card.card_translations?.find((t) => t.locale === 'fr')?.name ||
+                card.card_translations?.[0]?.name
+              cardNameById.set(card.id, fr || card.base_code || 'Carte')
+            })
+          }
+
+          const res = await fetch(`/api/optcg/prices/${encodeURIComponent(setRow.code)}`)
+          const pricing = await res.json().catch(() => ({}))
+          if (!res.ok) return [] as OpportunityRow[]
+
+          const prices: Record<string, number> = pricing?.prices || {}
+          const sources: Record<string, 'cardmarket' | 'us'> = pricing?.sources || {}
+          const ranges: Record<string, { low: number | null; avg: number | null }> =
+            pricing?.cardmarketRanges || {}
+          const cardmarketProductIds: Record<string, string> = pricing?.cardmarketProductIds || {}
+          const trends: Record<string, OpportunityTrend> = pricing?.cardmarketTrends || {}
+
+          const localRows: OpportunityRow[] = []
+          for (const print of prints) {
+            const quantity = ownedByPrintId.get(print.id) || 0
+            if (quantity > 0) continue
+
+            const printCode = (print.print_code || '').trim().toUpperCase()
+            if (!printCode) continue
+
+            const unitPrice = asFinite(prices[printCode])
+            if (unitPrice == null) continue
+            if (sources[printCode] !== 'cardmarket') continue
+
+            const trend = trends[printCode] || {
+              direction: 'unknown',
+              score: null,
+              pct1d: null,
+              pct7d: null,
+              pct30d: null
+            }
+            const low = asFinite(ranges[printCode]?.low)
+            const avg = asFinite(ranges[printCode]?.avg)
+
+            const scoring = calculateInterestIndex({
+              trend,
+              low,
+              avg,
+              unitPrice
+            })
+
+            // Keep only real downward opportunities.
+            if (scoring.dropScore < 0.01) continue
+
+            localRows.push({
+              id: `${setRow.code}:${print.id}`,
+              setCode: setRow.code,
+              printCode,
+              cardName: cardNameById.get(print.card_id) || printCode,
+              cardmarketProductId: cardmarketProductIds[printCode] || null,
+              unitPrice,
+              low,
+              avg,
+              trend,
+              dropScore: scoring.dropScore,
+              spreadScore: scoring.spreadScore,
+              priceAccessibility: scoring.priceAccessibility,
+              interestIndex: scoring.interestIndex
+            })
+          }
+
+          return localRows
+        })
+      )
+
+      const flattened = rowsBySet
+        .flat()
+        .sort(
+          (a, b) =>
+            b.interestIndex - a.interestIndex ||
+            b.dropScore - a.dropScore ||
+            a.unitPrice - b.unitPrice ||
+            a.printCode.localeCompare(b.printCode)
+        )
+
+      setOpportunityRows(flattened)
+      setShowOpportunityModal(true)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Erreur serveur'
+      setOpportunityError(message)
+      setOpportunityRows([])
+    } finally {
+      setOpportunityLoading(false)
+    }
+  }
+
   return (
     <>
       <CollectionSetsGrid
@@ -268,6 +496,21 @@ export default function CollectionPage() {
             >
               {priceLoading ? 'Calcul en cours...' : 'Calculer prix collection'}
             </button>
+            <button
+              onClick={calculateOpportunities}
+              disabled={opportunityLoading || visibleSets.length === 0}
+              style={{
+                border: '1px solid #7c3aed',
+                background: '#7c3aed',
+                color: '#fff',
+                borderRadius: 8,
+                padding: '8px 12px',
+                cursor: opportunityLoading || visibleSets.length === 0 ? 'not-allowed' : 'pointer',
+                opacity: opportunityLoading || visibleSets.length === 0 ? 0.6 : 1
+              }}
+            >
+              {opportunityLoading ? 'Analyse en cours...' : "Opportunites d'achat"}
+            </button>
           </div>
         }
       />
@@ -275,6 +518,11 @@ export default function CollectionPage() {
       {priceError && (
         <div style={{ padding: '0 40px 24px', color: '#b91c1c', fontSize: 13 }}>
           {priceError}
+        </div>
+      )}
+      {opportunityError && (
+        <div style={{ padding: '0 40px 24px', color: '#b91c1c', fontSize: 13 }}>
+          {opportunityError}
         </div>
       )}
 
@@ -391,6 +639,161 @@ export default function CollectionPage() {
           </div>
         </div>
       )}
+      {showOpportunityModal && (
+        <div
+          onClick={() => setShowOpportunityModal(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.45)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: 16
+          }}
+        >
+          <div
+            onClick={(event) => event.stopPropagation()}
+            style={{
+              background: '#fff',
+              borderRadius: 12,
+              width: 'min(1080px, 100%)',
+              maxHeight: '85vh',
+              overflow: 'auto',
+              padding: 18
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: 12
+              }}
+            >
+              <div>
+                <h2 style={{ margin: 0, fontSize: 18 }}>Opportunites d'achat (cartes en baisse)</h2>
+                <div style={{ fontSize: 13, color: '#475569', marginTop: 4 }}>
+                  Tri par indice d'interet (baisse + spread + accessibilite prix).
+                </div>
+              </div>
+              <button onClick={() => setShowOpportunityModal(false)}>Fermer</button>
+            </div>
+
+            <div
+              style={{
+                border: '1px solid #e2e8f0',
+                borderRadius: 8,
+                overflow: 'hidden'
+              }}
+            >
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '90px 130px 1.4fr 110px 140px 110px 130px',
+                  gap: 10,
+                  padding: '10px 12px',
+                  background: '#f8fafc',
+                  fontWeight: 700,
+                  fontSize: 13
+                }}
+              >
+                <div>Indice</div>
+                <div>Set</div>
+                <div>Carte</div>
+                <div>Prix</div>
+                <div>Baisse</div>
+                <div>Lien</div>
+                <div>Signal</div>
+              </div>
+
+              {opportunityRows.length === 0 ? (
+                <div style={{ padding: 12 }}>
+                  Aucune opportunite detectee pour l'instant sur les cartes manquantes.
+                </div>
+              ) : (
+                opportunityRows.map((row) => (
+                  <div
+                    key={row.id}
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: '90px 130px 1.4fr 110px 140px 110px 130px',
+                      gap: 10,
+                      padding: '10px 12px',
+                      borderTop: '1px solid #e2e8f0',
+                      alignItems: 'center'
+                    }}
+                  >
+                    <div style={{ fontWeight: 800, color: '#7c3aed' }}>
+                      {new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 1 }).format(
+                        row.interestIndex
+                      )}
+                    </div>
+                    <div>
+                      <strong>{row.setCode}</strong>
+                    </div>
+                    <div>
+                      <div style={{ fontWeight: 700 }}>{row.printCode}</div>
+                      <div>{row.cardName}</div>
+                    </div>
+                    <div>{formatCurrency(row.unitPrice)}</div>
+                    <div
+                      title={`1j: ${
+                        row.trend.pct1d != null ? formatPercent(row.trend.pct1d) : '-'
+                      } | 7j: ${row.trend.pct7d != null ? formatPercent(row.trend.pct7d) : '-'} | 30j: ${
+                        row.trend.pct30d != null ? formatPercent(row.trend.pct30d) : '-'
+                      }`}
+                      style={{ color: '#dc2626', fontWeight: 700 }}
+                    >
+                      {row.trend.score != null ? formatPercent(row.trend.score) : '-'}
+                    </div>
+                    <a
+                      href={
+                        row.cardmarketProductId
+                          ? `https://www.cardmarket.com/en/OnePiece/Products?idProduct=${encodeURIComponent(
+                              row.cardmarketProductId
+                            )}`
+                          : `https://www.cardmarket.com/fr/OnePiece/Products/Singles?searchMode=v2&idCategory=1621&idExpansion=0&searchString=${encodeURIComponent(
+                              row.printCode.split('_')[0] || row.printCode
+                            )}&idRarity=0&perSite=30`
+                      }
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{ color: '#0369a1', fontWeight: 700 }}
+                    >
+                      Cardmarket
+                    </a>
+                    <div
+                      title={`Low: ${
+                        row.low != null ? formatCurrency(row.low) : '-'
+                      } | Avg: ${row.avg != null ? formatCurrency(row.avg) : '-'}`}
+                      style={{
+                        fontWeight: 700,
+                        color:
+                          row.trend.direction === 'down'
+                            ? '#dc2626'
+                            : row.trend.direction === 'up'
+                              ? '#15803d'
+                              : '#64748b'
+                      }}
+                    >
+                      {row.trend.direction === 'down'
+                        ? 'baisse'
+                        : row.trend.direction === 'up'
+                          ? 'hausse'
+                          : row.trend.direction === 'flat'
+                            ? 'stable'
+                            : '-'}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }
+

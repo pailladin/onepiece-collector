@@ -24,6 +24,7 @@ const CARD_PLACEHOLDER_IMAGE =
 type SortKey = 'number' | 'name' | 'rarity' | 'type'
 type SortDirection = 'asc' | 'desc'
 type PriceSource = 'cardmarket' | 'us'
+type TrendDirection = 'up' | 'down' | 'flat' | 'unknown'
 type PriceDetail = {
   id: string
   printCode: string
@@ -36,6 +37,11 @@ type PriceDetail = {
   cardmarketProductId: string | null
   cardmarketLow: number | null
   cardmarketAvg: number | null
+  trendDirection: TrendDirection
+  trendScore: number | null
+  trendPct1d: number | null
+  trendPct7d: number | null
+  trendPct30d: number | null
 }
 
 type DoubleDetail = {
@@ -403,10 +409,15 @@ export function CollectionSetView({
   )
 
   const formatCurrency = (value: number) =>
-    new Intl.NumberFormat('en-US', {
+    new Intl.NumberFormat('fr-FR', {
       style: 'currency',
-      currency: 'USD'
+      currency: 'EUR'
     }).format(value)
+  const formatPercent = (value: number) =>
+    `${value >= 0 ? '+' : ''}${new Intl.NumberFormat('fr-FR', {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1
+    }).format(value * 100)}%`
 
   const calculatePriceDetails = async (mode: 'owned' | 'missing') => {
     if (!code) return
@@ -433,6 +444,16 @@ export function CollectionSetView({
       const cardmarketProductIds: Record<string, string> = data?.cardmarketProductIds || {}
       const cardmarketRanges: Record<string, { low: number | null; avg: number | null }> =
         data?.cardmarketRanges || {}
+      const cardmarketTrends: Record<
+        string,
+        {
+          direction?: TrendDirection
+          score?: number | null
+          pct1d?: number | null
+          pct7d?: number | null
+          pct30d?: number | null
+        }
+      > = data?.cardmarketTrends || {}
       let total = 0
       let matched = 0
       const details: PriceDetail[] = []
@@ -455,8 +476,7 @@ export function CollectionSetView({
           item.card?.card_translations?.find((t: any) => t.locale === DEFAULT_LOCALE)
             ?.name || ''
         const linkedProductId = cardmarketProductIds[printCode] || null
-        const hasCardmarketRange =
-          Number.isFinite(range?.low) || Number.isFinite(range?.avg)
+        const trend = cardmarketTrends[printCode] || {}
 
         if (unitPrice != null && totalPrice != null) {
           total += totalPrice
@@ -474,7 +494,17 @@ export function CollectionSetView({
           source,
           cardmarketProductId: linkedProductId,
           cardmarketLow: Number.isFinite(range?.low) ? Number(range.low) : null,
-          cardmarketAvg: Number.isFinite(range?.avg) ? Number(range.avg) : null
+          cardmarketAvg: Number.isFinite(range?.avg) ? Number(range.avg) : null,
+          trendDirection:
+            source === 'cardmarket' ? trend.direction || 'unknown' : 'unknown',
+          trendScore:
+            source === 'cardmarket' && Number.isFinite(trend.score) ? Number(trend.score) : null,
+          trendPct1d:
+            source === 'cardmarket' && Number.isFinite(trend.pct1d) ? Number(trend.pct1d) : null,
+          trendPct7d:
+            source === 'cardmarket' && Number.isFinite(trend.pct7d) ? Number(trend.pct7d) : null,
+          trendPct30d:
+            source === 'cardmarket' && Number.isFinite(trend.pct30d) ? Number(trend.pct30d) : null
         })
       }
 
@@ -1236,7 +1266,7 @@ export function CollectionSetView({
               <div
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: '1.5fr 1fr 0.6fr 0.8fr 0.8fr 0.9fr',
+                  gridTemplateColumns: '1.8fr 0.6fr 0.9fr 0.9fr 0.7fr 0.9fr',
                   gap: 10,
                   padding: '6px 8px',
                   fontSize: 12,
@@ -1246,10 +1276,10 @@ export function CollectionSetView({
                 }}
               >
                 <div>Carte</div>
-                <div>Code print</div>
                 <div>Qte</div>
                 <div>Prix u.</div>
                 <div>Total</div>
+                <div>Tendance</div>
                 <div>Lien</div>
               </div>
 
@@ -1264,7 +1294,7 @@ export function CollectionSetView({
                   key={row.id}
                   style={{
                     display: 'grid',
-                    gridTemplateColumns: '1.5fr 1fr 0.6fr 0.8fr 0.8fr 0.9fr',
+                    gridTemplateColumns: '1.8fr 0.6fr 0.9fr 0.9fr 0.7fr 0.9fr',
                     gap: 10,
                     padding: '10px 8px',
                     borderBottom: '1px solid #e2e8f0',
@@ -1276,8 +1306,7 @@ export function CollectionSetView({
                     <div style={{ fontWeight: 700 }}>{row.displayCode}</div>
                     <div>{row.name}</div>
                   </div>
-                  <div style={{ color: '#334155' }}>{row.printCode}</div>
-                    <div>x{row.quantity}</div>
+                  <div>x{row.quantity}</div>
                   <div
                     title={
                       row.source == null
@@ -1298,6 +1327,36 @@ export function CollectionSetView({
                   </div>
                   <div style={{ fontWeight: 700 }}>
                     {row.totalPrice == null ? '-' : formatCurrency(row.totalPrice)}
+                  </div>
+                  <div
+                    title={
+                      row.source !== 'cardmarket'
+                        ? 'Tendance indisponible (source US)'
+                        : row.trendDirection === 'unknown'
+                          ? 'Tendance indisponible (historique insuffisant)'
+                          : `Score: ${
+                              row.trendScore != null ? formatPercent(row.trendScore) : '-'
+                            } | 1j: ${row.trendPct1d != null ? formatPercent(row.trendPct1d) : '-'} | 7j: ${
+                              row.trendPct7d != null ? formatPercent(row.trendPct7d) : '-'
+                            } | 30j: ${row.trendPct30d != null ? formatPercent(row.trendPct30d) : '-'}`
+                    }
+                    style={{
+                      fontWeight: 700,
+                      color:
+                        row.trendDirection === 'up'
+                          ? '#15803d'
+                          : row.trendDirection === 'down'
+                            ? '#dc2626'
+                            : '#64748b'
+                    }}
+                  >
+                    {row.trendDirection === 'up'
+                      ? '↑'
+                      : row.trendDirection === 'down'
+                        ? '↓'
+                        : row.trendDirection === 'flat'
+                          ? '→'
+                          : '-'}
                   </div>
                   <a
                     href={cardmarketUrl}

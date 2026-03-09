@@ -7,6 +7,7 @@ const ONE_PIECE_LINK_REGEX = /href="([^"]*price_guide_18\.json[^"]*)"/i
 const ONE_PIECE_TEXT_LINK_REGEX = /<a[^>]*href="([^"]+)"[^>]*>\s*One Piece price guide\s*<\/a>/i
 const FILE_NAME = 'price_guide_18.json'
 const DB_TABLE = 'cardmarket_price_guide_entries'
+const SNAPSHOT_TABLE = 'cardmarket_price_guide_snapshots'
 const UPSERT_CHUNK_SIZE = 500
 
 function absoluteUrl(base: string, maybeRelative: string): string {
@@ -136,6 +137,12 @@ function toDbRows(rows: Record<string, unknown>[], refreshDate: string) {
     const printCode = asString(
       getValueByKeys(row, ['printCode', 'cardImageId', 'card_id', 'cardNumber'])
     )
+    const avg = asNumber(getValueByKeys(row, ['avg', 'averagePrice', 'avgPrice']))
+    const low = asNumber(getValueByKeys(row, ['low', 'lowPrice', 'priceLow', 'sell', 'fromPrice']))
+    const trend = asNumber(getValueByKeys(row, ['trend', 'trendPrice', 'priceTrend']))
+    const avg1 = asNumber(getValueByKeys(row, ['avg1', 'average1', 'avgPrice1']))
+    const avg7 = asNumber(getValueByKeys(row, ['avg7', 'average7', 'avgPrice7']))
+    const avg30 = asNumber(getValueByKeys(row, ['avg30', 'average30', 'avgPrice30']))
 
     return {
       entry_key: entryKey,
@@ -145,15 +152,15 @@ function toDbRows(rows: Record<string, unknown>[], refreshDate: string) {
       card_name: asString(getValueByKeys(row, ['name', 'cardName', 'productName'])),
       set_code: asString(getValueByKeys(row, ['setCode', 'expansionCode', 'set', 'expansion'])),
       rarity: asString(getValueByKeys(row, ['rarity', 'rarityName'])),
-      trend_price: asNumber(getValueByKeys(row, ['trend', 'trendPrice', 'priceTrend', 'avg1'])),
-      low_price: asNumber(getValueByKeys(row, ['low', 'lowPrice', 'priceLow', 'sell', 'fromPrice'])),
-      avg_price: asNumber(getValueByKeys(row, ['avg', 'averagePrice', 'avgPrice'])),
-      avg: asNumber(getValueByKeys(row, ['avg'])),
-      low: asNumber(getValueByKeys(row, ['low'])),
-      trend: asNumber(getValueByKeys(row, ['trend'])),
-      avg1: asNumber(getValueByKeys(row, ['avg1'])),
-      avg7: asNumber(getValueByKeys(row, ['avg7'])),
-      avg30: asNumber(getValueByKeys(row, ['avg30'])),
+      trend_price: trend,
+      low_price: low,
+      avg_price: avg,
+      avg,
+      low,
+      trend,
+      avg1,
+      avg7,
+      avg30,
       avg_foil: asNumber(getValueByKeys(row, ['avg-foil', 'avgFoil'])),
       low_foil: asNumber(getValueByKeys(row, ['low-foil', 'lowFoil'])),
       trend_foil: asNumber(getValueByKeys(row, ['trend-foil', 'trendFoil'])),
@@ -172,9 +179,7 @@ function toDbRows(rows: Record<string, unknown>[], refreshDate: string) {
   })
 }
 
-async function upsertPriceGuideRows(rows: Record<string, unknown>[], refreshDate: string) {
-  const dbRows = toDbRows(rows, refreshDate)
-
+async function upsertPriceGuideRows(dbRows: Record<string, unknown>[], refreshDate: string) {
   for (let i = 0; i < dbRows.length; i += UPSERT_CHUNK_SIZE) {
     const chunk = dbRows.slice(i, i + UPSERT_CHUNK_SIZE)
     const { error } = await supabaseServiceServer.from(DB_TABLE).upsert(chunk, {
@@ -191,6 +196,48 @@ async function upsertPriceGuideRows(rows: Record<string, unknown>[], refreshDate
     .lt('last_seen_on', refreshDate)
   if (cleanupError) {
     throw new Error(`DB cleanup failed (${DB_TABLE}): ${cleanupError.message}`)
+  }
+}
+
+function toSnapshotRows(dbRows: Record<string, unknown>[], snapshotDate: string) {
+  return dbRows.map((row) => ({
+    snapshot_date: snapshotDate,
+    entry_key: asString(row.entry_key),
+    product_id: asString(row.product_id),
+    print_code: asString(row.print_code),
+    card_name: asString(row.card_name),
+    set_code: asString(row.set_code),
+    rarity: asString(row.rarity),
+    avg: asNumber(row.avg),
+    low: asNumber(row.low),
+    trend: asNumber(row.trend),
+    avg1: asNumber(row.avg1),
+    avg7: asNumber(row.avg7),
+    avg30: asNumber(row.avg30),
+    avg_foil: asNumber(row.avg_foil),
+    low_foil: asNumber(row.low_foil),
+    trend_foil: asNumber(row.trend_foil),
+    avg1_foil: asNumber(row.avg1_foil),
+    avg7_foil: asNumber(row.avg7_foil),
+    avg30_foil: asNumber(row.avg30_foil),
+    available: asNumber(row.available),
+    source_game_id: asString(row.source_game_id),
+    source_expansion_id: asString(row.source_expansion_id),
+    currency: asString(row.currency) || 'EUR'
+  }))
+}
+
+async function upsertPriceGuideSnapshots(dbRows: Record<string, unknown>[], snapshotDate: string) {
+  const snapshotRows = toSnapshotRows(dbRows, snapshotDate).filter((row) => Boolean(row.entry_key))
+
+  for (let i = 0; i < snapshotRows.length; i += UPSERT_CHUNK_SIZE) {
+    const chunk = snapshotRows.slice(i, i + UPSERT_CHUNK_SIZE)
+    const { error } = await supabaseServiceServer.from(SNAPSHOT_TABLE).upsert(chunk, {
+      onConflict: 'snapshot_date,entry_key'
+    })
+    if (error) {
+      throw new Error(`DB upsert failed (${SNAPSHOT_TABLE}): ${error.message}`)
+    }
   }
 }
 
@@ -261,6 +308,7 @@ async function runJob() {
 
   const now = new Date()
   const refreshDate = toIsoDate(now)
+  const dbRows = toDbRows(parsedRows, refreshDate)
   const datedPath = buildDatedPath(now)
   const previousDayPath = buildDatedPath(subtractDays(now, 1))
   const latestPath = `cardmarket/price-guide/latest/${FILE_NAME}`
@@ -289,7 +337,8 @@ async function runJob() {
     throw new Error(`Cleanup failed (${previousDayPath}): ${removeResult.error.message}`)
   }
 
-  await upsertPriceGuideRows(parsedRows, refreshDate)
+  await upsertPriceGuideRows(dbRows, refreshDate)
+  await upsertPriceGuideSnapshots(dbRows, refreshDate)
 
   return {
     ok: true,
@@ -299,7 +348,9 @@ async function runJob() {
     files: [datedPath, latestPath],
     removedFiles: [previousDayPath],
     dbTable: DB_TABLE,
-    dbRowsUpserted: parsedRows.length,
+    dbRowsUpserted: dbRows.length,
+    snapshotTable: SNAPSHOT_TABLE,
+    snapshotRowsUpserted: dbRows.length,
     bytes: fileBuffer.byteLength,
     executedAt: new Date().toISOString()
   }

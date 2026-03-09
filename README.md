@@ -44,6 +44,7 @@ Files:
 - `src/app/api/cron/cardmarket-catalog/route.ts`
 - `vercel.json`
 - `supabase/cardmarket-price-guide-table.sql`
+- `supabase/cardmarket-price-guide-snapshots-table.sql`
 - `supabase/cardmarket-print-links.sql`
 - `supabase/cardmarket-catalog-table.sql`
 
@@ -58,6 +59,7 @@ Required Vercel env vars:
 
 Before enabling cron, run these SQL files in Supabase SQL Editor:
 - `supabase/cardmarket-price-guide-table.sql` (table fed by daily cron JSON)
+- `supabase/cardmarket-price-guide-snapshots-table.sql` (daily history snapshots of card prices)
 - `supabase/cardmarket-catalog-table.sql` (table fed by daily catalog JSON)
 - `supabase/cardmarket-print-links.sql` (manual/assisted mapping table between local prints and Cardmarket product ids)
 
@@ -75,6 +77,7 @@ Uploaded files:
 Database refresh:
 - Daily upsert into `public.cardmarket_price_guide_entries`
 - Rows not seen in the latest JSON are deleted automatically
+- Daily upsert into `public.cardmarket_price_guide_snapshots` (one snapshot per `last_seen_on` date)
 - Daily upsert into `public.cardmarket_catalog_entries`
 - Rows not seen in the latest catalog JSON are deleted automatically
 

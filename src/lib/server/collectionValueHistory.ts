@@ -30,7 +30,7 @@ type SetPricingSnapshot = {
 export type UserCollectionSnapshot = {
   periodStart: string
   periodEnd: string
-  currency: 'USD'
+  currency: 'EUR'
   totalValue: number
   pricedCount: number
   expectedCount: number
@@ -86,7 +86,7 @@ export async function computeUserCollectionSnapshot(userId: string): Promise<Use
     return {
       periodStart,
       periodEnd,
-      currency: 'USD',
+      currency: 'EUR',
       totalValue: 0,
       pricedCount: 0,
       expectedCount: 0,
@@ -113,7 +113,7 @@ export async function computeUserCollectionSnapshot(userId: string): Promise<Use
     return {
       periodStart,
       periodEnd,
-      currency: 'USD',
+      currency: 'EUR',
       totalValue: 0,
       pricedCount: 0,
       expectedCount: 0,
@@ -208,7 +208,7 @@ export async function computeUserCollectionSnapshot(userId: string): Promise<Use
   return {
     periodStart,
     periodEnd,
-    currency: 'USD',
+    currency: 'EUR',
     totalValue,
     pricedCount,
     expectedCount,

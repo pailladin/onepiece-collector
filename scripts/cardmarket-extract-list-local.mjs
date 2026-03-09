@@ -11,6 +11,8 @@
  *   --headful     Open visible browser
  *   --out <file>  Write JSON array to file
  *   --max <n>     Max number of cards to output (default: 200)
+ *   --start-delay <s>   Wait on first page before scraping (default: 120)
+ *   --between-delay <s> Wait between each product page (default: 30)
  */
 
 import fs from 'node:fs'
@@ -24,7 +26,8 @@ function parseArgs(argv) {
   let outFile = ''
   let headful = false
   let max = 200
-  let startDelayMs = 0
+  let startDelayMs = 120000
+  let betweenDelayMs = 30000
   let manualStart = false
 
   for (let i = 0; i < args.length; i += 1) {
@@ -51,6 +54,12 @@ function parseArgs(argv) {
       i += 1
       continue
     }
+    if (value === '--between-delay') {
+      const parsed = Number.parseInt(args[i + 1] || '', 10)
+      if (Number.isFinite(parsed) && parsed >= 0) betweenDelayMs = parsed * 1000
+      i += 1
+      continue
+    }
     if (value === '--manual-start') {
       manualStart = true
       continue
@@ -60,7 +69,7 @@ function parseArgs(argv) {
     }
   }
 
-  return { url, outFile, headful, max, startDelayMs, manualStart }
+  return { url, outFile, headful, max, startDelayMs, betweenDelayMs, manualStart }
 }
 
 function normalizeWhitespace(value) {
@@ -189,6 +198,27 @@ function extractProductIdFromUrl(url) {
   return null
 }
 
+function parseSearchFilters(listingUrl) {
+  try {
+    const u = new URL(listingUrl)
+    const rawExpansion = String(u.searchParams.get('idExpansion') || '').trim()
+    const expansionId = /^\d+$/.test(rawExpansion) ? rawExpansion : ''
+    return { expansionId: expansionId && expansionId !== '0' ? expansionId : '' }
+  } catch {
+    return { expansionId: '' }
+  }
+}
+
+function parseExpansionIdCandidates(value) {
+  const out = []
+  const source = String(value || '')
+  if (!source) return out
+  for (const m of source.matchAll(/idExpansion=(\d+)/gi)) out.push(m[1])
+  for (const m of source.matchAll(/"idExpansion"\s*:\s*(\d+)/gi)) out.push(m[1])
+  for (const m of source.matchAll(/idExpansion["']?\s*[:=]\s*["']?(\d+)/gi)) out.push(m[1])
+  return out
+}
+
 async function extractSingleCard(page, url) {
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 120000 })
   await page.waitForTimeout(900)
@@ -295,7 +325,19 @@ async function extractSingleCard(page, url) {
     if (m?.[1]) productIdMatches.push(m[1])
   }
 
+  const expansionIdMatches = unique([
+    ...parseExpansionIdCandidates(data.canonicalUrl),
+    ...parseExpansionIdCandidates(data.pageUrl),
+    ...parseExpansionIdCandidates(data.html)
+  ])
+
+  for (const link of data.allLinks || []) {
+    const m = String(link).match(/idExpansion=(\d+)/i)
+    if (m?.[1]) expansionIdMatches.push(m[1])
+  }
+
   const productId = unique(productIdMatches)[0] || extractProductIdFromUrl(data.ogImage) || null
+  const expansionId = unique(expansionIdMatches)[0] || null
   const printCode = inferPrintCode(`${data.title} ${data.pageUrl} ${data.description || ''}`)
 
   const rarityFromHtml =
@@ -332,7 +374,9 @@ async function extractSingleCard(page, url) {
     type: donCodes ? 'DON' : normalizeWhitespace(data.cardType || typeFromHtml || ''),
     variant_type: 'normal',
     image_url: data.ogImage || null,
-    cardmarket_product_id: productId
+    cardmarket_product_id: productId,
+    source_expansion_id: expansionId,
+    url: data.pageUrl || url
   }
 }
 
@@ -348,11 +392,14 @@ async function waitForEnter(message) {
 }
 
 async function run() {
-  const { url, outFile, headful, max, startDelayMs, manualStart } = parseArgs(process.argv.slice(2))
+  const { url, outFile, headful, max, startDelayMs, betweenDelayMs, manualStart } = parseArgs(
+    process.argv.slice(2)
+  )
   if (!url) {
     console.error('Missing listing URL.')
     process.exit(1)
   }
+  const filters = parseSearchFilters(url)
 
   let chromium
   try {
@@ -418,7 +465,9 @@ async function run() {
         }
       }
 
-      const anchors = [...document.querySelectorAll('a[href*="/Products/Singles/"]')]
+      const anchors = [
+        ...document.querySelectorAll('a.galleryBox[href*="/Products/Singles/"], a.card.galleryBox[href*="/Products/Singles/"]')
+      ]
       const rows = []
 
       for (const a of anchors) {
@@ -453,11 +502,23 @@ async function run() {
 
     const targets = cards.slice(0, max).map((row) => row.href).filter(Boolean)
     const outputRows = []
+    let filteredOutCount = 0
     for (let i = 0; i < targets.length; i += 1) {
       const productUrl = targets[i]
       process.stderr.write(`[${i + 1}/${targets.length}] ${productUrl}\n`)
       try {
         const row = await extractSingleCard(page, productUrl)
+        if (
+          filters.expansionId &&
+          row.source_expansion_id &&
+          String(row.source_expansion_id) !== String(filters.expansionId)
+        ) {
+          filteredOutCount += 1
+          process.stderr.write(
+            `  -> skipped (idExpansion=${row.source_expansion_id}, expected=${filters.expansionId})\n`
+          )
+          continue
+        }
         outputRows.push(row)
       } catch (error) {
         outputRows.push({
@@ -474,12 +535,15 @@ async function run() {
         })
       }
       // Reduce bot-detection risk by pacing requests.
-      if (i < targets.length - 1) {
-        await page.waitForTimeout(5000)
-      }
+      if (i < targets.length - 1) await page.waitForTimeout(betweenDelayMs)
     }
 
     const json = JSON.stringify(outputRows, null, 2)
+    if (filters.expansionId) {
+      process.stderr.write(
+        `Kept ${outputRows.length} cards after idExpansion=${filters.expansionId} filter (${filteredOutCount} skipped).\n`
+      )
+    }
     if (outFile) {
       const abs = path.resolve(outFile)
       fs.writeFileSync(abs, json, 'utf8')

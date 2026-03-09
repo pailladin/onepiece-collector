@@ -30,8 +30,8 @@ type SetOption = {
   name: string
 }
 
-function formatCurrency(value: number, currency = 'USD') {
-  return new Intl.NumberFormat('en-US', {
+function formatCurrency(value: number, currency = 'EUR') {
+  return new Intl.NumberFormat('fr-FR', {
     style: 'currency',
     currency
   }).format(value)
@@ -74,7 +74,7 @@ export default function CollectionHistoryPage() {
             selectedSetCode === 'TOTAL'
               ? week.total?.value || 0
               : week.sets.find((row) => row.setCode === selectedSetCode)?.value || 0,
-          currency: week.total?.currency || 'USD'
+          currency: week.total?.currency || 'EUR'
         }))
         .reverse(),
     [weeks, selectedSetCode]

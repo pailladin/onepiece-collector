@@ -26,6 +26,7 @@ const TABLES = [
   'cardmarket_print_links',
   'cardmarket_catalog_entries',
   'cardmarket_price_guide_entries',
+  'cardmarket_price_guide_snapshots',
   'collection_value_history'
 ] as const
 
