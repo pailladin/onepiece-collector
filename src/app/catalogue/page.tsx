@@ -3,6 +3,8 @@ import CatalogueSetsBrowser, {
   type CatalogueSetRow
 } from '@/components/CatalogueSetsBrowser'
 
+export const dynamic = 'force-dynamic'
+
 async function fetchSets() {
   const { data, error } = await supabaseServiceServer
     .from('sets')
