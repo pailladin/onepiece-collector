@@ -66,9 +66,11 @@ export default function CatalogueSetPage() {
   const { user } = useAuth()
   const params = useParams()
   const code = Array.isArray(params.code) ? params.code[0] : params.code
+  const normalizedCode = (code || '').toString().replace('-', '').toUpperCase()
 
   const [items, setItems] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [selectedImage, setSelectedImage] = useState<string | null>(null)
 
   const [sortKey, setSortKey] = useState<SortKey>('number')
@@ -78,7 +80,7 @@ export default function CatalogueSetPage() {
   const [typeFilter, setTypeFilter] = useState('all')
   const [altFilter, setAltFilter] = useState<AltFilter>('all')
   const [altTypeFilter, setAltTypeFilter] = useState('all')
-  const normalizedSetCode = (code || '').toString().replace('-', '').toUpperCase()
+  const normalizedSetCode = normalizedCode
 
   const isSetScopedFallbackPrint = (printCode: string | null | undefined) => {
     const raw = (printCode || '').toString().trim().toUpperCase()
@@ -89,47 +91,24 @@ export default function CatalogueSetPage() {
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true)
+      setError(null)
 
-      const { data: setData } = await supabase
-        .from('sets')
-        .select('id')
-        .eq('code', code)
-        .single()
+      const res = await fetch(`/api/catalogue/${normalizedCode}`)
+      const payload = await res.json().catch(() => ({}))
 
-      if (!setData) {
+      if (!res.ok) {
         setItems([])
+        setError(payload?.error || 'Erreur chargement catalogue')
         setLoading(false)
         return
       }
 
-      const { data: printsData } = await supabase
-        .from('card_prints')
-        .select('*')
-        .eq('distribution_set_id', setData.id)
-
-      if (!printsData || printsData.length === 0) {
+      const baseItems = Array.isArray(payload?.items) ? payload.items : []
+      if (baseItems.length === 0) {
         setItems([])
         setLoading(false)
         return
       }
-
-      const cardIds = printsData.map((p) => p.card_id)
-
-      const { data: cardsData } = await supabase
-        .from('cards')
-        .select(
-          `
-          id,
-          number,
-          rarity,
-          type,
-          card_translations (
-            name,
-            locale
-          )
-        `
-        )
-        .in('id', cardIds)
 
       let ownedMap = new Map<string, number>()
 
@@ -142,11 +121,8 @@ export default function CatalogueSetPage() {
         ownedMap = new Map(collectionData?.map((c) => [c.card_print_id, c.quantity]))
       }
 
-      const cardsMap = new Map(cardsData?.map((c) => [c.id, c]))
-
-      const merged = printsData.map((print) => ({
+      const merged = baseItems.map((print: any) => ({
         ...print,
-        card: cardsMap.get(print.card_id),
         quantity: ownedMap.get(print.id) || 0
       }))
 
@@ -188,7 +164,7 @@ export default function CatalogueSetPage() {
     }
 
     fetchData()
-  }, [code, user])
+  }, [normalizedCode, user])
 
   const filterOptions = useMemo(() => getFilterOptions(items), [items])
 
@@ -300,6 +276,10 @@ export default function CatalogueSetPage() {
     return <div style={{ padding: 40 }}>Chargement...</div>
   }
 
+  if (error) {
+    return <div style={{ padding: 40 }}>Erreur: {error}</div>
+  }
+
   const totalCount = items.length
 
   return (
@@ -319,7 +299,7 @@ export default function CatalogueSetPage() {
           color: '#111827'
         }}
       >
-        Catalogue - {code}
+        Catalogue - {normalizedCode}
       </h1>
 
       <div
@@ -475,7 +455,7 @@ export default function CatalogueSetPage() {
           )
           const hasImagePath = Boolean(item.image_path) && item.image_path !== MISSING_IMAGE_PATH
           const imageUrl = hasImagePath
-            ? `${STORAGE_BASE_URL}/${code}/${item.image_path}`
+            ? `${STORAGE_BASE_URL}/${normalizedCode}/${item.image_path}`
             : CARD_PLACEHOLDER_IMAGE
           const isAlt = isAltVersion(item)
           const altType = getAltTypeKey(item)
