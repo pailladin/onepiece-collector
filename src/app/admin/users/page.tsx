@@ -10,6 +10,8 @@ type AdminUser = {
   id: string
   email: string
   username: string
+  startedSetsCount: number
+  cardsCount: number
   createdAt: string | null
   lastSignInAt: string | null
   emailConfirmedAt: string | null
@@ -157,7 +159,8 @@ export default function AdminUsersPage() {
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: '30px minmax(220px,1.3fr) minmax(150px,1fr) minmax(150px,1fr) minmax(150px,1fr)',
+            gridTemplateColumns:
+              '30px minmax(220px,1.3fr) 110px 110px minmax(150px,1fr) minmax(150px,1fr) minmax(150px,1fr)',
             gap: 10,
             padding: '8px 10px',
             background: '#f8fafc',
@@ -166,7 +169,9 @@ export default function AdminUsersPage() {
           }}
         >
           <div />
-          <div>Email / Username</div>
+          <div>Email / Pseudo</div>
+          <div>Sets demarres</div>
+          <div>Cartes</div>
           <div>Cree le</div>
           <div>Derniere connexion</div>
           <div>Email confirme</div>
@@ -180,7 +185,8 @@ export default function AdminUsersPage() {
               key={row.id}
               style={{
                 display: 'grid',
-                gridTemplateColumns: '30px minmax(220px,1.3fr) minmax(150px,1fr) minmax(150px,1fr) minmax(150px,1fr)',
+                gridTemplateColumns:
+                  '30px minmax(220px,1.3fr) 110px 110px minmax(150px,1fr) minmax(150px,1fr) minmax(150px,1fr)',
                 gap: 10,
                 padding: '10px',
                 borderBottom: '1px solid #eee',
@@ -205,6 +211,8 @@ export default function AdminUsersPage() {
                   {row.id === user?.id ? ' (toi)' : ''}
                 </div>
               </div>
+              <div>{row.startedSetsCount}</div>
+              <div>{row.cardsCount}</div>
               <div>{formatDate(row.createdAt)}</div>
               <div>{formatDate(row.lastSignInAt)}</div>
               <div>{formatDate(row.emailConfirmedAt)}</div>
@@ -236,4 +244,3 @@ export default function AdminUsersPage() {
     </div>
   )
 }
-

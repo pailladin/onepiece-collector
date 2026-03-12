@@ -12,38 +12,47 @@ const supabase = createClient(
 )
 
 type CronStatusRow = {
-  name: 'price-guide' | 'catalog'
+  name: 'price-guide' | 'catalog' | 'collection-value-weekly'
   table: string
   lastSeenOn: string | null
   ageHours: number | null
   healthy: boolean
   error: string | null
+  thresholdHours: number
 }
 
-async function fetchLastSeenOn(tableName: string) {
-  const { data, error } = await supabase
-    .from(tableName)
-    .select('last_seen_on')
-    .order('last_seen_on', { ascending: false })
+async function fetchLatestValue(params: {
+  tableName: string
+  column: string
+  filterColumn?: string
+  filterValue?: string | boolean
+}) {
+  let query = supabase
+    .from(params.tableName)
+    .select(params.column)
+    .order(params.column, { ascending: false })
     .limit(1)
-    .maybeSingle()
 
-  if (error) {
-    return { lastSeenOn: null as string | null, error: error.message }
+  if (params.filterColumn) {
+    query = query.eq(params.filterColumn, params.filterValue as never)
   }
 
+  const filtered = await query.maybeSingle()
+  if (filtered.error) {
+    return { value: null as string | null, error: filtered.error.message }
+  }
+
+  const raw = filtered.data as Record<string, unknown> | null
   return {
-    lastSeenOn:
-      data && typeof (data as { last_seen_on?: unknown }).last_seen_on === 'string'
-        ? ((data as { last_seen_on: string }).last_seen_on || null)
-        : null,
+    value: raw && typeof raw[params.column] === 'string' ? (raw[params.column] as string) : null,
     error: null as string | null
   }
 }
 
-function computeAgeHours(lastSeenOn: string | null): number | null {
+function computeAgeHours(lastSeenOn: string | null, mode: 'date' | 'datetime'): number | null {
   if (!lastSeenOn) return null
-  const ms = Date.now() - Date.parse(`${lastSeenOn}T00:00:00.000Z`)
+  const input = mode === 'date' ? `${lastSeenOn}T00:00:00.000Z` : lastSeenOn
+  const ms = Date.now() - Date.parse(input)
   if (!Number.isFinite(ms)) return null
   return Math.max(0, Math.round((ms / (1000 * 60 * 60)) * 10) / 10)
 }
@@ -63,22 +72,50 @@ export async function GET(request: Request) {
   }
 
   const checks = [
-    { name: 'price-guide' as const, table: 'cardmarket_price_guide_entries' },
-    { name: 'catalog' as const, table: 'cardmarket_catalog_entries' }
+    {
+      name: 'price-guide' as const,
+      table: 'cardmarket_price_guide_entries',
+      column: 'last_seen_on',
+      mode: 'date' as const,
+      thresholdHours: 48
+    },
+    {
+      name: 'catalog' as const,
+      table: 'cardmarket_catalog_entries',
+      column: 'last_seen_on',
+      mode: 'date' as const,
+      thresholdHours: 48
+    },
+    {
+      name: 'collection-value-weekly' as const,
+      table: 'collection_value_history',
+      column: 'updated_at',
+      mode: 'datetime' as const,
+      filterColumn: 'is_total',
+      filterValue: true,
+      thresholdHours: 24 * 8
+    }
   ]
 
   const rows: CronStatusRow[] = []
   for (const check of checks) {
-    const result = await fetchLastSeenOn(check.table)
-    const ageHours = computeAgeHours(result.lastSeenOn)
-    const healthy = result.error == null && ageHours != null && ageHours <= 48
+    const result = await fetchLatestValue({
+      tableName: check.table,
+      column: check.column,
+      filterColumn: check.filterColumn,
+      filterValue: check.filterValue
+    })
+    const ageHours = computeAgeHours(result.value, check.mode)
+    const healthy =
+      result.error == null && ageHours != null && ageHours <= check.thresholdHours
     rows.push({
       name: check.name,
       table: check.table,
-      lastSeenOn: result.lastSeenOn,
+      lastSeenOn: result.value,
       ageHours,
       healthy,
-      error: result.error
+      error: result.error,
+      thresholdHours: check.thresholdHours
     })
   }
 

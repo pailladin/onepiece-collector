@@ -15,17 +15,7 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true)
   const [logs, setLogs] = useState<string[]>([])
   const [showModal, setShowModal] = useState(false)
-  const [cronRows, setCronRows] = useState<
-    Array<{
-      name: 'price-guide' | 'catalog'
-      table: string
-      lastSeenOn: string | null
-      ageHours: number | null
-      healthy: boolean
-      error: string | null
-    }>
-  >([])
-  const [cronLoading, setCronLoading] = useState(false)
+  const [cronHasAlert, setCronHasAlert] = useState(false)
   const [backupLoading, setBackupLoading] = useState(false)
   const [backupResult, setBackupResult] = useState<{
     ok: boolean
@@ -61,7 +51,6 @@ export default function AdminPage() {
   }
 
   const loadData = async () => {
-    setCronLoading(true)
     const apiRes = await fetch('https://www.optcgapi.com/api/allSets/')
     const apiData = await apiRes.json()
 
@@ -82,8 +71,9 @@ export default function AdminPage() {
 
     setApiSets(mergedSets)
     setDbSets(setsData?.map((s) => s.code) || [])
-    setCronRows(Array.isArray(cronData?.rows) ? cronData.rows : [])
-    setCronLoading(false)
+    setCronHasAlert(
+      Array.isArray(cronData?.rows) ? cronData.rows.some((row: { healthy?: boolean }) => row.healthy === false) : false
+    )
     setLoading(false)
   }
 
@@ -307,59 +297,21 @@ export default function AdminPage() {
         >
           Lier cartes Cardmarket
         </Link>
-      </div>
-
-      <div
-        style={{
-          marginBottom: 16,
-          border: '1px solid #d1d5db',
-          borderRadius: 8,
-          padding: 12,
-          background: '#fff'
-        }}
-      >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h2 style={{ margin: 0, fontSize: 18 }}>Supervision cron</h2>
-          <button onClick={loadData} disabled={cronLoading}>
-            {cronLoading ? 'Chargement...' : 'Rafraichir'}
-          </button>
-        </div>
-        <div style={{ marginTop: 10, display: 'grid', gap: 8 }}>
-          {cronRows.map((row) => (
-            <div
-              key={row.name}
-              style={{
-                border: '1px solid #cbd5e1',
-                borderRadius: 6,
-                padding: 10,
-                background: row.healthy ? '#ecfdf5' : '#fef2f2'
-              }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <strong>{row.name}</strong>
-                <span
-                  style={{
-                    fontSize: 12,
-                    color: row.healthy ? '#166534' : '#991b1b',
-                    fontWeight: 700
-                  }}
-                >
-                  {row.healthy ? 'OK (<48h)' : 'ALERTE (>48h)'}
-                </span>
-              </div>
-              <div style={{ fontSize: 13, marginTop: 4 }}>
-                Derniere maj: {row.lastSeenOn || 'N/A'}{' '}
-                {row.ageHours != null ? `(${row.ageHours}h)` : ''}
-              </div>
-              {row.error && (
-                <div style={{ fontSize: 12, color: '#b91c1c', marginTop: 4 }}>Erreur: {row.error}</div>
-              )}
-            </div>
-          ))}
-          {cronRows.length === 0 && (
-            <div style={{ fontSize: 13, color: '#64748b' }}>Aucune donnee cron disponible.</div>
-          )}
-        </div>
+        <Link
+          href="/admin/cron"
+          style={{
+            background: cronHasAlert ? '#b91c1c' : '#0f766e',
+            color: '#fff',
+            padding: '6px 10px',
+            borderRadius: 4,
+            textDecoration: 'none',
+            display: 'inline-flex',
+            alignItems: 'center',
+            marginLeft: 8
+          }}
+        >
+          Supervision cron
+        </Link>
       </div>
 
       <div
