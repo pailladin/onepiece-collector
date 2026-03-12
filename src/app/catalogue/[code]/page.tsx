@@ -83,6 +83,7 @@ export default function CatalogueSetPage() {
   const [setLanguages, setSetLanguages] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [collectionMutationError, setCollectionMutationError] = useState<string | null>(null)
   const [selectedImage, setSelectedImage] = useState<string | null>(null)
 
   const [sortKey, setSortKey] = useState<SortKey>('number')
@@ -260,29 +261,43 @@ export default function CatalogueSetPage() {
       current.languageBreakdown?.get(normalizedLanguageCode) || 0
     )
     const nextLanguageQty = currentLanguageQty + delta
+    let mutationError: string | null = null
 
     if (nextLanguageQty <= 0) {
-      await supabase
+      const { error } = await supabase
         .from('collections')
         .delete()
         .eq('user_id', user.id)
         .eq('card_print_id', printId)
         .eq('language_code', normalizedLanguageCode)
+      mutationError = error?.message || null
     } else if (currentLanguageQty === 0) {
-      await supabase.from('collections').insert({
-        user_id: user.id,
-        card_print_id: printId,
-        language_code: normalizedLanguageCode,
-        quantity: 1
-      })
+      const { error } = await supabase.from('collections').upsert(
+        {
+          user_id: user.id,
+          card_print_id: printId,
+          language_code: normalizedLanguageCode,
+          quantity: nextLanguageQty
+        },
+        { onConflict: 'user_id,card_print_id,language_code' }
+      )
+      mutationError = error?.message || null
     } else {
-      await supabase
+      const { error } = await supabase
         .from('collections')
         .update({ quantity: nextLanguageQty })
         .eq('user_id', user.id)
         .eq('card_print_id', printId)
         .eq('language_code', normalizedLanguageCode)
+      mutationError = error?.message || null
     }
+
+    if (mutationError) {
+      setCollectionMutationError(mutationError)
+      return
+    }
+
+    setCollectionMutationError(null)
 
     setItems((prevItems) =>
       prevItems.map((i) =>
@@ -490,6 +505,11 @@ export default function CatalogueSetPage() {
               Reinitialiser filtres
             </button>
           </div>
+          {collectionMutationError && (
+            <div style={{ marginTop: 8, fontSize: 12, color: '#b91c1c' }}>
+              Erreur collection: {collectionMutationError}
+            </div>
+          )}
         </div>
       </div>
 

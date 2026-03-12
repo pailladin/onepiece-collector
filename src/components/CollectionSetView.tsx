@@ -216,6 +216,7 @@ export function CollectionSetView({
   const [priceDetails, setPriceDetails] = useState<PriceDetail[]>([])
   const [showPriceDetails, setShowPriceDetails] = useState(false)
   const [shareMessage, setShareMessage] = useState<string | null>(null)
+  const [collectionMutationError, setCollectionMutationError] = useState<string | null>(null)
   const [showDoublesModal, setShowDoublesModal] = useState(false)
   const [doublesPriceLoading, setDoublesPriceLoading] = useState(false)
 
@@ -715,29 +716,43 @@ export function CollectionSetView({
       current.languageBreakdown?.get(normalizedLanguageCode) || 0
     )
     const nextLanguageQty = currentLanguageQty + delta
+    let mutationError: string | null = null
 
     if (nextLanguageQty <= 0) {
-      await supabase
+      const { error } = await supabase
         .from('collections')
         .delete()
         .eq('user_id', user.id)
         .eq('card_print_id', printId)
         .eq('language_code', normalizedLanguageCode)
+      mutationError = error?.message || null
     } else if (currentLanguageQty === 0) {
-      await supabase.from('collections').insert({
-        user_id: user.id,
-        card_print_id: printId,
-        language_code: normalizedLanguageCode,
-        quantity: 1
-      })
+      const { error } = await supabase.from('collections').upsert(
+        {
+          user_id: user.id,
+          card_print_id: printId,
+          language_code: normalizedLanguageCode,
+          quantity: nextLanguageQty
+        },
+        { onConflict: 'user_id,card_print_id,language_code' }
+      )
+      mutationError = error?.message || null
     } else {
-      await supabase
+      const { error } = await supabase
         .from('collections')
         .update({ quantity: nextLanguageQty })
         .eq('user_id', user.id)
         .eq('card_print_id', printId)
         .eq('language_code', normalizedLanguageCode)
+      mutationError = error?.message || null
     }
+
+    if (mutationError) {
+      setCollectionMutationError(mutationError)
+      return
+    }
+
+    setCollectionMutationError(null)
 
     setItems((prevItems) =>
       prevItems.map((i) =>
@@ -1244,6 +1259,11 @@ export function CollectionSetView({
             </button>
           </div>
           {priceError && <div style={{ marginTop: 6, fontSize: 12, color: '#b91c1c' }}>{priceError}</div>}
+          {collectionMutationError && (
+            <div style={{ marginTop: 6, fontSize: 12, color: '#b91c1c' }}>
+              Erreur collection: {collectionMutationError}
+            </div>
+          )}
           {shareMessage && (
             <div style={{ marginTop: 6, fontSize: 12, color: '#0f766e' }}>{shareMessage}</div>
           )}
