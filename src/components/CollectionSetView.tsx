@@ -732,9 +732,9 @@ export function CollectionSetView({
         .eq('language_code', normalizedLanguageCode)
     }
 
-    setItems(
-      items.map((i) =>
-            i.id === printId
+    setItems((prevItems) =>
+      prevItems.map((i) =>
+        i.id === printId
           ? (() => {
               const nextLanguageBreakdown = new Map<string, number>(
                 i.languageBreakdown || []
@@ -793,6 +793,7 @@ export function CollectionSetView({
           code: option.code,
           flag: option.flag,
           label: option.label,
+          shortLabel: option.shortLabel,
           quantity: Number(item.languageBreakdown?.get(option.code) || 0)
         }))
         const hasImagePath =
@@ -873,7 +874,7 @@ export function CollectionSetView({
               <strong>{item.card?.rarity}</strong> - {item.card?.type}
             </div>
 
-            {(item.quantity > 0 || languageBreakdown.length > 0) && (
+            {item.quantity > 0 && (
               <div
                 style={{
                   marginTop: 8,
@@ -887,22 +888,10 @@ export function CollectionSetView({
                   overflowX: 'auto',
                   scrollbarWidth: 'none'
                 }}
-              >
-                {item.quantity > 0 && (
+                >
                   <span style={{ color: '#334155' }}>
                     Total: <strong>{item.quantity}</strong>
                   </span>
-                )}
-                {languageBreakdown.map((entry) => (
-                  <span
-                    key={entry.languageCode}
-                    title={entry.label}
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}
-                  >
-                    <span>{entry.flag}</span>
-                    <span>{entry.quantity}</span>
-                  </span>
-                ))}
               </div>
             )}
 
@@ -925,9 +914,7 @@ export function CollectionSetView({
                         fontSize: 12
                       }}
                     >
-                      <span title={entry.label} style={{ minWidth: 18 }}>
-                        {entry.flag}
-                      </span>
+                      <span style={{ minWidth: 20, textAlign: 'left' }}>{entry.shortLabel}</span>
                       <button onClick={() => updateQuantity(item.id, entry.code, -1)}>-</button>
                       <span style={{ minWidth: 16, textAlign: 'center' }}>{entry.quantity}</span>
                       <button onClick={() => updateQuantity(item.id, entry.code, 1)}>+</button>

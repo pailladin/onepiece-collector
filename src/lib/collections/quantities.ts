@@ -1,6 +1,7 @@
 import {
   getCollectionLanguageFlag,
   getCollectionLanguageLabel,
+  getCollectionLanguageShortLabel,
   normalizeCollectionLanguage
 } from '@/lib/collections/languages'
 
@@ -46,6 +47,7 @@ export function getLanguageBreakdownEntries(
       languageCode,
       quantity,
       label: getCollectionLanguageLabel(languageCode),
+      shortLabel: getCollectionLanguageShortLabel(languageCode),
       flag: getCollectionLanguageFlag(languageCode)
     }))
 }

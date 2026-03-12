@@ -279,8 +279,8 @@ export default function CatalogueSetPage() {
         .eq('language_code', normalizedLanguageCode)
     }
 
-    setItems(
-      items.map((i) =>
+    setItems((prevItems) =>
+      prevItems.map((i) =>
         i.id === printId
           ? (() => {
               const nextLanguageBreakdown = new Map<string, number>(
@@ -500,15 +500,16 @@ export default function CatalogueSetPage() {
             (t: any) => t.locale === DEFAULT_LOCALE
           )
           const languageBreakdown = getLanguageBreakdownEntries(item.languageBreakdown)
-          const visibleLanguageControls = COLLECTION_LANGUAGE_OPTIONS.filter((option) => {
-            if (option.code !== UNKNOWN_LANGUAGE) return true
-            return Number(item.languageBreakdown?.get(UNKNOWN_LANGUAGE) || 0) > 0
-          }).map((option) => ({
-            code: option.code,
-            flag: option.flag,
-            label: option.label,
-            quantity: Number(item.languageBreakdown?.get(option.code) || 0)
-          }))
+        const visibleLanguageControls = COLLECTION_LANGUAGE_OPTIONS.filter((option) => {
+          if (option.code !== UNKNOWN_LANGUAGE) return true
+          return Number(item.languageBreakdown?.get(UNKNOWN_LANGUAGE) || 0) > 0
+        }).map((option) => ({
+          code: option.code,
+          flag: option.flag,
+          label: option.label,
+          shortLabel: option.shortLabel,
+          quantity: Number(item.languageBreakdown?.get(option.code) || 0)
+        }))
           const hasImagePath = Boolean(item.image_path) && item.image_path !== MISSING_IMAGE_PATH
           const imageUrl = hasImagePath
             ? `${STORAGE_BASE_URL}/${normalizedCode}/${item.image_path}`
@@ -585,7 +586,7 @@ export default function CatalogueSetPage() {
                 <strong>{item.card?.rarity}</strong> - {item.card?.type}
               </div>
 
-              {(item.quantity > 0 || languageBreakdown.length > 0) && (
+              {item.quantity > 0 && (
                 <div
                   style={{
                     marginTop: 8,
@@ -600,21 +601,9 @@ export default function CatalogueSetPage() {
                     scrollbarWidth: 'none'
                   }}
                 >
-                  {item.quantity > 0 && (
-                    <span style={{ color: '#334155' }}>
-                      Total: <strong>{item.quantity}</strong>
-                    </span>
-                  )}
-                  {languageBreakdown.map((entry) => (
-                    <span
-                      key={entry.languageCode}
-                      title={entry.label}
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}
-                    >
-                      <span>{entry.flag}</span>
-                      <span>{entry.quantity}</span>
-                    </span>
-                  ))}
+                  <span style={{ color: '#334155' }}>
+                    Total: <strong>{item.quantity}</strong>
+                  </span>
                 </div>
               )}
 
@@ -637,9 +626,7 @@ export default function CatalogueSetPage() {
                         fontSize: 12
                       }}
                     >
-                      <span title={entry.label} style={{ minWidth: 18 }}>
-                        {entry.flag}
-                      </span>
+                      <span style={{ minWidth: 20, textAlign: 'left' }}>{entry.shortLabel}</span>
                       <button onClick={() => updateQuantity(item.id, entry.code, -1)}>-</button>
                       <span style={{ minWidth: 16, textAlign: 'center' }}>{entry.quantity}</span>
                       <button onClick={() => updateQuantity(item.id, entry.code, 1)}>+</button>
