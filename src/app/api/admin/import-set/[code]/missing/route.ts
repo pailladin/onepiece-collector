@@ -13,6 +13,10 @@ const supabase = createClient(
 function formatApiCode(code: string) {
   const raw = (code || '').trim().toUpperCase().replace(/-/g, '')
 
+  if (/^ST\d{2}$/i.test(raw)) {
+    return `${raw.slice(0, 2)}-${raw.slice(2)}`
+  }
+
   const ebMatch = raw.match(/^(OP\d{2})(EB\d{2})$/)
   if (ebMatch) return `${ebMatch[1]}-${ebMatch[2]}`
 
@@ -148,7 +152,11 @@ export async function GET(
   )
 
   const apiCode = formatApiCode(normalizedCode)
-  const res = await fetch(`https://www.optcgapi.com/api/sets/${apiCode}/`)
+  const isDeckCode = /^ST\d{2}$/i.test(normalizedCode)
+  const endpoint = isDeckCode
+    ? `https://www.optcgapi.com/api/decks/${apiCode}/`
+    : `https://www.optcgapi.com/api/sets/${apiCode}/`
+  const res = await fetch(endpoint)
   if (!res.ok) {
     return NextResponse.json({ error: `Erreur API ${res.status}` }, { status: 502 })
   }

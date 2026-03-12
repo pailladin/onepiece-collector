@@ -15,10 +15,18 @@ const MISSING_IMAGE_PATH = '__missing__'
 const PROMO_IMPORT_CODE = 'PROMO'
 const PROMO_SET_NAME = 'Promos Speciales'
 
+function isDeckImportCode(value: string | null | undefined) {
+  return /^ST\d{2}$/i.test(normalizeSetCode(value))
+}
+
 function formatApiCode(code: string) {
   if (normalizeSetCode(code) === PROMO_IMPORT_CODE) return PROMO_IMPORT_CODE
 
   const raw = (code || '').trim().toUpperCase().replace(/-/g, '')
+
+  if (isDeckImportCode(raw)) {
+    return `${raw.slice(0, 2)}-${raw.slice(2)}`
+  }
 
   // Special products like OP14-EB04 are stored as OP14EB04 in DB/UI.
   const ebMatch = raw.match(/^(OP\d{2})(EB\d{2})$/)
@@ -322,6 +330,7 @@ export async function POST(
 
         const apiCode = formatApiCode(code)
         const isPromoImport = apiCode === PROMO_IMPORT_CODE
+        const isDeckImport = isDeckImportCode(normalizedImportCode)
         let apiCards: any[] = []
 
         if (isPromoImport) {
@@ -341,7 +350,10 @@ export async function POST(
             .map((card, index) => normalizePromoApiCard(card, index))
             .filter(Boolean) as any[]
         } else {
-          const res = await fetch(`https://www.optcgapi.com/api/sets/${apiCode}/`)
+          const endpoint = isDeckImport
+            ? `https://www.optcgapi.com/api/decks/${apiCode}/`
+            : `https://www.optcgapi.com/api/sets/${apiCode}/`
+          const res = await fetch(endpoint)
 
           if (!res.ok) {
             push(`Erreur API ${res.status}`)

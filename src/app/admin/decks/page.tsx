@@ -6,36 +6,24 @@ import { supabase } from '@/lib/supabaseClient'
 import { useAuth } from '@/lib/auth'
 import { isAdminEmail, parseAdminEmails } from '@/lib/admin'
 
-export default function AdminPage() {
+type ApiDeckRow = {
+  structure_deck_id?: string | null
+  structure_deck_name?: string | null
+}
+
+function normalizeDeckCode(value: string | null | undefined) {
+  return (value || '').replace(/-/g, '').trim().toUpperCase()
+}
+
+export default function AdminDecksPage() {
   const { user, loading: authLoading } = useAuth()
   const adminEmails = parseAdminEmails(process.env.NEXT_PUBLIC_ADMIN_EMAILS)
   const canAccessAdmin = isAdminEmail(user?.email, adminEmails)
-  const [apiSets, setApiSets] = useState<any[]>([])
-  const [dbSets, setDbSets] = useState<string[]>([])
+  const [apiDecks, setApiDecks] = useState<ApiDeckRow[]>([])
+  const [dbDecks, setDbDecks] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [logs, setLogs] = useState<string[]>([])
   const [showModal, setShowModal] = useState(false)
-  const [cronRows, setCronRows] = useState<
-    Array<{
-      name: 'price-guide' | 'catalog'
-      table: string
-      lastSeenOn: string | null
-      ageHours: number | null
-      healthy: boolean
-      error: string | null
-    }>
-  >([])
-  const [cronLoading, setCronLoading] = useState(false)
-  const [backupLoading, setBackupLoading] = useState(false)
-  const [backupResult, setBackupResult] = useState<{
-    ok: boolean
-    bucket?: string
-    filePath?: string
-    bytes?: number
-    generatedAt?: string
-    tableCounts?: Record<string, number>
-    error?: string
-  } | null>(null)
   const [deleteDialog, setDeleteDialog] = useState<{
     open: boolean
     code: string
@@ -61,29 +49,15 @@ export default function AdminPage() {
   }
 
   const loadData = async () => {
-    setCronLoading(true)
-    const apiRes = await fetch('https://www.optcgapi.com/api/allSets/')
-    const apiData = await apiRes.json()
-
+    const apiRes = await fetch('https://www.optcgapi.com/api/allDecks/')
+    const apiData = await apiRes.json().catch(() => [])
     const { data: setsData } = await supabase.from('sets').select('code')
-    const authHeaders = await getAuthHeader()
-    const cronRes = await fetch('/api/admin/cron/status', {
-      headers: authHeaders
-    })
-    const cronData = await cronRes.json().catch(() => ({}))
 
-    const baseSets = Array.isArray(apiData) ? apiData : []
-    const hasPromoSet = baseSets.some(
-      (set: any) => String(set?.set_id || '').replace('-', '').toUpperCase() === 'PROMO'
+    setApiDecks(Array.isArray(apiData) ? (apiData as ApiDeckRow[]) : [])
+    setDbDecks(
+      (setsData?.map((row) => normalizeDeckCode(row.code)).filter((code) => /^ST\d{2}$/.test(code)) ||
+        []) as string[]
     )
-    const mergedSets = hasPromoSet
-      ? baseSets
-      : [...baseSets, { set_id: 'PROMO', set_name: 'Promos Speciales' }]
-
-    setApiSets(mergedSets)
-    setDbSets(setsData?.map((s) => s.code) || [])
-    setCronRows(Array.isArray(cronData?.rows) ? cronData.rows : [])
-    setCronLoading(false)
     setLoading(false)
   }
 
@@ -95,7 +69,7 @@ export default function AdminPage() {
     loadData()
   }, [canAccessAdmin])
 
-  const importSet = async (
+  const importDeck = async (
     code: string,
     options?: { skipImages?: boolean; missingImagesOnly?: boolean }
   ) => {
@@ -160,7 +134,7 @@ export default function AdminPage() {
     await loadData()
   }
 
-  const executeDeleteSet = async (
+  const executeDeleteDeck = async (
     code: string,
     forceDelete = false,
     deleteToken: string
@@ -189,7 +163,7 @@ export default function AdminPage() {
         token: deleteToken,
         confirmChecked: false,
         error:
-          'Ce set a des cartes dans des collections. Coche la confirmation pour forcer la suppression.'
+          'Ce deck a des cartes dans des collections. Coche la confirmation pour forcer la suppression.'
       })
       return
     }
@@ -225,35 +199,7 @@ export default function AdminPage() {
     }
 
     closeDeleteDialog()
-    await executeDeleteSet(deleteDialog.code, deleteDialog.forceDelete, token)
-  }
-
-  const runDatabaseBackup = async () => {
-    setBackupLoading(true)
-    setBackupResult(null)
-
-    try {
-      const authHeaders = await getAuthHeader()
-      const res = await fetch('/api/admin/backup/database', {
-        method: 'POST',
-        headers: {
-          ...authHeaders,
-          'Content-Type': 'application/json'
-        }
-      })
-      const data = await res.json().catch(() => ({}))
-      setBackupResult({
-        ok: Boolean(data?.ok),
-        bucket: data?.bucket,
-        filePath: data?.filePath,
-        bytes: data?.bytes,
-        generatedAt: data?.generatedAt,
-        tableCounts: data?.tableCounts,
-        error: data?.error || (!res.ok ? 'Erreur sauvegarde' : undefined)
-      })
-    } finally {
-      setBackupLoading(false)
-    }
+    await executeDeleteDeck(deleteDialog.code, deleteDialog.forceDelete, token)
   }
 
   if (authLoading || loading) return <div style={{ padding: 40 }}>Chargement...</div>
@@ -261,27 +207,26 @@ export default function AdminPage() {
 
   return (
     <div style={{ padding: 40 }}>
-      <h1>Admin - Import Sets</h1>
-      <div style={{ margin: '10px 0 20px' }}>
+      <h1>Admin - Import Decks</h1>
+      <div style={{ margin: '10px 0 20px', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <Link
-          href="/admin/decks"
+          href="/admin"
           style={{
-            background: '#7c3aed',
+            background: '#111827',
             color: '#fff',
             padding: '6px 10px',
             borderRadius: 4,
             textDecoration: 'none',
             display: 'inline-flex',
-            alignItems: 'center',
-            marginRight: 8
+            alignItems: 'center'
           }}
         >
-          Gerer les decks
+          Retour aux sets
         </Link>
         <Link
           href="/admin/users"
           style={{
-            background: '#111827',
+            background: '#374151',
             color: '#fff',
             padding: '6px 10px',
             borderRadius: 4,
@@ -301,118 +246,18 @@ export default function AdminPage() {
             borderRadius: 4,
             textDecoration: 'none',
             display: 'inline-flex',
-            alignItems: 'center',
-            marginLeft: 8
+            alignItems: 'center'
           }}
         >
           Lier cartes Cardmarket
         </Link>
       </div>
 
-      <div
-        style={{
-          marginBottom: 16,
-          border: '1px solid #d1d5db',
-          borderRadius: 8,
-          padding: 12,
-          background: '#fff'
-        }}
-      >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h2 style={{ margin: 0, fontSize: 18 }}>Supervision cron</h2>
-          <button onClick={loadData} disabled={cronLoading}>
-            {cronLoading ? 'Chargement...' : 'Rafraichir'}
-          </button>
-        </div>
-        <div style={{ marginTop: 10, display: 'grid', gap: 8 }}>
-          {cronRows.map((row) => (
-            <div
-              key={row.name}
-              style={{
-                border: '1px solid #cbd5e1',
-                borderRadius: 6,
-                padding: 10,
-                background: row.healthy ? '#ecfdf5' : '#fef2f2'
-              }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <strong>{row.name}</strong>
-                <span
-                  style={{
-                    fontSize: 12,
-                    color: row.healthy ? '#166534' : '#991b1b',
-                    fontWeight: 700
-                  }}
-                >
-                  {row.healthy ? 'OK (<48h)' : 'ALERTE (>48h)'}
-                </span>
-              </div>
-              <div style={{ fontSize: 13, marginTop: 4 }}>
-                Derniere maj: {row.lastSeenOn || 'N/A'}{' '}
-                {row.ageHours != null ? `(${row.ageHours}h)` : ''}
-              </div>
-              {row.error && (
-                <div style={{ fontSize: 12, color: '#b91c1c', marginTop: 4 }}>Erreur: {row.error}</div>
-              )}
-            </div>
-          ))}
-          {cronRows.length === 0 && (
-            <div style={{ fontSize: 13, color: '#64748b' }}>Aucune donnee cron disponible.</div>
-          )}
-        </div>
-      </div>
-
-      <div
-        style={{
-          marginBottom: 16,
-          border: '1px solid #d1d5db',
-          borderRadius: 8,
-          padding: 12,
-          background: '#fff'
-        }}
-      >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h2 style={{ margin: 0, fontSize: 18 }}>Sauvegarde base</h2>
-          <button onClick={runDatabaseBackup} disabled={backupLoading}>
-            {backupLoading ? 'Sauvegarde en cours...' : 'Sauvegarder maintenant'}
-          </button>
-        </div>
-
-        {backupResult && (
-          <div
-            style={{
-              marginTop: 10,
-              fontSize: 13,
-              color: backupResult.ok ? '#166534' : '#b91c1c'
-            }}
-          >
-            {backupResult.ok ? (
-              <>
-                <div>Bucket: {backupResult.bucket}</div>
-                <div>Fichier: {backupResult.filePath}</div>
-                <div>Taille: {backupResult.bytes} bytes</div>
-                <div>Date: {backupResult.generatedAt}</div>
-                <div>
-                  Tables:{' '}
-                  {backupResult.tableCounts
-                    ? Object.entries(backupResult.tableCounts)
-                        .map(([table, count]) => `${table}=${count}`)
-                        .join(', ')
-                    : 'N/A'}
-                </div>
-              </>
-            ) : (
-              <div>Erreur: {backupResult.error || 'Erreur inconnue'}</div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {apiSets.map((set: any) => {
-        const code = String(set?.set_id || '').replace('-', '').toUpperCase()
-        const setName = String(set?.set_name || '')
+      {apiDecks.map((deck) => {
+        const code = normalizeDeckCode(deck?.structure_deck_id)
+        const deckName = String(deck?.structure_deck_name || '')
         if (!code) return null
-        const exists = dbSets.includes(code)
+        const exists = dbDecks.includes(code)
 
         return (
           <div
@@ -426,15 +271,15 @@ export default function AdminPage() {
           >
             <div>
               <strong>{code}</strong>
-              {setName ? <span style={{ marginLeft: 8, color: '#64748b' }}>{setName}</span> : null}
+              {deckName ? <span style={{ marginLeft: 8, color: '#64748b' }}>{deckName}</span> : null}
             </div>
 
             {exists ? (
-              <div style={{ display: 'flex', gap: 10 }}>
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                 <span style={{ color: 'green' }}>Deja importe</span>
 
                 <button
-                  onClick={() => importSet(code, { skipImages: true })}
+                  onClick={() => importDeck(code, { skipImages: true })}
                   style={{
                     background: '#2563eb',
                     color: '#fff',
@@ -447,7 +292,7 @@ export default function AdminPage() {
                 </button>
 
                 <button
-                  onClick={() => importSet(code, { missingImagesOnly: true })}
+                  onClick={() => importDeck(code, { missingImagesOnly: true })}
                   style={{
                     background: '#f59e0b',
                     color: '#111827',
@@ -460,7 +305,7 @@ export default function AdminPage() {
                 </button>
 
                 <button
-                  onClick={() => importSet(code)}
+                  onClick={() => importDeck(code)}
                   style={{
                     background: '#0ea5e9',
                     color: '#fff',
@@ -551,7 +396,7 @@ export default function AdminPage() {
               </div>
             ) : (
               <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={() => importSet(code)}>Importer</button>
+                <button onClick={() => importDeck(code)}>Importer</button>
                 <Link
                   href={`/admin/create-card/${code}`}
                   style={{
@@ -605,10 +450,7 @@ export default function AdminPage() {
               ))}
             </div>
 
-            <button
-              style={{ marginTop: 20 }}
-              onClick={() => setShowModal(false)}
-            >
+            <button style={{ marginTop: 20 }} onClick={() => setShowModal(false)}>
               Fermer
             </button>
           </div>
@@ -640,10 +482,10 @@ export default function AdminPage() {
             }}
           >
             <h2 style={{ marginTop: 0, marginBottom: 10 }}>
-              {deleteDialog.forceDelete ? 'Suppression forcee du set' : 'Suppression du set'}
+              {deleteDialog.forceDelete ? 'Suppression forcee du deck' : 'Suppression du deck'}
             </h2>
             <div style={{ marginBottom: 10, color: '#334155' }}>
-              Set cible: <strong>{deleteDialog.code}</strong>
+              Deck cible: <strong>{deleteDialog.code}</strong>
             </div>
             <div style={{ marginBottom: 10, color: deleteDialog.forceDelete ? '#b91c1c' : '#334155' }}>
               {deleteDialog.forceDelete
@@ -688,7 +530,7 @@ export default function AdminPage() {
                 }
               />
               <span style={{ fontSize: 13, color: '#334155' }}>
-                Je confirme vouloir supprimer {deleteDialog.forceDelete ? 'FORCEMENT' : ''} le set{' '}
+                Je confirme vouloir supprimer {deleteDialog.forceDelete ? 'FORCEMENT' : ''} le deck{' '}
                 <strong>{deleteDialog.code}</strong>.
               </span>
             </label>
