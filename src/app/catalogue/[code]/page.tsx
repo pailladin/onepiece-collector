@@ -15,7 +15,16 @@ import {
   isAltVersion,
   type AltFilter
 } from '@/lib/filtering/filterCardPrints'
-import { aggregateCollectionRows, type CollectionQuantityRow } from '@/lib/collections/quantities'
+import {
+  aggregateCollectionRows,
+  getLanguageBreakdownEntries,
+  type CollectionQuantityRow
+} from '@/lib/collections/quantities'
+import {
+  COLLECTION_LANGUAGE_OPTIONS,
+  UNKNOWN_LANGUAGE,
+  normalizeCollectionLanguage
+} from '@/lib/collections/languages'
 
 const STORAGE_BASE_URL = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/cards-images`
 const MISSING_IMAGE_PATH = '__missing__'
@@ -112,6 +121,7 @@ export default function CatalogueSetPage() {
       }
 
       let ownedMap = new Map<string, number>()
+      let languageBreakdownByPrintId = new Map<string, Map<string, number>>()
 
       if (user) {
         const { data: collectionData } = await supabase
@@ -119,14 +129,17 @@ export default function CatalogueSetPage() {
           .select('card_print_id, quantity, language_code')
           .eq('user_id', user.id)
 
-        ownedMap = aggregateCollectionRows(
+        const aggregated = aggregateCollectionRows(
           (collectionData as CollectionQuantityRow[] | null) || []
-        ).totalByPrintId
+        )
+        ownedMap = aggregated.totalByPrintId
+        languageBreakdownByPrintId = aggregated.byPrintIdLanguage
       }
 
       const merged = baseItems.map((print: any) => ({
         ...print,
-        quantity: ownedMap.get(print.id) || 0
+        quantity: ownedMap.get(print.id) || 0,
+        languageBreakdown: languageBreakdownByPrintId.get(print.id) || new Map<string, number>()
       }))
 
       const dedupedByVisualKey = new Map<string, any>()
@@ -232,36 +245,66 @@ export default function CatalogueSetPage() {
     })
   }, [filteredItems, sortKey, sortDirection, code])
 
-  const updateQuantity = async (printId: string, delta: number) => {
+  const updateQuantity = async (printId: string, languageCode: string, delta: number) => {
     if (!user) return
 
     const current = items.find((i) => i.id === printId)
     if (!current) return
+    const normalizedLanguageCode = normalizeCollectionLanguage(languageCode)
+    const currentLanguageQty = Number(
+      current.languageBreakdown?.get(normalizedLanguageCode) || 0
+    )
+    const nextLanguageQty = currentLanguageQty + delta
 
-    const newQty = current.quantity + delta
-
-    if (newQty <= 0) {
+    if (nextLanguageQty <= 0) {
       await supabase
         .from('collections')
         .delete()
         .eq('user_id', user.id)
         .eq('card_print_id', printId)
-    } else if (current.quantity === 0) {
+        .eq('language_code', normalizedLanguageCode)
+    } else if (currentLanguageQty === 0) {
       await supabase.from('collections').insert({
         user_id: user.id,
         card_print_id: printId,
+        language_code: normalizedLanguageCode,
         quantity: 1
       })
     } else {
       await supabase
         .from('collections')
-        .update({ quantity: newQty })
+        .update({ quantity: nextLanguageQty })
         .eq('user_id', user.id)
         .eq('card_print_id', printId)
+        .eq('language_code', normalizedLanguageCode)
     }
 
     setItems(
-      items.map((i) => (i.id === printId ? { ...i, quantity: Math.max(newQty, 0) } : i))
+      items.map((i) =>
+        i.id === printId
+          ? (() => {
+              const nextLanguageBreakdown = new Map<string, number>(
+                i.languageBreakdown || []
+              )
+              if (nextLanguageQty <= 0) {
+                nextLanguageBreakdown.delete(normalizedLanguageCode)
+              } else {
+                nextLanguageBreakdown.set(normalizedLanguageCode, nextLanguageQty)
+              }
+
+              const totalQuantity = [...nextLanguageBreakdown.values()].reduce(
+                (sum, quantity) => sum + quantity,
+                0
+              )
+
+              return {
+                ...i,
+                quantity: totalQuantity,
+                languageBreakdown: nextLanguageBreakdown
+              }
+            })()
+          : i
+      )
     )
   }
 
@@ -456,6 +499,16 @@ export default function CatalogueSetPage() {
           const translation = item.card?.card_translations?.find(
             (t: any) => t.locale === DEFAULT_LOCALE
           )
+          const languageBreakdown = getLanguageBreakdownEntries(item.languageBreakdown)
+          const visibleLanguageControls = COLLECTION_LANGUAGE_OPTIONS.filter((option) => {
+            if (option.code !== UNKNOWN_LANGUAGE) return true
+            return Number(item.languageBreakdown?.get(UNKNOWN_LANGUAGE) || 0) > 0
+          }).map((option) => ({
+            code: option.code,
+            flag: option.flag,
+            label: option.label,
+            quantity: Number(item.languageBreakdown?.get(option.code) || 0)
+          }))
           const hasImagePath = Boolean(item.image_path) && item.image_path !== MISSING_IMAGE_PATH
           const imageUrl = hasImagePath
             ? `${STORAGE_BASE_URL}/${normalizedCode}/${item.image_path}`
@@ -532,11 +585,66 @@ export default function CatalogueSetPage() {
                 <strong>{item.card?.rarity}</strong> - {item.card?.type}
               </div>
 
+              {(item.quantity > 0 || languageBreakdown.length > 0) && (
+                <div
+                  style={{
+                    marginTop: 8,
+                    fontSize: 10,
+                    color: '#475569',
+                    display: 'flex',
+                    gap: 6,
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    whiteSpace: 'nowrap',
+                    overflowX: 'auto',
+                    scrollbarWidth: 'none'
+                  }}
+                >
+                  {item.quantity > 0 && (
+                    <span style={{ color: '#334155' }}>
+                      Total: <strong>{item.quantity}</strong>
+                    </span>
+                  )}
+                  {languageBreakdown.map((entry) => (
+                    <span
+                      key={entry.languageCode}
+                      title={entry.label}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}
+                    >
+                      <span>{entry.flag}</span>
+                      <span>{entry.quantity}</span>
+                    </span>
+                  ))}
+                </div>
+              )}
+
               {user && (
-                <div style={{ marginTop: 10 }}>
-                  <button onClick={() => updateQuantity(item.id, -1)}>-</button>
-                  <span style={{ margin: '0 8px' }}>{item.quantity}</span>
-                  <button onClick={() => updateQuantity(item.id, 1)}>+</button>
+                <div
+                  style={{
+                    marginTop: 10,
+                    display: 'grid',
+                    gap: 6,
+                    justifyItems: 'center'
+                  }}
+                >
+                  {visibleLanguageControls.map((entry) => (
+                    <div
+                      key={entry.code}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        fontSize: 12
+                      }}
+                    >
+                      <span title={entry.label} style={{ minWidth: 18 }}>
+                        {entry.flag}
+                      </span>
+                      <button onClick={() => updateQuantity(item.id, entry.code, -1)}>-</button>
+                      <span style={{ minWidth: 16, textAlign: 'center' }}>{entry.quantity}</span>
+                      <button onClick={() => updateQuantity(item.id, entry.code, 1)}>+</button>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
