@@ -8,15 +8,11 @@ import { DEFAULT_LOCALE } from '@/lib/locale'
 import { getDisplayPrintCode } from '@/lib/cards/printDisplay'
 import { parseCardCode } from '@/lib/sorting/parseCardCode'
 import { useAuth } from '@/lib/auth'
+import { aggregateCollectionRows, type CollectionQuantityRow } from '@/lib/collections/quantities'
 
 type SetRow = {
   id: string
   code: string
-}
-
-type CollectionRow = {
-  card_print_id: string
-  quantity: number
 }
 
 type CardTranslationRow = {
@@ -119,7 +115,7 @@ export default function FriendTradePage() {
 
       const { data: myCollectionData, error: myCollectionError } = await supabase
         .from('collections')
-        .select('card_print_id, quantity')
+        .select('card_print_id, quantity, language_code')
         .eq('user_id', user.id)
 
       if (myCollectionError) {
@@ -130,7 +126,7 @@ export default function FriendTradePage() {
 
       const { data: friendCollectionData, error: friendCollectionError } = await supabase
         .from('collections')
-        .select('card_print_id, quantity')
+        .select('card_print_id, quantity, language_code')
         .eq('user_id', friendId)
 
       if (friendCollectionError) {
@@ -139,19 +135,13 @@ export default function FriendTradePage() {
         return
       }
 
-      const mineByPrint = new Map<string, number>(
-        ((myCollectionData as CollectionRow[] | null) || []).map((row) => [
-          row.card_print_id,
-          row.quantity || 0
-        ])
-      )
+      const mineByPrint = aggregateCollectionRows(
+        (myCollectionData as CollectionQuantityRow[] | null) || []
+      ).totalByPrintId
 
-      const friendByPrint = new Map<string, number>(
-        ((friendCollectionData as CollectionRow[] | null) || []).map((row) => [
-          row.card_print_id,
-          row.quantity || 0
-        ])
-      )
+      const friendByPrint = aggregateCollectionRows(
+        (friendCollectionData as CollectionQuantityRow[] | null) || []
+      ).totalByPrintId
 
       const relevantPrintIds = [
         ...new Set(

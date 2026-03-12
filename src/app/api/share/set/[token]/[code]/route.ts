@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabaseServiceServer } from '@/lib/server/supabaseServer'
 import { verifyShareSetToken } from '@/lib/server/shareToken'
+import { aggregateCollectionRows, type CollectionQuantityRow } from '@/lib/collections/quantities'
 
 function normalizeSetCode(value: string) {
   return value.trim().toUpperCase().replace(/-/g, '')
@@ -23,11 +24,6 @@ type CardRow = {
     name: string
     locale: string
   }> | null
-}
-
-type CollectionRow = {
-  card_print_id: string
-  quantity: number
 }
 
 export async function GET(
@@ -97,7 +93,7 @@ export async function GET(
         .in('id', cardIds),
       supabaseServiceServer
         .from('collections')
-        .select('card_print_id, quantity')
+        .select('card_print_id, quantity, language_code')
         .eq('user_id', payload.userId)
         .in('card_print_id', printIds)
     ])
@@ -105,11 +101,8 @@ export async function GET(
     const cardsMap = new Map<string, CardRow>(
       ((cardsData as CardRow[] | null) || []).map((c) => [c.id, c])
     )
-    const quantities = new Map<string, number>(
-      ((collectionData as CollectionRow[] | null) || []).map((row) => [
-        row.card_print_id,
-        row.quantity
-      ])
+    const { totalByPrintId: quantities } = aggregateCollectionRows(
+      (collectionData as CollectionQuantityRow[] | null) || []
     )
 
     const items = prints.map((print) => ({

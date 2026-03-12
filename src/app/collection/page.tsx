@@ -10,11 +10,7 @@ import {
   type SetStats
 } from '@/lib/collections/fetchUserSetStats'
 import { CollectionSetsGrid } from '@/components/CollectionSetsGrid'
-
-type CollectionOwnedRow = {
-  card_print_id: string
-  quantity: number
-}
+import { aggregateCollectionRows, type CollectionQuantityRow } from '@/lib/collections/quantities'
 
 type CardPrintLookupRow = {
   id: string
@@ -168,7 +164,7 @@ export default function CollectionPage() {
     try {
       const { data: ownedData, error: ownedError } = await supabase
         .from('collections')
-        .select('card_print_id, quantity')
+        .select('card_print_id, quantity, language_code')
         .eq('user_id', user.id)
         .gt('quantity', 0)
 
@@ -179,7 +175,7 @@ export default function CollectionPage() {
         return
       }
 
-      const ownedRows = (ownedData as CollectionOwnedRow[] | null) || []
+      const ownedRows = (ownedData as CollectionQuantityRow[] | null) || []
       if (ownedRows.length === 0) {
         setPriceTotal(0)
         setPriceSetRows([])
@@ -189,7 +185,8 @@ export default function CollectionPage() {
         return
       }
 
-      const printIds = [...new Set(ownedRows.map((row) => row.card_print_id))]
+      const { totalByPrintId } = aggregateCollectionRows(ownedRows)
+      const printIds = [...new Set([...totalByPrintId.keys()])]
       const printRows: CardPrintLookupRow[] = []
 
       for (const chunk of chunkArray(printIds, 500)) {
@@ -212,8 +209,8 @@ export default function CollectionPage() {
       const printById = new Map(printRows.map((row) => [row.id, row]))
       const bySet = new Map<string, Array<{ printCode: string; quantity: number }>>()
 
-      for (const owned of ownedRows) {
-        const print = printById.get(owned.card_print_id)
+      for (const [printId, quantity] of totalByPrintId.entries()) {
+        const print = printById.get(printId)
         if (!print) continue
 
         const setRow = setById.get(print.distribution_set_id)
@@ -225,7 +222,7 @@ export default function CollectionPage() {
         if (!bySet.has(setRow.code)) bySet.set(setRow.code, [])
         bySet.get(setRow.code)?.push({
           printCode,
-          quantity: owned.quantity || 0
+          quantity
         })
       }
 
@@ -317,20 +314,18 @@ export default function CollectionPage() {
           for (const idsChunk of chunkArray(printIds, 400)) {
             const { data: ownedData, error: ownedError } = await supabase
               .from('collections')
-              .select('card_print_id, quantity')
+              .select('card_print_id, quantity, language_code')
               .eq('user_id', user.id)
               .in('card_print_id', idsChunk)
 
             if (ownedError) {
               throw new Error(`Erreur collection (${setRow.code}): ${ownedError.message}`)
             }
-            ;(
-              ((ownedData as Array<{ card_print_id: string; quantity: number }> | null) || []) as Array<{
-                card_print_id: string
-                quantity: number
-              }>
-            ).forEach((row) => {
-              ownedByPrintId.set(row.card_print_id, row.quantity || 0)
+            const aggregated = aggregateCollectionRows(
+              (((ownedData as CollectionQuantityRow[] | null) || []) as CollectionQuantityRow[])
+            )
+            aggregated.totalByPrintId.forEach((quantity, printId) => {
+              ownedByPrintId.set(printId, quantity)
             })
           }
 

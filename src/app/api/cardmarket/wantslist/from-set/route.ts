@@ -4,6 +4,7 @@ import { supabaseServiceServer } from '@/lib/server/supabaseServer'
 import { cardmarketGet, cardmarketPut } from '@/lib/server/cardmarket'
 import { DEFAULT_LOCALE } from '@/lib/locale'
 import { getPrintBaseCode } from '@/lib/cards/printDisplay'
+import { aggregateCollectionRows, type CollectionQuantityRow } from '@/lib/collections/quantities'
 
 export const runtime = 'nodejs'
 
@@ -24,11 +25,6 @@ type CardPrintRow = {
   card_id: string
   print_code: string | null
   variant_type: string | null
-}
-
-type CollectionRow = {
-  card_print_id: string
-  quantity: number
 }
 
 type ProductLike = {
@@ -174,19 +170,16 @@ export async function POST(request: Request) {
 
     const { data: collectionData } = await supabaseServiceServer
       .from('collections')
-      .select('card_print_id, quantity')
+      .select('card_print_id, quantity, language_code')
       .eq('user_id', userId)
       .in(
         'card_print_id',
         prints.map((p) => p.id)
       )
 
-    const owned = new Map<string, number>(
-      ((collectionData as CollectionRow[] | null) || []).map((c) => [
-        c.card_print_id,
-        c.quantity || 0
-      ])
-    )
+    const owned = aggregateCollectionRows(
+      (collectionData as CollectionQuantityRow[] | null) || []
+    ).totalByPrintId
 
     const missingPrints = prints.filter((p) => (owned.get(p.id) || 0) === 0)
     if (missingPrints.length === 0) {

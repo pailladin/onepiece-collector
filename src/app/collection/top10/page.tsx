@@ -6,6 +6,7 @@ import { useAuth } from '@/lib/auth'
 import { DEFAULT_LOCALE } from '@/lib/locale'
 import { supabase } from '@/lib/supabaseClient'
 import { getDisplayPrintCode } from '@/lib/cards/printDisplay'
+import { aggregateCollectionRows, type CollectionQuantityRow } from '@/lib/collections/quantities'
 
 const STORAGE_BASE_URL = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/cards-images`
 const MISSING_IMAGE_PATH = '__missing__'
@@ -13,11 +14,6 @@ const CARD_PLACEHOLDER_IMAGE =
   "data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 360 500'%3E%3Crect width='360' height='500' fill='%23e2e8f0'/%3E%3Crect x='16' y='16' width='328' height='468' rx='16' fill='%23f8fafc' stroke='%23cbd5e1' stroke-width='2'/%3E%3Ctext x='180' y='235' text-anchor='middle' font-family='Arial' font-size='24' fill='%23475569'%3EPhoto a venir%3C/text%3E%3C/svg%3E"
 
 type PriceSource = 'cardmarket' | 'us'
-
-type CollectionRow = {
-  card_print_id: string
-  quantity: number
-}
 
 type PrintRow = {
   id: string
@@ -97,20 +93,21 @@ export default function CollectionTop10Page() {
       try {
         const { data: ownedData, error: ownedError } = await supabase
           .from('collections')
-          .select('card_print_id, quantity')
+          .select('card_print_id, quantity, language_code')
           .eq('user_id', user.id)
           .gt('quantity', 0)
 
         if (ownedError) throw new Error(`Erreur collection: ${ownedError.message}`)
 
-        const ownedRows = (ownedData as CollectionRow[] | null) || []
+        const ownedRows = (ownedData as CollectionQuantityRow[] | null) || []
         if (ownedRows.length === 0) {
           setRows([])
           setLoading(false)
           return
         }
 
-        const printIds = [...new Set(ownedRows.map((row) => row.card_print_id))]
+        const { totalByPrintId } = aggregateCollectionRows(ownedRows)
+        const printIds = [...new Set([...totalByPrintId.keys()])]
         const prints: PrintRow[] = []
         for (const idsChunk of chunkArray(printIds, 500)) {
           const { data, error: printsError } = await supabase
@@ -188,8 +185,8 @@ export default function CollectionTop10Page() {
         )
 
         const nextRows: TopRow[] = []
-        for (const owned of ownedRows) {
-          const print = printById.get(owned.card_print_id)
+        for (const [printId, quantity] of totalByPrintId.entries()) {
+          const print = printById.get(printId)
           if (!print) continue
 
           const normalizedPrintCode = normalizePrintCode(print.print_code)
@@ -213,7 +210,6 @@ export default function CollectionTop10Page() {
               ? `${STORAGE_BASE_URL}/${setCode}/${print.image_path}`
               : CARD_PLACEHOLDER_IMAGE
 
-          const quantity = owned.quantity || 0
           const totalPrice = unitPrice * quantity
           const source = sourceByPrintCode.get(normalizedPrintCode) || 'us'
           const cardmarketProductId = productIdByPrintCode.get(normalizedPrintCode) || null

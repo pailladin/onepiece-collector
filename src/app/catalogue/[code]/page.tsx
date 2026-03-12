@@ -15,6 +15,7 @@ import {
   isAltVersion,
   type AltFilter
 } from '@/lib/filtering/filterCardPrints'
+import { aggregateCollectionRows, type CollectionQuantityRow } from '@/lib/collections/quantities'
 
 const STORAGE_BASE_URL = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/cards-images`
 const MISSING_IMAGE_PATH = '__missing__'
@@ -115,10 +116,12 @@ export default function CatalogueSetPage() {
       if (user) {
         const { data: collectionData } = await supabase
           .from('collections')
-          .select('*')
+          .select('card_print_id, quantity, language_code')
           .eq('user_id', user.id)
 
-        ownedMap = new Map(collectionData?.map((c) => [c.card_print_id, c.quantity]))
+        ownedMap = aggregateCollectionRows(
+          (collectionData as CollectionQuantityRow[] | null) || []
+        ).totalByPrintId
       }
 
       const merged = baseItems.map((print: any) => ({

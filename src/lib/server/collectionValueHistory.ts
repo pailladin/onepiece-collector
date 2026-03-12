@@ -1,10 +1,6 @@
 import { supabaseServiceServer } from '@/lib/server/supabaseServer'
 import { getSetPricing } from '@/lib/server/setPricing'
-
-type CollectionOwnedRow = {
-  card_print_id: string
-  quantity: number
-}
+import { aggregateCollectionRows, type CollectionQuantityRow } from '@/lib/collections/quantities'
 
 type CardPrintLookupRow = {
   id: string
@@ -73,7 +69,7 @@ export async function computeUserCollectionSnapshot(userId: string): Promise<Use
 
   const { data: ownedData, error: ownedError } = await supabaseServiceServer
     .from('collections')
-    .select('card_print_id, quantity')
+    .select('card_print_id, quantity, language_code')
     .eq('user_id', userId)
     .gt('quantity', 0)
 
@@ -81,7 +77,7 @@ export async function computeUserCollectionSnapshot(userId: string): Promise<Use
     throw new Error(`Erreur collection: ${ownedError.message}`)
   }
 
-  const ownedRows = (ownedData as CollectionOwnedRow[] | null) || []
+  const ownedRows = (ownedData as CollectionQuantityRow[] | null) || []
   if (ownedRows.length === 0) {
     return {
       periodStart,
@@ -95,7 +91,8 @@ export async function computeUserCollectionSnapshot(userId: string): Promise<Use
     }
   }
 
-  const printIds = [...new Set(ownedRows.map((row) => row.card_print_id))]
+  const { totalByPrintId } = aggregateCollectionRows(ownedRows)
+  const printIds = [...new Set([...totalByPrintId.keys()])]
   const printRows: CardPrintLookupRow[] = []
   for (const chunk of chunkArray(printIds, IN_CHUNK_SIZE)) {
     const { data, error } = await supabaseServiceServer
@@ -143,8 +140,8 @@ export async function computeUserCollectionSnapshot(userId: string): Promise<Use
     { setCode: string; setName: string; rows: Array<{ printCode: string; quantity: number }> }
   >()
 
-  for (const owned of ownedRows) {
-    const print = printById.get(owned.card_print_id)
+  for (const [printId, quantity] of totalByPrintId.entries()) {
+    const print = printById.get(printId)
     if (!print) continue
     const set = setById.get(print.distribution_set_id)
     if (!set) continue
@@ -160,7 +157,7 @@ export async function computeUserCollectionSnapshot(userId: string): Promise<Use
     }
     groupedBySet.get(set.id)?.rows.push({
       printCode,
-      quantity: owned.quantity || 0
+      quantity
     })
   }
 
