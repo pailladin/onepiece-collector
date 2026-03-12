@@ -1,41 +1,51 @@
-'use client'
-
-import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabaseClient'
+import { supabaseServiceServer } from '@/lib/server/supabaseServer'
 
 const STORAGE_BASE_URL =
   `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/cards-images`
 
-export default function CataloguePage() {
-  const [sets, setSets] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
+type CatalogueSetRow = {
+  id: string | null
+  code: string | null
+  name?: string | null
+}
 
-  useEffect(() => {
-    const fetchSets = async () => {
-      setLoading(true)
+async function fetchSets() {
+  const { data, error } = await supabaseServiceServer
+    .from('sets')
+    .select('id, code, name')
+    .order('code', { ascending: true })
 
-      const { data } = await supabase
-        .from('sets')
-        .select('*')
-        .order('code', { ascending: true })
-
-      setSets(data || [])
-      setLoading(false)
-    }
-
-    fetchSets()
-  }, [])
-
-  if (loading) {
-    return <div style={{ padding: 40 }}>Chargement...</div>
+  if (error) {
+    return { sets: [] as CatalogueSetRow[], error: error.message }
   }
+
+  const sets = ((data as CatalogueSetRow[] | null) || [])
+    .filter((set) => typeof set?.code === 'string' && set.code.trim().length > 0)
+    .map((set) => ({
+      ...set,
+      code: set.code!.trim()
+    }))
+
+  return { sets, error: null as string | null }
+}
+
+export default async function CataloguePage() {
+  const { sets, error } = await fetchSets()
 
   return (
     <div style={{ padding: 40 }}>
       <h1 style={{ fontSize: 24, fontWeight: 'bold', marginBottom: 30 }}>
         Catalogue des Sets
       </h1>
+
+      {error && <div style={{ color: '#b91c1c', marginBottom: 24 }}>Erreur de chargement: {error}</div>}
+
+      {!error && sets.length === 0 && (
+        <div style={{ color: '#475569', marginBottom: 24 }}>
+          Aucun set valide trouve dans la table `sets`.
+        </div>
+      )}
 
       <div
         style={{
@@ -46,13 +56,13 @@ export default function CataloguePage() {
         }}
       >
         {sets.map((set) => {
-          const imageUrl =
-            `${STORAGE_BASE_URL}/sets/${set.code}.png`
+          const setCode = set.code as string
+          const imageUrl = `${STORAGE_BASE_URL}/sets/${setCode}.png`
 
           return (
             <Link
-              key={set.id}
-              href={`/catalogue/${set.code}`}
+              key={set.id || setCode}
+              href={`/catalogue/${setCode}`}
               style={{ textDecoration: 'none', color: 'inherit' }}
             >
               <div
@@ -79,7 +89,7 @@ export default function CataloguePage() {
                 >
                   <img
                     src={imageUrl}
-                    alt={set.code}
+                    alt={setCode}
                     style={{
                       maxWidth: '100%',
                       maxHeight: '100%',
@@ -95,7 +105,7 @@ export default function CataloguePage() {
                     textAlign: 'center'
                   }}
                 >
-                  {set.code}
+                  {set.name || setCode}
                 </div>
               </div>
             </Link>
