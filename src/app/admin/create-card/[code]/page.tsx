@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 import { useAuth } from '@/lib/auth'
 import { isAdminEmail, parseAdminEmails } from '@/lib/admin'
+import { SET_LANGUAGE_CODES, getCollectionLanguageShortLabel } from '@/lib/collections/languages'
 
 export default function AdminCreateCardPage() {
   const { user, loading: authLoading } = useAuth()
@@ -22,6 +23,7 @@ export default function AdminCreateCardPage() {
   const [type, setType] = useState('')
   const [variantType, setVariantType] = useState('normal')
   const [imageUrl, setImageUrl] = useState('')
+  const [availableLanguages, setAvailableLanguages] = useState<Record<string, boolean>>({})
   const [cardmarketProductId, setCardmarketProductId] = useState('')
   const [jsonPayload, setJsonPayload] = useState('')
   const [jsonError, setJsonError] = useState<string | null>(null)
@@ -62,7 +64,8 @@ export default function AdminCreateCardPage() {
           type: type.trim(),
           variantType: variantType.trim() || 'normal',
           imageUrl: imageUrl.trim(),
-          cardmarketProductId: cardmarketProductId.trim()
+          cardmarketProductId: cardmarketProductId.trim(),
+          availableLanguages: SET_LANGUAGE_CODES.filter((language) => availableLanguages[language])
         })
       })
 
@@ -106,6 +109,10 @@ export default function AdminCreateCardPage() {
       const nextCardmarketId = toText(
         parsed.cardmarket_product_id ?? parsed.cardmarketProductId ?? parsed.id_cardmarket
       )
+      const rawAvailableLanguages = parsed.available_languages ?? parsed.availableLanguages
+      const nextAvailableLanguages = Array.isArray(rawAvailableLanguages)
+        ? rawAvailableLanguages.map((value) => String(value))
+        : []
 
       if (nextBaseCode) setBaseCode(nextBaseCode.toUpperCase())
       if (nextPrintCode) setPrintCode(nextPrintCode.toUpperCase())
@@ -115,6 +122,17 @@ export default function AdminCreateCardPage() {
       setVariantType(nextVariant)
       setImageUrl(nextImage)
       setCardmarketProductId(nextCardmarketId)
+      if (nextAvailableLanguages.length > 0) {
+        setAvailableLanguages(
+          Object.fromEntries(
+            SET_LANGUAGE_CODES.map((language) => [
+              language,
+              nextAvailableLanguages.includes(language) ||
+                nextAvailableLanguages.includes(language.toUpperCase())
+            ])
+          )
+        )
+      }
 
       setLogs((prev) => ['JSON applique: champs pre-remplis', ...prev])
     } catch {
@@ -131,7 +149,8 @@ export default function AdminCreateCardPage() {
       type: type.trim(),
       variant_type: variantType.trim() || 'normal',
       image_url: imageUrl.trim() || null,
-      cardmarket_product_id: cardmarketProductId.trim() || null
+      cardmarket_product_id: cardmarketProductId.trim() || null,
+      available_languages: SET_LANGUAGE_CODES.filter((language) => availableLanguages[language])
     }
 
     const text = JSON.stringify(payload, null, 2)
@@ -238,6 +257,29 @@ export default function AdminCreateCardPage() {
             style={{ gridColumn: '1 / -1' }}
           />
         </div>
+
+        {code === 'PROMO' && (
+          <div style={{ marginTop: 12 }}>
+            <div style={{ fontSize: 13, marginBottom: 6 }}>Langues disponibles</div>
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+              {SET_LANGUAGE_CODES.map((language) => (
+                <label key={language} style={{ display: 'inline-flex', gap: 6 }}>
+                  <input
+                    type="checkbox"
+                    checked={Boolean(availableLanguages[language])}
+                    onChange={(e) =>
+                      setAvailableLanguages((prev) => ({
+                        ...prev,
+                        [language]: e.target.checked
+                      }))
+                    }
+                  />
+                  <span>{getCollectionLanguageShortLabel(language)}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
 
         <button
           onClick={handleSubmit}

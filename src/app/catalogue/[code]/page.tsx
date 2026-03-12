@@ -17,13 +17,14 @@ import {
 } from '@/lib/filtering/filterCardPrints'
 import {
   aggregateCollectionRows,
-  getLanguageBreakdownEntries,
   type CollectionQuantityRow
 } from '@/lib/collections/quantities'
 import {
   COLLECTION_LANGUAGE_OPTIONS,
   UNKNOWN_LANGUAGE,
-  normalizeCollectionLanguage
+  normalizeCollectionLanguage,
+  resolveAvailableLanguages,
+  resolveSetLanguages
 } from '@/lib/collections/languages'
 
 const STORAGE_BASE_URL = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/cards-images`
@@ -79,6 +80,7 @@ export default function CatalogueSetPage() {
   const normalizedCode = (code || '').toString().replace('-', '').toUpperCase()
 
   const [items, setItems] = useState<any[]>([])
+  const [setLanguages, setSetLanguages] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedImage, setSelectedImage] = useState<string | null>(null)
@@ -108,10 +110,13 @@ export default function CatalogueSetPage() {
 
       if (!res.ok) {
         setItems([])
+        setSetLanguages([])
         setError(payload?.error || 'Erreur chargement catalogue')
         setLoading(false)
         return
       }
+
+      setSetLanguages(resolveSetLanguages(payload?.set?.availableLanguages))
 
       const baseItems = Array.isArray(payload?.items) ? payload.items : []
       if (baseItems.length === 0) {
@@ -499,17 +504,20 @@ export default function CatalogueSetPage() {
           const translation = item.card?.card_translations?.find(
             (t: any) => t.locale === DEFAULT_LOCALE
           )
-          const languageBreakdown = getLanguageBreakdownEntries(item.languageBreakdown)
-        const visibleLanguageControls = COLLECTION_LANGUAGE_OPTIONS.filter((option) => {
-          if (option.code !== UNKNOWN_LANGUAGE) return true
-          return Number(item.languageBreakdown?.get(UNKNOWN_LANGUAGE) || 0) > 0
-        }).map((option) => ({
-          code: option.code,
-          flag: option.flag,
-          label: option.label,
-          shortLabel: option.shortLabel,
-          quantity: Number(item.languageBreakdown?.get(option.code) || 0)
-        }))
+          const itemLanguages = resolveAvailableLanguages({
+            setLanguages,
+            itemLanguages: item.available_languages
+          })
+          const visibleLanguageControls = COLLECTION_LANGUAGE_OPTIONS.filter((option) => {
+            if (option.code !== UNKNOWN_LANGUAGE) return itemLanguages.includes(option.code)
+            return Number(item.languageBreakdown?.get(UNKNOWN_LANGUAGE) || 0) > 0
+          }).map((option) => ({
+            code: option.code,
+            flag: option.flag,
+            label: option.label,
+            shortLabel: option.shortLabel,
+            quantity: Number(item.languageBreakdown?.get(option.code) || 0)
+          }))
           const hasImagePath = Boolean(item.image_path) && item.image_path !== MISSING_IMAGE_PATH
           const imageUrl = hasImagePath
             ? `${STORAGE_BASE_URL}/${normalizedCode}/${item.image_path}`

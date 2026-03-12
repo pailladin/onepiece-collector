@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getRequestUser } from '@/lib/server/authUser'
 import { isAdminEmail, parseAdminEmails } from '@/lib/admin'
+import { normalizeSetLanguages } from '@/lib/collections/languages'
 
 export const runtime = 'nodejs'
 
@@ -144,6 +145,9 @@ export async function POST(
   const variantType = String(body?.variantType || 'normal').trim() || 'normal'
   const imageUrl = String(body?.imageUrl || '').trim()
   const cardmarketProductId = String(body?.cardmarketProductId || '').trim()
+  const availableLanguages = normalizeSetLanguages(
+    Array.isArray(body?.availableLanguages) ? body.availableLanguages : []
+  )
 
   if (!baseCode || !printCodeRaw || !name) {
     return NextResponse.json(
@@ -247,7 +251,8 @@ export async function POST(
       card_id: existingCard.id,
       distribution_set_id: setData.id,
       variant_type: variantType,
-      image_path: finalImagePath
+      image_path: finalImagePath,
+      available_languages: availableLanguages
     },
     { onConflict: 'print_code' }
   )
@@ -303,7 +308,8 @@ export async function POST(
       name,
       variantType,
       imagePath: finalImagePath,
-      cardmarketProductId: linkedCardmarketProductId
+      cardmarketProductId: linkedCardmarketProductId,
+      availableLanguages
     }
   })
 }

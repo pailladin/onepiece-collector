@@ -21,6 +21,7 @@ type PrintRow = {
   variant_type: string | null
   image_path: string | null
   card_id: string
+  available_languages?: string[] | null
 }
 
 type CardRow = {
@@ -75,7 +76,7 @@ export async function GET(
 
   const { data: printsData, error: printsError } = await supabase
     .from('card_prints')
-    .select('id, print_code, variant_type, image_path, card_id')
+    .select('id, print_code, variant_type, image_path, card_id, available_languages')
     .eq('distribution_set_id', setData.id)
 
   if (printsError) {
@@ -144,6 +145,7 @@ export async function GET(
         number: card?.number || null,
         rarity: card?.rarity || '',
         type: card?.type || '',
+        availableLanguages: print.available_languages || [],
         name
       }
     })

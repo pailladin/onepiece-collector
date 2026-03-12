@@ -7,6 +7,7 @@ type PrintRow = {
   variant_type: string | null
   image_path: string | null
   card_id: string
+  available_languages?: string[] | null
 }
 
 type CardRow = {
@@ -42,7 +43,7 @@ export async function GET(
 
   const { data: setData, error: setError } = await supabaseServiceServer
     .from('sets')
-    .select('id, code, name')
+    .select('id, code, name, available_languages')
     .eq('code', code)
     .maybeSingle()
 
@@ -59,7 +60,7 @@ export async function GET(
 
   const { data: printsData, error: printsError } = await supabaseServiceServer
     .from('card_prints')
-    .select('id, print_code, variant_type, image_path, card_id')
+    .select('id, print_code, variant_type, image_path, card_id, available_languages')
     .eq('distribution_set_id', setData.id)
 
   if (printsError) {
@@ -77,7 +78,8 @@ export async function GET(
       set: {
         id: setData.id,
         code: setData.code,
-        name: setData.name
+        name: setData.name,
+        availableLanguages: setData.available_languages || []
       },
       items: []
     })
@@ -122,7 +124,8 @@ export async function GET(
     set: {
       id: setData.id,
       code: setData.code,
-      name: setData.name
+      name: setData.name,
+      availableLanguages: setData.available_languages || []
     },
     items
   })

@@ -18,11 +18,12 @@ import {
 import {
   COLLECTION_LANGUAGE_OPTIONS,
   UNKNOWN_LANGUAGE,
-  normalizeCollectionLanguage
+  normalizeCollectionLanguage,
+  resolveAvailableLanguages,
+  resolveSetLanguages
 } from '@/lib/collections/languages'
 import {
   aggregateCollectionRows,
-  getLanguageBreakdownEntries,
   type CollectionQuantityRow
 } from '@/lib/collections/quantities'
 
@@ -177,6 +178,7 @@ export function CollectionSetView({
   const isSharedView = Boolean(shareToken)
 
   const [items, setItems] = useState<any[]>([])
+  const [setLanguages, setSetLanguages] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedImage, setSelectedImage] = useState<string | null>(null)
 
@@ -228,26 +230,31 @@ export function CollectionSetView({
         const data = await res.json().catch(() => ({}))
         if (!res.ok) {
           setItems([])
+          setSetLanguages([])
           setLoading(false)
           return
         }
 
         setItems(data?.items || [])
+        setSetLanguages(resolveSetLanguages(data?.set?.availableLanguages))
         setLoading(false)
         return
       }
 
       const { data: setData } = await supabase
         .from('sets')
-        .select('id')
+        .select('id, available_languages')
         .eq('code', code)
         .single()
 
       if (!setData) {
         setItems([])
+        setSetLanguages([])
         setLoading(false)
         return
       }
+
+      setSetLanguages(resolveSetLanguages((setData as any).available_languages))
 
       const { data: printsData } = await supabase
         .from('card_prints')
@@ -785,9 +792,12 @@ export function CollectionSetView({
         const translation = item.card?.card_translations?.find(
           (t: any) => t.locale === DEFAULT_LOCALE
         )
-        const languageBreakdown = getLanguageBreakdownEntries(item.languageBreakdown)
+        const itemLanguages = resolveAvailableLanguages({
+          setLanguages,
+          itemLanguages: item.available_languages
+        })
         const visibleLanguageControls = COLLECTION_LANGUAGE_OPTIONS.filter((option) => {
-          if (option.code !== UNKNOWN_LANGUAGE) return true
+          if (option.code !== UNKNOWN_LANGUAGE) return itemLanguages.includes(option.code)
           return Number(item.languageBreakdown?.get(UNKNOWN_LANGUAGE) || 0) > 0
         }).map((option) => ({
           code: option.code,

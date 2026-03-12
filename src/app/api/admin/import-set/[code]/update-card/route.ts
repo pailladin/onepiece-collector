@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getRequestUser } from '@/lib/server/authUser'
 import { isAdminEmail, parseAdminEmails } from '@/lib/admin'
+import { normalizeSetLanguages } from '@/lib/collections/languages'
 
 export const runtime = 'nodejs'
 
@@ -162,6 +163,9 @@ export async function POST(
   const nextPrintCodeRaw = String(body?.printCode || printData.print_code || '').trim()
   const imageUrl = String(body?.imageUrl || '').trim()
   const setMissingImage = Boolean(body?.setMissingImage)
+  const availableLanguages = normalizeSetLanguages(
+    Array.isArray(body?.availableLanguages) ? body.availableLanguages : []
+  )
 
   const nextPrintCode = normalizeCode(nextPrintCodeRaw)
   if (!nextPrintCode) {
@@ -226,6 +230,7 @@ export async function POST(
 
   const printUpdate: Record<string, unknown> = {}
   if ('variantType' in body) printUpdate.variant_type = variantTypeInput || 'normal'
+  if ('availableLanguages' in body) printUpdate.available_languages = availableLanguages
   if (nextPrintCode !== normalizeCode(printData.print_code)) {
     printUpdate.print_code = nextPrintCode
   }

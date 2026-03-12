@@ -1,11 +1,12 @@
 'use client'
 
 import Link from 'next/link'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 import { useAuth } from '@/lib/auth'
 import { isAdminEmail, parseAdminEmails } from '@/lib/admin'
+import { SET_LANGUAGE_CODES, getCollectionLanguageShortLabel } from '@/lib/collections/languages'
 
 type SetPrintOption = {
   id: string
@@ -18,6 +19,7 @@ type SetPrintOption = {
   rarity: string
   type: string
   name: string
+  availableLanguages: string[]
 }
 
 type SetOption = {
@@ -38,6 +40,7 @@ export default function AdminEditCardPage() {
   const [loading, setLoading] = useState(true)
   const [printOptions, setPrintOptions] = useState<SetPrintOption[]>([])
   const [setOptions, setSetOptions] = useState<SetOption[]>([])
+  const [printFilter, setPrintFilter] = useState('')
   const [editPrintId, setEditPrintId] = useState('')
   const [editTargetSetCode, setEditTargetSetCode] = useState('')
   const [editBaseCode, setEditBaseCode] = useState('')
@@ -47,6 +50,7 @@ export default function AdminEditCardPage() {
   const [editType, setEditType] = useState('')
   const [editVariantType, setEditVariantType] = useState('normal')
   const [editImageUrl, setEditImageUrl] = useState('')
+  const [editAvailableLanguages, setEditAvailableLanguages] = useState<Record<string, boolean>>({})
   const [editSetMissingImage, setEditSetMissingImage] = useState(false)
   const [isUpdatingCard, setIsUpdatingCard] = useState(false)
   const [logs, setLogs] = useState<string[]>([])
@@ -58,6 +62,24 @@ export default function AdminEditCardPage() {
       : '__missing__'
   const currentImageUrl =
     currentImageBaseUrl !== '__missing__' ? `${currentImageBaseUrl}?v=${imageVersion}` : '__missing__'
+  const filteredPrintOptions = useMemo(() => {
+    const query = printFilter.trim().toLowerCase()
+    if (!query) return printOptions
+
+    return printOptions.filter((row) =>
+      [
+        row.printCode,
+        row.baseCode,
+        row.name,
+        row.rarity,
+        row.type,
+        row.variantType
+      ]
+        .join(' ')
+        .toLowerCase()
+        .includes(query)
+    )
+  }, [printFilter, printOptions])
 
   const getAuthHeader = useCallback(async () => {
     const { data } = await supabase.auth.getSession()
@@ -124,9 +146,23 @@ export default function AdminEditCardPage() {
     setEditRarity(selectedPrint.rarity || '')
     setEditType(selectedPrint.type || '')
     setEditVariantType(selectedPrint.variantType || 'normal')
+    setEditAvailableLanguages(
+      Object.fromEntries(
+        SET_LANGUAGE_CODES.map((language) => [
+          language,
+          selectedPrint.availableLanguages?.includes(language) || false
+        ])
+      )
+    )
     setEditImageUrl('')
     setEditSetMissingImage(false)
   }, [editPrintId, printOptions])
+
+  useEffect(() => {
+    if (filteredPrintOptions.length === 0) return
+    if (filteredPrintOptions.some((row) => row.id === editPrintId)) return
+    setEditPrintId(filteredPrintOptions[0].id)
+  }, [editPrintId, filteredPrintOptions])
 
   useEffect(() => {
     if (!canAccessAdmin) {
@@ -160,6 +196,7 @@ export default function AdminEditCardPage() {
           rarity: editRarity.trim(),
           type: editType.trim(),
           variantType: editVariantType.trim() || 'normal',
+          availableLanguages: SET_LANGUAGE_CODES.filter((language) => editAvailableLanguages[language]),
           targetSetCode: editTargetSetCode.trim().toUpperCase() || code,
           imageUrl: editImageUrl.trim(),
           setMissingImage: editSetMissingImage
@@ -214,18 +251,31 @@ export default function AdminEditCardPage() {
         ) : (
           <>
             <div style={{ marginBottom: 8 }}>
+              <input
+                value={printFilter}
+                onChange={(e) => setPrintFilter(e.target.value)}
+                placeholder="Filtrer par code, nom, rarete, type..."
+                style={{ width: '100%', maxWidth: 520 }}
+              />
+            </div>
+            <div style={{ marginBottom: 8 }}>
               <select
                 value={editPrintId}
                 onChange={(e) => setEditPrintId(e.target.value)}
                 style={{ minWidth: 360 }}
               >
-                {printOptions.map((row) => (
+                {filteredPrintOptions.map((row) => (
                   <option key={row.id} value={row.id}>
                     {row.printCode} - {row.name}
                   </option>
                 ))}
               </select>
             </div>
+            {filteredPrintOptions.length === 0 && (
+              <div style={{ marginBottom: 8, fontSize: 13, color: '#64748b' }}>
+                Aucun resultat pour ce filtre.
+              </div>
+            )}
 
             <div
               style={{
@@ -300,6 +350,29 @@ export default function AdminEditCardPage() {
               />
               Marquer image manquante (__missing__)
             </label>
+
+            {code === 'PROMO' && (
+              <div style={{ marginTop: 12 }}>
+                <div style={{ fontSize: 13, marginBottom: 6 }}>Langues disponibles</div>
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                  {SET_LANGUAGE_CODES.map((language) => (
+                    <label key={language} style={{ display: 'inline-flex', gap: 6 }}>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(editAvailableLanguages[language])}
+                        onChange={(e) =>
+                          setEditAvailableLanguages((prev) => ({
+                            ...prev,
+                            [language]: e.target.checked
+                          }))
+                        }
+                      />
+                      <span>{getCollectionLanguageShortLabel(language)}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div>
               <button

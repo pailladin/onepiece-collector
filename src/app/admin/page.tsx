@@ -488,6 +488,22 @@ export default function AdminPage() {
                   Creer carte
                 </Link>
 
+                <Link
+                  href={`/admin/set-languages/${code}`}
+                  style={{
+                    background: '#475569',
+                    color: '#fff',
+                    border: 'none',
+                    padding: '4px 8px',
+                    borderRadius: 4,
+                    textDecoration: 'none',
+                    display: 'inline-flex',
+                    alignItems: 'center'
+                  }}
+                >
+                  Langues
+                </Link>
+
                 <button
                   onClick={() => openDeleteDialog(code)}
                   style={{
@@ -518,6 +534,21 @@ export default function AdminPage() {
                   }}
                 >
                   Creer carte
+                </Link>
+                <Link
+                  href={`/admin/set-languages/${code}`}
+                  style={{
+                    background: '#475569',
+                    color: '#fff',
+                    border: 'none',
+                    padding: '4px 8px',
+                    borderRadius: 4,
+                    textDecoration: 'none',
+                    display: 'inline-flex',
+                    alignItems: 'center'
+                  }}
+                >
+                  Langues
                 </Link>
               </div>
             )}
