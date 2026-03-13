@@ -41,6 +41,7 @@ export default function FriendsPage() {
   const [discordUsername, setDiscordUsername] = useState('')
   const [search, setSearch] = useState('')
   const [searchResults, setSearchResults] = useState<Profile[]>([])
+  const [nearbyResults, setNearbyResults] = useState<Profile[]>([])
   const [friendIds, setFriendIds] = useState<Set<string>>(new Set())
   const [friends, setFriends] = useState<Profile[]>([])
   const [incomingRequests, setIncomingRequests] = useState<FriendRequestRow[]>([])
@@ -177,6 +178,27 @@ export default function FriendsPage() {
 
     void runSearch()
   }, [search, user])
+
+  useEffect(() => {
+    const runNearbySearch = async () => {
+      if (!user || postalCode.trim().length !== 5) {
+        setNearbyResults([])
+        return
+      }
+
+      const departmentCode = postalCode.trim().slice(0, 2)
+      const { data } = await supabase
+        .from('profiles')
+        .select('id, username, discord_username, postal_code')
+        .like('postal_code', `${departmentCode}%`)
+        .neq('id', user.id)
+        .limit(12)
+
+      setNearbyResults((data as Profile[] | null) || [])
+    }
+
+    void runNearbySearch()
+  }, [postalCode, user])
 
   const saveProfile = async () => {
     if (!user || !canSaveProfile) return
@@ -326,6 +348,72 @@ export default function FriendsPage() {
     return <div style={{ padding: 40 }}>Connecte-toi pour gerer tes amis.</div>
   }
 
+  const renderProfileAction = (profile: Profile) => {
+    const alreadyFriend = friendIds.has(profile.id)
+    const requestState = getPendingRequestState(profile.id)
+    const buttonLabel = alreadyFriend
+      ? 'Deja ami'
+      : requestState?.type === 'incoming'
+        ? 'Accepter'
+        : requestState?.type === 'outgoing'
+          ? 'Demande envoyee'
+          : 'Envoyer demande'
+
+    return (
+      <div
+        key={profile.id}
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          border: '1px solid #e2e8f0',
+          borderRadius: 8,
+          padding: '10px 12px',
+          background: '#fff',
+          gap: 12
+        }}
+      >
+        <div>
+          <div style={{ fontWeight: 600, color: '#0f172a' }}>{profile.username}</div>
+          {profile.discord_username && (
+            <div style={{ fontSize: 12, color: '#64748b' }}>Discord: {profile.discord_username}</div>
+          )}
+          {profile.postal_code && (
+            <div style={{ fontSize: 12, color: '#94a3b8' }}>Departement: {profile.postal_code.slice(0, 2)}</div>
+          )}
+        </div>
+        <button
+          disabled={alreadyFriend || requestState?.type === 'outgoing'}
+          onClick={() => void sendFriendRequest(profile.id)}
+          style={{
+            background: alreadyFriend
+              ? '#e2e8f0'
+              : requestState?.type === 'incoming'
+                ? '#f59e0b'
+                : '#0f766e',
+            color: alreadyFriend ? '#475569' : '#fff',
+            border: 'none',
+            borderRadius: 8,
+            padding: '7px 10px',
+            cursor:
+              alreadyFriend || requestState?.type === 'outgoing'
+                ? 'not-allowed'
+                : 'pointer',
+            opacity: busyAction === `send:${profile.id}` ? 0.7 : 1
+          }}
+        >
+          {buttonLabel}
+        </button>
+      </div>
+    )
+  }
+
+  const visibleNearbyResults = nearbyResults.filter((profile) => {
+    if (friendIds.has(profile.id)) return false
+    if (getPendingRequestState(profile.id)) return false
+    return true
+  })
+
   return (
     <div
       style={{
@@ -403,8 +491,8 @@ export default function FriendsPage() {
               }}
             />
             <div style={{ fontSize: 12, color: '#64748b' }}>
-              * Le code postal ne sera pas partage avec les autres. Il servira uniquement a
-              proposer, plus tard, une liste d&apos;amis possibles par departement.
+              * Le code postal ne sera pas partage avec les autres. Il sert uniquement a
+              proposer une liste d&apos;amis possibles dans ton departement.
             </div>
             <button
               onClick={saveProfile}
@@ -425,87 +513,51 @@ export default function FriendsPage() {
           </div>
         </section>
 
-        <section style={cardStyle()}>
-          <h2 style={{ marginTop: 0, marginBottom: 10, color: '#0f172a' }}>
-            Recherche de joueurs
-          </h2>
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Rechercher un pseudo (min 2 caracteres)"
-            style={{
-              width: '100%',
-              boxSizing: 'border-box',
-              padding: '9px 10px',
-              borderRadius: 8,
-              border: '1px solid #cbd5e1'
-            }}
-          />
+        <div style={{ display: 'grid', gap: 12 }}>
+          <section style={cardStyle()}>
+            <h2 style={{ marginTop: 0, marginBottom: 10, color: '#0f172a' }}>
+              Recherche de joueurs
+            </h2>
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Rechercher un pseudo (min 2 caracteres)"
+              style={{
+                width: '100%',
+                boxSizing: 'border-box',
+                padding: '9px 10px',
+                borderRadius: 8,
+                border: '1px solid #cbd5e1'
+              }}
+            />
 
-          <div style={{ marginTop: 10, display: 'grid', gap: 8 }}>
-            {search.trim().length >= 2 && searchResults.length === 0 && (
-              <div style={{ fontSize: 13, color: '#64748b' }}>Aucun resultat.</div>
+            <div style={{ marginTop: 10, display: 'grid', gap: 8 }}>
+              {search.trim().length >= 2 && searchResults.length === 0 && (
+                <div style={{ fontSize: 13, color: '#64748b' }}>Aucun resultat.</div>
+              )}
+              {searchResults.map(renderProfileAction)}
+            </div>
+          </section>
+
+          <section style={cardStyle()}>
+            <h2 style={{ marginTop: 0, marginBottom: 10, color: '#0f172a' }}>
+              Amis proches de toi
+            </h2>
+            {postalCode.trim().length !== 5 && (
+              <div style={{ fontSize: 13, color: '#64748b' }}>
+                Renseigne ton code postal pour voir les joueurs de ton departement.
+              </div>
             )}
-            {searchResults.map((profile) => {
-              const alreadyFriend = friendIds.has(profile.id)
-              const requestState = getPendingRequestState(profile.id)
-              const buttonLabel = alreadyFriend
-                ? 'Deja ami'
-                : requestState?.type === 'incoming'
-                  ? 'Accepter'
-                  : requestState?.type === 'outgoing'
-                    ? 'Demande envoyee'
-                    : 'Envoyer demande'
-
-              return (
-                <div
-                  key={profile.id}
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    border: '1px solid #e2e8f0',
-                    borderRadius: 8,
-                    padding: '10px 12px',
-                    background: '#fff',
-                    gap: 12
-                  }}
-                >
-                  <div>
-                    <div style={{ fontWeight: 600, color: '#0f172a' }}>{profile.username}</div>
-                    {profile.discord_username && (
-                      <div style={{ fontSize: 12, color: '#64748b' }}>
-                        Discord: {profile.discord_username}
-                      </div>
-                    )}
-                  </div>
-                  <button
-                    disabled={alreadyFriend || requestState?.type === 'outgoing'}
-                    onClick={() => void sendFriendRequest(profile.id)}
-                    style={{
-                      background: alreadyFriend
-                        ? '#e2e8f0'
-                        : requestState?.type === 'incoming'
-                          ? '#f59e0b'
-                          : '#0f766e',
-                      color: alreadyFriend ? '#475569' : '#fff',
-                      border: 'none',
-                      borderRadius: 8,
-                      padding: '7px 10px',
-                      cursor:
-                        alreadyFriend || requestState?.type === 'outgoing'
-                          ? 'not-allowed'
-                          : 'pointer',
-                      opacity: busyAction === `send:${profile.id}` ? 0.7 : 1
-                    }}
-                  >
-                    {buttonLabel}
-                  </button>
-                </div>
-              )
-            })}
-          </div>
-        </section>
+            {postalCode.trim().length === 5 && visibleNearbyResults.length === 0 && (
+              <div style={{ fontSize: 13, color: '#64748b' }}>
+                Aucun joueur trouve pour ce departement pour le moment.
+              </div>
+            )}
+            <div style={{ display: 'grid', gap: 8 }}>
+              {visibleNearbyResults.map(renderProfileAction)}
+            </div>
+          </section>
+        </div>
       </div>
 
       <div
