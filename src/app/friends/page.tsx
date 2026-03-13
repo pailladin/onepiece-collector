@@ -76,34 +76,12 @@ export default function FriendsPage() {
       supabase.from('friends').select('friend_id').eq('user_id', userId),
       supabase
         .from('friend_requests')
-        .select(
-          `
-            id,
-            requester_id,
-            recipient_id,
-            status,
-            requester:profiles!friend_requests_requester_id_fkey (
-              id,
-              username
-            )
-          `
-        )
+        .select('id, requester_id, recipient_id, status')
         .eq('recipient_id', userId)
         .eq('status', 'pending'),
       supabase
         .from('friend_requests')
-        .select(
-          `
-            id,
-            requester_id,
-            recipient_id,
-            status,
-            recipient:profiles!friend_requests_recipient_id_fkey (
-              id,
-              username
-            )
-          `
-        )
+        .select('id, requester_id, recipient_id, status')
         .eq('requester_id', userId)
         .eq('status', 'pending')
     ])
@@ -123,8 +101,42 @@ export default function FriendsPage() {
       setFriends((profilesData as Profile[] | null) || [])
     }
 
-    setIncomingRequests((incomingData as FriendRequestRow[] | null) || [])
-    setOutgoingRequests((outgoingData as FriendRequestRow[] | null) || [])
+    const incomingRows = (incomingData as FriendRequestRow[] | null) || []
+    const outgoingRows = (outgoingData as FriendRequestRow[] | null) || []
+    const requestProfileIds = [
+      ...new Set([
+        ...incomingRows.map((row) => row.requester_id),
+        ...outgoingRows.map((row) => row.recipient_id)
+      ])
+    ]
+
+    let requestProfilesById = new Map<string, Profile>()
+    if (requestProfileIds.length > 0) {
+      const { data: requestProfilesData } = await supabase
+        .from('profiles')
+        .select('id, username, discord_username')
+        .in('id', requestProfileIds)
+
+      requestProfilesById = new Map(
+        (((requestProfilesData as Profile[] | null) || []) as Profile[]).map((profile) => [
+          profile.id,
+          profile
+        ])
+      )
+    }
+
+    setIncomingRequests(
+      incomingRows.map((row) => ({
+        ...row,
+        requester: requestProfilesById.get(row.requester_id) || null
+      }))
+    )
+    setOutgoingRequests(
+      outgoingRows.map((row) => ({
+        ...row,
+        recipient: requestProfilesById.get(row.recipient_id) || null
+      }))
+    )
   }, [])
 
   useEffect(() => {
