@@ -2,6 +2,7 @@
 
 import Image from 'next/image'
 import Link from 'next/link'
+import { useEffect, useState } from 'react'
 import { isAdminEmail, parseAdminEmails } from '@/lib/admin'
 import { useAuth } from '@/lib/auth'
 import { supabase } from '@/lib/supabaseClient'
@@ -14,6 +15,31 @@ export default function RootLayout({
   const { user } = useAuth()
   const adminEmails = parseAdminEmails(process.env.NEXT_PUBLIC_ADMIN_EMAILS)
   const canAccessAdmin = isAdminEmail(user?.email, adminEmails)
+  const [hasPendingFriendRequests, setHasPendingFriendRequests] = useState(false)
+
+  useEffect(() => {
+    const loadPendingRequests = async () => {
+      if (!user) {
+        setHasPendingFriendRequests(false)
+        return
+      }
+
+      const { count, error } = await supabase
+        .from('friend_requests')
+        .select('id', { count: 'exact', head: true })
+        .eq('recipient_id', user.id)
+        .eq('status', 'pending')
+
+      if (error) {
+        setHasPendingFriendRequests(false)
+        return
+      }
+
+      setHasPendingFriendRequests((count || 0) > 0)
+    }
+
+    void loadPendingRequests()
+  }, [user])
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
@@ -125,7 +151,11 @@ export default function RootLayout({
                       padding: 0,
                       display: 'inline-flex',
                       alignItems: 'center',
-                      lineHeight: 0
+                      lineHeight: 0,
+                      borderRadius: 18,
+                      boxShadow: hasPendingFriendRequests
+                        ? '0 0 0 3px rgba(250, 204, 21, 0.98), 0 0 22px rgba(245, 158, 11, 0.75)'
+                        : 'none'
                     }}
                   >
                     <Image
