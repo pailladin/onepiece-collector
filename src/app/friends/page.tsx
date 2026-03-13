@@ -48,6 +48,7 @@ export default function FriendsPage() {
   const [outgoingRequests, setOutgoingRequests] = useState<FriendRequestRow[]>([])
   const [message, setMessage] = useState('')
   const [busyAction, setBusyAction] = useState<string | null>(null)
+  const [copiedDiscord, setCopiedDiscord] = useState<string | null>(null)
 
   const canSaveProfile = useMemo(() => username.trim().length >= 3, [username])
 
@@ -337,6 +338,19 @@ export default function FriendsPage() {
       setMessage(error instanceof Error ? error.message : 'Erreur suppression ami')
     } finally {
       setBusyAction(null)
+    }
+  }
+
+  const copyDiscordUsername = async (discordValue: string) => {
+    try {
+      await navigator.clipboard.writeText(discordValue)
+      setCopiedDiscord(discordValue)
+      setMessage('Pseudo Discord copie.')
+      window.setTimeout(() => {
+        setCopiedDiscord((current) => (current === discordValue ? null : current))
+      }, 2000)
+    } catch {
+      setMessage('Impossible de copier le pseudo Discord.')
     }
   }
 
@@ -692,8 +706,22 @@ export default function FriendsPage() {
               <div>
                 <div style={{ fontWeight: 600, color: '#0f172a' }}>{friend.username}</div>
                 {friend.discord_username && (
-                  <div style={{ fontSize: 12, color: '#64748b' }}>
-                    Discord: {friend.discord_username}
+                  <div style={{ fontSize: 12, color: '#64748b', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <span>Discord: {friend.discord_username}</span>
+                    <button
+                      onClick={() => void copyDiscordUsername(friend.discord_username!)}
+                      style={{
+                        background: '#fff',
+                        color: '#1d4ed8',
+                        border: '1px solid #bfdbfe',
+                        borderRadius: 999,
+                        padding: '2px 8px',
+                        fontSize: 12,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {copiedDiscord === friend.discord_username ? 'Copie' : 'Copier'}
+                    </button>
                   </div>
                 )}
               </div>
