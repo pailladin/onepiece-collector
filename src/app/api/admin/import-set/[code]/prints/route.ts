@@ -24,6 +24,11 @@ type PrintRow = {
   available_languages?: string[] | null
 }
 
+type LinkRow = {
+  card_print_id: string
+  cardmarket_product_id: string
+}
+
 type CardRow = {
   id: string
   base_code: string
@@ -88,6 +93,7 @@ export async function GET(
 
   const prints = (printsData as PrintRow[] | null) || []
   const cardIds = [...new Set(prints.map((row) => row.card_id))]
+  const printIds = prints.map((row) => row.id)
 
   if (cardIds.length === 0) {
     return NextResponse.json({ prints: [] })
@@ -122,6 +128,25 @@ export async function GET(
     cardsRows.push(...(((cardsData as CardRow[] | null) || []) as CardRow[]))
   }
 
+  const linksByPrintId = new Map<string, string>()
+  if (printIds.length > 0) {
+    const { data: linksData, error: linksError } = await supabase
+      .from('cardmarket_print_links')
+      .select('card_print_id, cardmarket_product_id')
+      .in('card_print_id', printIds)
+
+    if (linksError) {
+      return NextResponse.json(
+        { error: `Erreur lecture liens Cardmarket: ${linksError.message}` },
+        { status: 500 }
+      )
+    }
+
+    for (const row of (linksData as LinkRow[] | null) || []) {
+      linksByPrintId.set(row.card_print_id, row.cardmarket_product_id)
+    }
+  }
+
   const cardsById = new Map<string, CardRow>(
     cardsRows.map((row) => [row.id, row])
   )
@@ -146,6 +171,7 @@ export async function GET(
         rarity: card?.rarity || '',
         type: card?.type || '',
         availableLanguages: print.available_languages || [],
+        cardmarketProductId: linksByPrintId.get(print.id) || '',
         name
       }
     })

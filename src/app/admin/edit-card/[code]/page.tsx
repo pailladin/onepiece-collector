@@ -20,6 +20,7 @@ type SetPrintOption = {
   type: string
   name: string
   availableLanguages: string[]
+  cardmarketProductId: string
 }
 
 type SetOption = {
@@ -50,6 +51,7 @@ export default function AdminEditCardPage() {
   const [editType, setEditType] = useState('')
   const [editVariantType, setEditVariantType] = useState('normal')
   const [editImageUrl, setEditImageUrl] = useState('')
+  const [editCardmarketProductId, setEditCardmarketProductId] = useState('')
   const [editAvailableLanguages, setEditAvailableLanguages] = useState<Record<string, boolean>>({})
   const [editSetMissingImage, setEditSetMissingImage] = useState(false)
   const [isUpdatingCard, setIsUpdatingCard] = useState(false)
@@ -146,6 +148,7 @@ export default function AdminEditCardPage() {
     setEditRarity(selectedPrint.rarity || '')
     setEditType(selectedPrint.type || '')
     setEditVariantType(selectedPrint.variantType || 'normal')
+    setEditCardmarketProductId(selectedPrint.cardmarketProductId || '')
     setEditAvailableLanguages(
       Object.fromEntries(
         SET_LANGUAGE_CODES.map((language) => [
@@ -199,6 +202,7 @@ export default function AdminEditCardPage() {
           availableLanguages: SET_LANGUAGE_CODES.filter((language) => editAvailableLanguages[language]),
           targetSetCode: editTargetSetCode.trim().toUpperCase() || code,
           imageUrl: editImageUrl.trim(),
+          cardmarketProductId: editCardmarketProductId.trim(),
           setMissingImage: editSetMissingImage
         })
       })
@@ -313,6 +317,11 @@ export default function AdminEditCardPage() {
                 placeholder="Variant type"
                 value={editVariantType}
                 onChange={(e) => setEditVariantType(e.target.value)}
+              />
+              <input
+                placeholder="ID Cardmarket"
+                value={editCardmarketProductId}
+                onChange={(e) => setEditCardmarketProductId(e.target.value)}
               />
               <select
                 value={editTargetSetCode}

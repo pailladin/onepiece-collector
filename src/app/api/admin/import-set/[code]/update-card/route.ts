@@ -162,6 +162,7 @@ export async function POST(
   const variantTypeInput = String(body?.variantType || '').trim()
   const nextPrintCodeRaw = String(body?.printCode || printData.print_code || '').trim()
   const imageUrl = String(body?.imageUrl || '').trim()
+  const cardmarketProductId = String(body?.cardmarketProductId || '').trim()
   const setMissingImage = Boolean(body?.setMissingImage)
   const availableLanguages = normalizeSetLanguages(
     Array.isArray(body?.availableLanguages) ? body.availableLanguages : []
@@ -170,6 +171,13 @@ export async function POST(
   const nextPrintCode = normalizeCode(nextPrintCodeRaw)
   if (!nextPrintCode) {
     return NextResponse.json({ error: 'printCode invalide' }, { status: 400 })
+  }
+
+  if (cardmarketProductId && !/^\d+$/.test(cardmarketProductId)) {
+    return NextResponse.json(
+      { error: 'ID Cardmarket invalide (chiffres uniquement)' },
+      { status: 400 }
+    )
   }
 
   if (nextPrintCode !== normalizeCode(printData.print_code)) {
@@ -294,12 +302,33 @@ export async function POST(
     }
   }
 
+  if (cardmarketProductId) {
+    const { error: linkError } = await supabase.from('cardmarket_print_links').upsert(
+      {
+        card_print_id: printId,
+        cardmarket_product_id: cardmarketProductId,
+        source: 'manual',
+        confidence: 100,
+        created_by: userResult.user.id
+      },
+      { onConflict: 'card_print_id' }
+    )
+
+    if (linkError) {
+      return NextResponse.json(
+        { error: `Erreur update lien Cardmarket: ${linkError.message}` },
+        { status: 500 }
+      )
+    }
+  }
+
   return NextResponse.json({
     ok: true,
     updated: {
       printId,
       printCode: nextPrintCode,
-      setCode: targetSetCode
+      setCode: targetSetCode,
+      cardmarketProductId: cardmarketProductId || null
     }
   })
 }

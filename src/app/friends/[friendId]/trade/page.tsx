@@ -8,6 +8,11 @@ import { DEFAULT_LOCALE } from '@/lib/locale'
 import { getDisplayPrintCode } from '@/lib/cards/printDisplay'
 import { parseCardCode } from '@/lib/sorting/parseCardCode'
 import { useAuth } from '@/lib/auth'
+import {
+  getCollectionLanguageFlag,
+  getCollectionLanguageLabel,
+  normalizeCollectionLanguage
+} from '@/lib/collections/languages'
 import { aggregateCollectionRows, type CollectionQuantityRow } from '@/lib/collections/quantities'
 
 type SetRow = {
@@ -37,11 +42,15 @@ type CardPrintRow = {
 
 type TradeItem = {
   id: string
+  itemKey: string
   setCode: string
   displayCode: string
   name: string
   rarity: string
   type: string
+  languageCode: string
+  languageLabel: string
+  languageFlag: string
   giverQty: number
   needQty: number
 }
@@ -135,13 +144,15 @@ export default function FriendTradePage() {
         return
       }
 
-      const mineByPrint = aggregateCollectionRows(
+      const myAggregate = aggregateCollectionRows(
         (myCollectionData as CollectionQuantityRow[] | null) || []
-      ).totalByPrintId
-
-      const friendByPrint = aggregateCollectionRows(
+      )
+      const friendAggregate = aggregateCollectionRows(
         (friendCollectionData as CollectionQuantityRow[] | null) || []
-      ).totalByPrintId
+      )
+
+      const mineByPrint = myAggregate.totalByPrintId
+      const friendByPrint = friendAggregate.totalByPrintId
 
       const relevantPrintIds = [
         ...new Set(
@@ -201,12 +212,8 @@ export default function FriendTradePage() {
       for (const print of prints) {
         const friendQty = friendByPrint.get(print.id) || 0
         const myQty = mineByPrint.get(print.id) || 0
-        const friendExtra = Math.max(friendQty - 1, 0)
-        const myExtra = Math.max(myQty - 1, 0)
-        const iNeed = myQty === 0 ? 1 : 0
-        const friendNeeds = friendQty === 0 ? 1 : 0
 
-        if (friendExtra === 0 && myExtra === 0) continue
+        if (friendQty <= 0 && myQty <= 0) continue
 
         const card = cardsById.get(print.card_id)
         const setCode = setById.get(print.distribution_set_id) || '?'
@@ -216,29 +223,54 @@ export default function FriendTradePage() {
           card?.card_translations?.[0]?.name ||
           fallbackName
 
-        const baseItem: Omit<TradeItem, 'giverQty' | 'needQty'> = {
-          id: print.id,
-          setCode,
-          displayCode: getDisplayPrintCode(print),
-          name,
-          rarity: card?.rarity || '-',
-          type: card?.type || '-'
-        }
+        const myLanguages = myAggregate.byPrintIdLanguage.get(print.id) || new Map<string, number>()
+        const friendLanguages =
+          friendAggregate.byPrintIdLanguage.get(print.id) || new Map<string, number>()
 
-        if (friendExtra > 0 && iNeed > 0) {
-          canGiveToMe.push({
-            ...baseItem,
-            giverQty: friendExtra,
-            needQty: iNeed
-          })
-        }
+        const relevantLanguages = new Set<string>([
+          ...myLanguages.keys(),
+          ...friendLanguages.keys()
+        ])
 
-        if (myExtra > 0 && friendNeeds > 0) {
-          canGiveToFriend.push({
-            ...baseItem,
-            giverQty: myExtra,
-            needQty: friendNeeds
-          })
+        for (const rawLanguageCode of relevantLanguages) {
+          const languageCode = normalizeCollectionLanguage(rawLanguageCode)
+          const friendLanguageQty = friendLanguages.get(languageCode) || 0
+          const myLanguageQty = myLanguages.get(languageCode) || 0
+          const friendExtra = Math.max(friendLanguageQty - 1, 0)
+          const myExtra = Math.max(myLanguageQty - 1, 0)
+          const iNeed = myLanguageQty === 0 ? 1 : 0
+          const friendNeeds = friendLanguageQty === 0 ? 1 : 0
+
+          if (friendExtra === 0 && myExtra === 0) continue
+
+          const baseItem: Omit<TradeItem, 'giverQty' | 'needQty'> = {
+            id: print.id,
+            itemKey: `${print.id}:${languageCode}`,
+            setCode,
+            displayCode: getDisplayPrintCode(print),
+            name,
+            rarity: card?.rarity || '-',
+            type: card?.type || '-',
+            languageCode,
+            languageLabel: getCollectionLanguageLabel(languageCode),
+            languageFlag: getCollectionLanguageFlag(languageCode)
+          }
+
+          if (friendExtra > 0 && iNeed > 0) {
+            canGiveToMe.push({
+              ...baseItem,
+              giverQty: friendExtra,
+              needQty: iNeed
+            })
+          }
+
+          if (myExtra > 0 && friendNeeds > 0) {
+            canGiveToFriend.push({
+              ...baseItem,
+              giverQty: myExtra,
+              needQty: friendNeeds
+            })
+          }
         }
       }
 
@@ -333,7 +365,7 @@ export default function FriendTradePage() {
                     <div style={{ display: 'grid', gap: 8, minWidth: 0 }}>
                       {setItems.map((item) => (
                         <div
-                          key={item.id}
+                          key={item.itemKey}
                           style={{
                             border: '1px solid #dbeafe',
                             borderRadius: 10,
@@ -352,7 +384,8 @@ export default function FriendTradePage() {
                           <div>
                             <div style={{ fontWeight: 600 }}>{item.name}</div>
                             <div style={{ fontSize: 12, color: '#475569' }}>
-                              {item.setCode} - {item.rarity} - {item.type}
+                              {item.setCode} - {item.rarity} - {item.type} - {item.languageFlag}{' '}
+                              {item.languageLabel}
                             </div>
                           </div>
                           <div

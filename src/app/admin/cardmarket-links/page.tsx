@@ -7,10 +7,14 @@ import { useAuth } from '@/lib/auth'
 import { isAdminEmail, parseAdminEmails } from '@/lib/admin'
 import { supabase } from '@/lib/supabaseClient'
 
+const PAGE_SIZE = 1000
+
 type SetOption = {
   id: string
   code: string
   name: string | null
+  printCount: number
+  unlinkedCount: number
 }
 
 type PrintRow = {
@@ -74,34 +78,62 @@ export default function AdminCardmarketLinksPage() {
       : ({} as Record<string, string>)
   }, [])
 
-  const loadSets = useCallback(async () => {
-    const { data: setsData } = await supabase
-      .from('sets')
-      .select('id, code, name')
-      .order('code')
-    const { data: printsData } = await supabase
-      .from('card_prints')
-      .select('id, distribution_set_id')
-    const { data: linksData } = await supabase
-      .from('cardmarket_print_links')
-      .select('card_print_id')
+  const fetchAllRows = useCallback(
+    async <T,>(queryFactory: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>) => {
+      const rows: T[] = []
+      let from = 0
 
-    const allSets = ((setsData as SetOption[] | null) || []).map((row) => ({
+      while (true) {
+        const to = from + PAGE_SIZE - 1
+        const result = await queryFactory(from, to)
+        if (result.error) {
+          throw new Error(result.error.message)
+        }
+
+        const batch = result.data || []
+        rows.push(...batch)
+
+        if (batch.length < PAGE_SIZE) break
+        from += PAGE_SIZE
+      }
+
+      return rows
+    },
+    []
+  )
+
+  const loadSets = useCallback(async () => {
+    const [setsData, printsData, linksData] = await Promise.all([
+      fetchAllRows<Pick<SetOption, 'id' | 'code' | 'name'>>((from, to) =>
+        supabase.from('sets').select('id, code, name').order('code').range(from, to)
+      ),
+      fetchAllRows<{ id: string; distribution_set_id: string }>((from, to) =>
+        supabase.from('card_prints').select('id, distribution_set_id').range(from, to)
+      ),
+      fetchAllRows<{ card_print_id: string }>((from, to) =>
+        supabase.from('cardmarket_print_links').select('card_print_id').range(from, to)
+      )
+    ])
+
+    const allSets = (setsData || []).map((row) => ({
       id: row.id,
       code: row.code,
-      name: row.name
+      name: row.name,
+      printCount: 0,
+      unlinkedCount: 0
     }))
 
     const linkedPrintIds = new Set(
-      (((linksData as Array<{ card_print_id: string }> | null) || []) as Array<{
-        card_print_id: string
-      }>).map((row) => row.card_print_id)
+      (linksData || []).map((row) => row.card_print_id)
     )
 
+    const printCountBySetId = new Map<string, number>()
     const unlinkedCountBySetId = new Map<string, number>()
-    for (const print of
-      (((printsData as Array<{ id: string; distribution_set_id: string }> | null) ||
-        []) as Array<{ id: string; distribution_set_id: string }>)) {
+    for (const print of printsData || []) {
+      printCountBySetId.set(
+        print.distribution_set_id,
+        (printCountBySetId.get(print.distribution_set_id) || 0) + 1
+      )
       if (linkedPrintIds.has(print.id)) continue
       unlinkedCountBySetId.set(
         print.distribution_set_id,
@@ -109,7 +141,11 @@ export default function AdminCardmarketLinksPage() {
       )
     }
 
-    const next = allSets.filter((set) => (unlinkedCountBySetId.get(set.id) || 0) > 0)
+    const next = allSets.map((set) => ({
+      ...set,
+      printCount: printCountBySetId.get(set.id) || 0,
+      unlinkedCount: unlinkedCountBySetId.get(set.id) || 0
+    }))
     setSets(next)
     if (!selectedSetCode && next.length > 0) {
       setSelectedSetCode(next[0].code)
@@ -119,7 +155,7 @@ export default function AdminCardmarketLinksPage() {
     ) {
       setSelectedSetCode(next[0]?.code || '')
     }
-  }, [selectedSetCode])
+  }, [fetchAllRows, selectedSetCode])
 
   const loadRows = useCallback(async () => {
     if (!selectedSetCode) return
@@ -337,7 +373,8 @@ export default function AdminCardmarketLinksPage() {
           >
             {sets.map((set) => (
               <option key={set.code} value={set.code}>
-                {set.code} - {set.name || set.code}
+                {set.code} - {set.name || set.code} ({set.unlinkedCount} non lies / {set.printCount}{' '}
+                prints)
               </option>
             ))}
           </select>
