@@ -168,6 +168,26 @@ export default function RootLayout({
                   </Link>
                 )}
 
+                {user && (
+                  <Link
+                    href="/community"
+                    style={{
+                      color: '#fffbeb',
+                      textDecoration: 'none',
+                      padding: '10px 14px',
+                      borderRadius: 999,
+                      background: 'rgba(15, 118, 110, 0.78)',
+                      border: '1px solid rgba(255,255,255,0.28)',
+                      fontWeight: 700,
+                      fontSize: 15,
+                      display: 'inline-flex',
+                      alignItems: 'center'
+                    }}
+                  >
+                    Contributions
+                  </Link>
+                )}
+
                 {user && canAccessAdmin && (
                   <Link
                     href="/admin"

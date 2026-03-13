@@ -57,6 +57,13 @@ export default function Home() {
           )}
           {user && (
             <LinkCard
+              href="/community"
+              title="Contributions"
+              text="Proposer des corrections, ajouter des cartes et monter dans le classement des contributeurs."
+            />
+          )}
+          {user && (
+            <LinkCard
               href="/friends"
               title="Amis"
               text="Comparer vos collections et preparer rapidement des echanges."

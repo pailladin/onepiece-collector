@@ -312,6 +312,21 @@ export default function AdminPage() {
         >
           Supervision cron
         </Link>
+        <Link
+          href="/admin/community"
+          style={{
+            background: '#7c2d12',
+            color: '#fff',
+            padding: '6px 10px',
+            borderRadius: 4,
+            textDecoration: 'none',
+            display: 'inline-flex',
+            alignItems: 'center',
+            marginLeft: 8
+          }}
+        >
+          Moderer les contributions
+        </Link>
       </div>
 
       <div
