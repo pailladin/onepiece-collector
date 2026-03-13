@@ -8,6 +8,8 @@ import { supabase } from '@/lib/supabaseClient'
 type Profile = {
   id: string
   username: string
+  postal_code?: string | null
+  discord_username?: string | null
 }
 
 type FriendRow = {
@@ -17,6 +19,8 @@ type FriendRow = {
 export default function FriendsPage() {
   const { user, loading } = useAuth()
   const [username, setUsername] = useState('')
+  const [postalCode, setPostalCode] = useState('')
+  const [discordUsername, setDiscordUsername] = useState('')
   const [search, setSearch] = useState('')
   const [searchResults, setSearchResults] = useState<Profile[]>([])
   const [friendIds, setFriendIds] = useState<Set<string>>(new Set())
@@ -57,11 +61,13 @@ export default function FriendsPage() {
 
       const { data: profile } = await supabase
         .from('profiles')
-        .select('id, username')
+        .select('id, username, postal_code, discord_username')
         .eq('id', user.id)
         .maybeSingle()
 
       setUsername(profile?.username || '')
+      setPostalCode(profile?.postal_code || '')
+      setDiscordUsername(profile?.discord_username || '')
       await loadFriends(user.id)
     }
 
@@ -93,11 +99,20 @@ export default function FriendsPage() {
 
     setMessage('')
     const value = username.trim()
+    const normalizedPostalCode = postalCode.trim()
+    const normalizedDiscordUsername = discordUsername.trim()
+
+    if (normalizedPostalCode && !/^\d{5}$/.test(normalizedPostalCode)) {
+      setMessage('Code postal invalide. Renseigne 5 chiffres.')
+      return
+    }
 
     const { error } = await supabase.from('profiles').upsert(
       {
         id: user.id,
-        username: value
+        username: value,
+        postal_code: normalizedPostalCode || null,
+        discord_username: normalizedDiscordUsername || null
       },
       { onConflict: 'id' }
     )
@@ -107,7 +122,7 @@ export default function FriendsPage() {
       return
     }
 
-    setMessage('Pseudo mis a jour.')
+    setMessage('Infos partagees mises a jour.')
   }
 
   const addFriend = async (friendId: string) => {
@@ -178,7 +193,9 @@ export default function FriendsPage() {
             background: '#ffffffd1'
           }}
         >
-          <h2 style={{ marginTop: 0, marginBottom: 10, color: '#0f172a' }}>Mon pseudo</h2>
+          <h2 style={{ marginTop: 0, marginBottom: 10, color: '#0f172a' }}>
+            Mes infos partagees
+          </h2>
           <div style={{ display: 'grid', gap: 8 }}>
             <input
               value={username}
@@ -192,6 +209,35 @@ export default function FriendsPage() {
                 border: '1px solid #cbd5e1'
               }}
             />
+            <input
+              value={discordUsername}
+              onChange={(e) => setDiscordUsername(e.target.value)}
+              placeholder="Pseudo Discord"
+              style={{
+                width: '100%',
+                boxSizing: 'border-box',
+                padding: '9px 10px',
+                borderRadius: 8,
+                border: '1px solid #cbd5e1'
+              }}
+            />
+            <input
+              value={postalCode}
+              onChange={(e) => setPostalCode(e.target.value.replace(/\D/g, '').slice(0, 5))}
+              placeholder="Code postal"
+              inputMode="numeric"
+              style={{
+                width: '100%',
+                boxSizing: 'border-box',
+                padding: '9px 10px',
+                borderRadius: 8,
+                border: '1px solid #cbd5e1'
+              }}
+            />
+            <div style={{ fontSize: 12, color: '#64748b' }}>
+              * Le code postal ne sera pas partage avec les autres. Il servira uniquement a
+              proposer, plus tard, une liste d&apos;amis possibles par departement.
+            </div>
             <button
               onClick={saveUsername}
               disabled={!canSaveUsername}
