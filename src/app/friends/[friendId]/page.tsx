@@ -4,11 +4,7 @@ import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
-import {
-  fetchUserSetStats,
-  type SetRow,
-  type SetStats
-} from '@/lib/collections/fetchUserSetStats'
+import { type SetRow, type SetStats } from '@/lib/collections/fetchUserSetStats'
 import { CollectionSetsGrid } from '@/components/CollectionSetsGrid'
 
 export default function FriendCollectionsPage() {
@@ -17,6 +13,7 @@ export default function FriendCollectionsPage() {
   const [friendUsername, setFriendUsername] = useState<string>('')
   const [sets, setSets] = useState<SetRow[]>([])
   const [stats, setStats] = useState<Record<string, SetStats>>({})
+  const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const visibleSets = useMemo(
     () => sets.filter((set) => (stats[set.code]?.owned || 0) > 0),
@@ -28,22 +25,32 @@ export default function FriendCollectionsPage() {
       if (!friendId) return
 
       setLoading(true)
+      setError(null)
 
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('username')
-        .eq('id', friendId)
-        .maybeSingle()
+      const { data: sessionData } = await supabase.auth.getSession()
+      const accessToken = sessionData.session?.access_token
 
-      setFriendUsername(profile?.username || 'Ami')
+      const res = await fetch(`/api/friends/${friendId}/sets`, {
+        headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {}
+      })
+      const data = await res.json().catch(() => ({}))
 
-      const data = await fetchUserSetStats(friendId)
-      setSets(data.sets)
-      setStats(data.stats)
+      if (!res.ok) {
+        setFriendUsername('Ami')
+        setSets([])
+        setStats({})
+        setError(data?.error || 'Erreur chargement collection ami')
+        setLoading(false)
+        return
+      }
+
+      setFriendUsername(data?.username || 'Ami')
+      setSets(Array.isArray(data?.sets) ? data.sets : [])
+      setStats(typeof data?.stats === 'object' && data.stats ? data.stats : {})
       setLoading(false)
     }
 
-    fetchData()
+    void fetchData()
   }, [friendId])
 
   if (!friendId) {
@@ -60,6 +67,16 @@ export default function FriendCollectionsPage() {
         <Link href="/friends">Retour aux amis</Link>
         <Link href={`/friends/${friendId}/trade`}>Voir echanges possibles</Link>
       </div>
+      {error && (
+        <div style={{ padding: '12px 40px 0', color: '#b91c1c', fontWeight: 600 }}>
+          {error}
+        </div>
+      )}
+      {!error && visibleSets.length === 0 && (
+        <div style={{ padding: '12px 40px 0', color: '#475569', fontWeight: 600 }}>
+          Cet ami n&apos;a pas encore de carte dans sa collection.
+        </div>
+      )}
       <CollectionSetsGrid
         title={`Collection de ${friendUsername}`}
         sets={visibleSets}

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getRequestUser } from '@/lib/server/authUser'
 import { isAdminEmail, parseAdminEmails } from '@/lib/admin'
+import { getPrintVariantLabel } from '@/lib/cards/printDisplay'
 import { DEFAULT_LOCALE } from '@/lib/locale'
 
 export const runtime = 'nodejs'
@@ -42,6 +43,7 @@ type CardRow = {
 }
 
 const CARD_IDS_CHUNK_SIZE = 100
+const PRINT_IDS_CHUNK_SIZE = 100
 
 function chunkArray<T>(values: T[], size: number): T[][] {
   const chunks: T[][] = []
@@ -130,20 +132,22 @@ export async function GET(
 
   const linksByPrintId = new Map<string, string>()
   if (printIds.length > 0) {
-    const { data: linksData, error: linksError } = await supabase
-      .from('cardmarket_print_links')
-      .select('card_print_id, cardmarket_product_id')
-      .in('card_print_id', printIds)
+    for (const chunk of chunkArray(printIds, PRINT_IDS_CHUNK_SIZE)) {
+      const { data: linksData, error: linksError } = await supabase
+        .from('cardmarket_print_links')
+        .select('card_print_id, cardmarket_product_id')
+        .in('card_print_id', chunk)
 
-    if (linksError) {
-      return NextResponse.json(
-        { error: `Erreur lecture liens Cardmarket: ${linksError.message}` },
-        { status: 500 }
-      )
-    }
+      if (linksError) {
+        return NextResponse.json(
+          { error: `Erreur lecture liens Cardmarket: ${linksError.message}` },
+          { status: 500 }
+        )
+      }
 
-    for (const row of (linksData as LinkRow[] | null) || []) {
-      linksByPrintId.set(row.card_print_id, row.cardmarket_product_id)
+      for (const row of (linksData as LinkRow[] | null) || []) {
+        linksByPrintId.set(row.card_print_id, row.cardmarket_product_id)
+      }
     }
   }
 
@@ -163,7 +167,7 @@ export async function GET(
       return {
         id: print.id,
         printCode: print.print_code,
-        variantType: print.variant_type || 'normal',
+        variantType: getPrintVariantLabel(print) || print.variant_type || 'Normal',
         imagePath: print.image_path,
         cardId: print.card_id,
         baseCode: card?.base_code || '',

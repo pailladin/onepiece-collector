@@ -8,6 +8,21 @@ import { useAuth } from '@/lib/auth'
 import { isAdminEmail, parseAdminEmails } from '@/lib/admin'
 import { SET_LANGUAGE_CODES, getCollectionLanguageShortLabel } from '@/lib/collections/languages'
 
+const CARD_TYPE_OPTIONS = ['Character', 'Event', 'Leader', 'Stage'] as const
+const VARIANT_TYPE_OPTIONS = ['Normal', 'Parallel', 'Foil', 'SP', 'Manga', 'Wanted Poster'] as const
+
+function normalizeVariantTypeOption(value: string) {
+  const normalized = value.trim().toLowerCase()
+  if (!normalized) return 'Normal'
+  if (normalized === 'normal') return 'Normal'
+  if (normalized === 'parallel') return 'Parallel'
+  if (normalized === 'foil') return 'Foil'
+  if (normalized === 'sp') return 'SP'
+  if (normalized === 'manga') return 'Manga'
+  if (normalized === 'wanted poster') return 'Wanted Poster'
+  return value.trim()
+}
+
 type SetPrintOption = {
   id: string
   printCode: string
@@ -49,7 +64,9 @@ export default function AdminEditCardPage() {
   const [editName, setEditName] = useState('')
   const [editRarity, setEditRarity] = useState('')
   const [editType, setEditType] = useState('')
-  const [editVariantType, setEditVariantType] = useState('normal')
+  const [editVariantType, setEditVariantType] = useState('Normal')
+  const [rarityOptions, setRarityOptions] = useState<string[]>([])
+  const [variantOptions, setVariantOptions] = useState<string[]>([...VARIANT_TYPE_OPTIONS])
   const [editImageUrl, setEditImageUrl] = useState('')
   const [editCardmarketProductId, setEditCardmarketProductId] = useState('')
   const [editAvailableLanguages, setEditAvailableLanguages] = useState<Record<string, boolean>>({})
@@ -139,15 +156,59 @@ export default function AdminEditCardPage() {
     setSetOptions(rows)
   }, [])
 
+  const loadFieldOptions = useCallback(async () => {
+    const [raritiesResult, variantsResult] = await Promise.all([
+      supabase.from('cards').select('rarity').not('rarity', 'is', null),
+      supabase.from('card_prints').select('variant_type').not('variant_type', 'is', null)
+    ])
+
+    const raritiesData = raritiesResult.data
+
+    setRarityOptions(
+      [
+        ...new Set(
+          (((raritiesData as Array<{ rarity: string | null }> | null) || []) as Array<{
+            rarity: string | null
+          }>)
+            .map((row) => String(row.rarity || '').trim())
+            .filter(Boolean)
+        )
+      ].sort((a, b) => a.localeCompare(b, 'fr'))
+    )
+
+    const baseVariantOptions = [...VARIANT_TYPE_OPTIONS]
+    const dbVariantOptions = [
+      ...new Set(
+        (((variantsResult.data as Array<{ variant_type: string | null }> | null) || []) as Array<{
+          variant_type: string | null
+        }>)
+          .map((row) => normalizeVariantTypeOption(String(row.variant_type || '')))
+          .filter(Boolean)
+      )
+    ]
+
+    setVariantOptions(
+      [...new Set([...baseVariantOptions, ...dbVariantOptions])].sort((a, b) =>
+        a.localeCompare(b, 'fr')
+      )
+    )
+  }, [])
+
   useEffect(() => {
     const selectedPrint = printOptions.find((row) => row.id === editPrintId)
     if (!selectedPrint) return
+    const normalizedVariantType = normalizeVariantTypeOption(selectedPrint.variantType || 'Normal')
     setEditBaseCode(selectedPrint.baseCode || '')
     setEditPrintCode(selectedPrint.printCode || '')
     setEditName(selectedPrint.name || '')
     setEditRarity(selectedPrint.rarity || '')
     setEditType(selectedPrint.type || '')
-    setEditVariantType(selectedPrint.variantType || 'normal')
+    setEditVariantType(normalizedVariantType)
+    setVariantOptions((prev) =>
+      prev.includes(normalizedVariantType)
+        ? prev
+        : [...prev, normalizedVariantType].sort((a, b) => a.localeCompare(b, 'fr'))
+    )
     setEditCardmarketProductId(selectedPrint.cardmarketProductId || '')
     setEditAvailableLanguages(
       Object.fromEntries(
@@ -173,9 +234,10 @@ export default function AdminEditCardPage() {
       return
     }
     if (!code) return
+    loadFieldOptions()
     loadSetOptions()
     loadSetPrints()
-  }, [canAccessAdmin, code, loadSetOptions, loadSetPrints])
+  }, [canAccessAdmin, code, loadFieldOptions, loadSetOptions, loadSetPrints])
 
   const updateSelectedPrint = async () => {
     if (!editPrintId || isUpdatingCard) return
@@ -198,7 +260,7 @@ export default function AdminEditCardPage() {
           name: editName.trim(),
           rarity: editRarity.trim(),
           type: editType.trim(),
-          variantType: editVariantType.trim() || 'normal',
+          variantType: editVariantType.trim() || 'Normal',
           availableLanguages: SET_LANGUAGE_CODES.filter((language) => editAvailableLanguages[language]),
           targetSetCode: editTargetSetCode.trim().toUpperCase() || code,
           imageUrl: editImageUrl.trim(),
@@ -303,21 +365,30 @@ export default function AdminEditCardPage() {
                 value={editName}
                 onChange={(e) => setEditName(e.target.value)}
               />
-              <input
-                placeholder="Rarete"
-                value={editRarity}
-                onChange={(e) => setEditRarity(e.target.value)}
-              />
-              <input
-                placeholder="Type"
-                value={editType}
-                onChange={(e) => setEditType(e.target.value)}
-              />
-              <input
-                placeholder="Variant type"
-                value={editVariantType}
-                onChange={(e) => setEditVariantType(e.target.value)}
-              />
+              <select value={editRarity} onChange={(e) => setEditRarity(e.target.value)}>
+                <option value="">Rarete</option>
+                {rarityOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+              <select value={editType} onChange={(e) => setEditType(e.target.value)}>
+                <option value="">Type</option>
+                {CARD_TYPE_OPTIONS.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+              <select value={editVariantType} onChange={(e) => setEditVariantType(e.target.value)}>
+                <option value="">Variant type</option>
+                {variantOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
               <input
                 placeholder="ID Cardmarket"
                 value={editCardmarketProductId}

@@ -1,12 +1,27 @@
 'use client'
 
 import Link from 'next/link'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 import { useAuth } from '@/lib/auth'
 import { isAdminEmail, parseAdminEmails } from '@/lib/admin'
 import { SET_LANGUAGE_CODES, getCollectionLanguageShortLabel } from '@/lib/collections/languages'
+
+const CARD_TYPE_OPTIONS = ['Character', 'Event', 'Leader', 'Stage'] as const
+const VARIANT_TYPE_OPTIONS = ['Normal', 'Parallel', 'Foil', 'SP', 'Manga', 'Wanted Poster'] as const
+
+function normalizeVariantTypeOption(value: string) {
+  const normalized = value.trim().toLowerCase()
+  if (!normalized) return 'Normal'
+  if (normalized === 'normal') return 'Normal'
+  if (normalized === 'parallel') return 'Parallel'
+  if (normalized === 'foil') return 'Foil'
+  if (normalized === 'sp') return 'SP'
+  if (normalized === 'manga') return 'Manga'
+  if (normalized === 'wanted poster') return 'Wanted Poster'
+  return value.trim()
+}
 
 export default function AdminCreateCardPage() {
   const { user, loading: authLoading } = useAuth()
@@ -21,7 +36,8 @@ export default function AdminCreateCardPage() {
   const [name, setName] = useState('')
   const [rarity, setRarity] = useState('')
   const [type, setType] = useState('')
-  const [variantType, setVariantType] = useState('normal')
+  const [variantType, setVariantType] = useState('Normal')
+  const [rarityOptions, setRarityOptions] = useState<string[]>([])
   const [imageUrl, setImageUrl] = useState('')
   const [availableLanguages, setAvailableLanguages] = useState<Record<string, boolean>>({})
   const [cardmarketProductId, setCardmarketProductId] = useState('')
@@ -43,6 +59,27 @@ export default function AdminCreateCardPage() {
       : ({} as Record<string, string>)
   }
 
+  const loadFieldOptions = async () => {
+    const { data: raritiesData } = await supabase.from('cards').select('rarity').not('rarity', 'is', null)
+
+    setRarityOptions(
+      [
+        ...new Set(
+          (((raritiesData as Array<{ rarity: string | null }> | null) || []) as Array<{
+            rarity: string | null
+          }>)
+            .map((row) => String(row.rarity || '').trim())
+            .filter(Boolean)
+        )
+      ].sort((a, b) => a.localeCompare(b, 'fr'))
+    )
+  }
+
+  useEffect(() => {
+    if (!canAccessAdmin) return
+    void loadFieldOptions()
+  }, [canAccessAdmin])
+
   const handleSubmit = async () => {
     if (!canSubmit || isSaving) return
 
@@ -62,7 +99,7 @@ export default function AdminCreateCardPage() {
           name: name.trim(),
           rarity: rarity.trim(),
           type: type.trim(),
-          variantType: variantType.trim() || 'normal',
+          variantType: variantType.trim() || 'Normal',
           imageUrl: imageUrl.trim(),
           cardmarketProductId: cardmarketProductId.trim(),
           availableLanguages: SET_LANGUAGE_CODES.filter((language) => availableLanguages[language])
@@ -104,7 +141,7 @@ export default function AdminCreateCardPage() {
       const nextName = toText(parsed.name)
       const nextRarity = toText(parsed.rarity)
       const nextType = toText(parsed.type)
-      const nextVariant = toText(parsed.variant_type ?? parsed.variantType) || 'normal'
+      const nextVariant = normalizeVariantTypeOption(toText(parsed.variant_type ?? parsed.variantType))
       const nextImage = toText(parsed.image_url ?? parsed.imageUrl)
       const nextCardmarketId = toText(
         parsed.cardmarket_product_id ?? parsed.cardmarketProductId ?? parsed.id_cardmarket
@@ -147,7 +184,7 @@ export default function AdminCreateCardPage() {
       name: name.trim(),
       rarity: rarity.trim(),
       type: type.trim(),
-      variant_type: variantType.trim() || 'normal',
+      variant_type: variantType.trim() || 'Normal',
       image_url: imageUrl.trim() || null,
       cardmarket_product_id: cardmarketProductId.trim() || null,
       available_languages: SET_LANGUAGE_CODES.filter((language) => availableLanguages[language])
@@ -230,21 +267,30 @@ export default function AdminCreateCardPage() {
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
-          <input
-            placeholder="Rarete (ex: UC)"
-            value={rarity}
-            onChange={(e) => setRarity(e.target.value)}
-          />
-          <input
-            placeholder="Type (ex: Character)"
-            value={type}
-            onChange={(e) => setType(e.target.value)}
-          />
-          <input
-            placeholder="Variant type (normal, Foil, Parallel...)"
-            value={variantType}
-            onChange={(e) => setVariantType(e.target.value)}
-          />
+          <select value={rarity} onChange={(e) => setRarity(e.target.value)}>
+            <option value="">Rarete</option>
+            {rarityOptions.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+          <select value={type} onChange={(e) => setType(e.target.value)}>
+            <option value="">Type</option>
+            {CARD_TYPE_OPTIONS.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+          <select value={variantType} onChange={(e) => setVariantType(e.target.value)}>
+            <option value="">Variant type</option>
+            {VARIANT_TYPE_OPTIONS.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
           <input
             placeholder="ID Cardmarket (optionnel, ex: 870973)"
             value={cardmarketProductId}
