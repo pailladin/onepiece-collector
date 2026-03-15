@@ -2,8 +2,23 @@ import { supabaseServiceServer } from '@/lib/server/supabaseServer'
 import CatalogueSetsBrowser, {
   type CatalogueSetRow
 } from '@/components/CatalogueSetsBrowser'
+import type { Metadata } from 'next'
 
 export const dynamic = 'force-dynamic'
+
+export const metadata: Metadata = {
+  title: 'Catalogue des sets One Piece TCG',
+  description:
+    'Parcours tous les sets One Piece Card Game, ouvre chaque extension et explore les cartes, raretes, types et variantes.',
+  alternates: {
+    canonical: '/catalogue'
+  },
+  openGraph: {
+    title: 'Catalogue des sets One Piece TCG',
+    description:
+      'Tous les sets One Piece Card Game avec acces aux cartes, raretes, types et variantes.'
+  }
+}
 
 async function fetchSets() {
   const { data, error } = await supabaseServiceServer

@@ -1,23 +1,16 @@
-'use client'
+import type { Metadata } from 'next'
+import { SharedSetPageClient } from '@/components/SharedSetPageClient'
 
-import { useParams } from 'next/navigation'
-import { CollectionSetView } from '@/components/CollectionSetView'
+export const metadata: Metadata = {
+  title: 'Collection partagee',
+  description: 'Vue partagee d un set de collection One Piece.',
+  robots: {
+    index: false,
+    follow: false
+  }
+}
 
 export default function SharedSetPage() {
-  const params = useParams()
-  const token = Array.isArray(params.token) ? params.token[0] : params.token
-  const code = Array.isArray(params.code) ? params.code[0] : params.code
-
-  if (!token || !code) {
-    return <div style={{ padding: 40 }}>Lien de partage invalide.</div>
-  }
-
-  return (
-    <CollectionSetView
-      code={code}
-      editable={false}
-      shareToken={token}
-      title={`Collection partagee - ${code}`}
-    />
-  )
+  return <SharedSetPageClient />
 }
+
