@@ -26,6 +26,8 @@ import {
   aggregateCollectionRows,
   type CollectionQuantityRow
 } from '@/lib/collections/quantities'
+import { WishlistHeartButton } from '@/components/WishlistHeartButton'
+import { useWishlist } from '@/lib/useWishlist'
 
 const STORAGE_BASE_URL = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/cards-images`
 const MISSING_IMAGE_PATH = '__missing__'
@@ -169,6 +171,7 @@ export function CollectionSetView({
   shareToken = null
 }: Props) {
   const { user } = useAuth()
+  const { isWishlisted, toggleWishlist, busyPrintId } = useWishlist(user?.id)
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -835,9 +838,9 @@ export function CollectionSetView({
           border: '#9ca3af'
         }
 
-        return (
-          <div
-            key={item.id}
+              return (
+            <div
+              key={item.id}
             style={{
               border: `2px solid ${
                 isFoil ? '#f5c84c' : isAlt ? rarityTheme.border : '#d1d5db'
@@ -855,16 +858,23 @@ export function CollectionSetView({
                   ? `0 10px 24px -14px ${rarityTheme.border}`
                   : '0 8px 20px -18px #374151'
             }}
-          >
-            {isAlt && (
-              <div
-                style={{
-                  position: 'absolute',
-                  top: 8,
-                  right: 8,
-                  fontSize: 10,
-                  fontWeight: 700,
-                  letterSpacing: 0.5,
+            >
+              {user && (
+                <WishlistHeartButton
+                  active={isWishlisted(item.id)}
+                  busy={busyPrintId === item.id}
+                  onToggle={() => void toggleWishlist(item.id)}
+                />
+              )}
+              {isAlt && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: 8,
+                    right: user ? 44 : 8,
+                    fontSize: 10,
+                    fontWeight: 700,
+                    letterSpacing: 0.5,
                   background: '#111827',
                   color: '#fff',
                   borderRadius: 999,

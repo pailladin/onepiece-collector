@@ -451,6 +451,19 @@ export default function CollectionPage() {
         headerActions={
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <Link
+              href="/collection/wishlist"
+              style={{
+                border: '1px solid #db2777',
+                background: '#db2777',
+                color: '#fff',
+                borderRadius: 8,
+                padding: '8px 12px',
+                textDecoration: 'none'
+              }}
+            >
+              Wishlist
+            </Link>
+            <Link
               href="/collection/history"
               style={{
                 border: '1px solid #1d4ed8',

@@ -26,6 +26,8 @@ import {
   resolveAvailableLanguages,
   resolveSetLanguages
 } from '@/lib/collections/languages'
+import { WishlistHeartButton } from '@/components/WishlistHeartButton'
+import { useWishlist } from '@/lib/useWishlist'
 
 const STORAGE_BASE_URL = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/cards-images`
 const MISSING_IMAGE_PATH = '__missing__'
@@ -75,6 +77,7 @@ const ALT_RARITY_THEME: Record<string, { background: string; border: string }> =
 
 export function CatalogueSetPageClient() {
   const { user } = useAuth()
+  const { isWishlisted, toggleWishlist, busyPrintId } = useWishlist(user?.id)
   const params = useParams()
   const code = Array.isArray(params.code) ? params.code[0] : params.code
   const normalizedCode = (code || '').toString().replace('-', '').toUpperCase()
@@ -572,12 +575,19 @@ export function CatalogueSetPageClient() {
                     : '0 8px 20px -18px #374151'
               }}
             >
+              {user && (
+                <WishlistHeartButton
+                  active={isWishlisted(item.id)}
+                  busy={busyPrintId === item.id}
+                  onToggle={() => void toggleWishlist(item.id)}
+                />
+              )}
               {isAlt && (
                 <div
                   style={{
                     position: 'absolute',
                     top: 8,
-                    right: 8,
+                    right: user ? 44 : 8,
                     fontSize: 10,
                     fontWeight: 700,
                     letterSpacing: 0.5,
@@ -694,4 +704,3 @@ export function CatalogueSetPageClient() {
     </div>
   )
 }
-
