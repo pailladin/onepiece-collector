@@ -16,6 +16,7 @@ export function RootShell({
   const adminEmails = parseAdminEmails(process.env.NEXT_PUBLIC_ADMIN_EMAILS)
   const canAccessAdmin = isAdminEmail(user?.email, adminEmails)
   const [hasPendingFriendRequests, setHasPendingFriendRequests] = useState(false)
+  const [hasPendingAdminSubmissions, setHasPendingAdminSubmissions] = useState(false)
 
   useEffect(() => {
     const loadPendingRequests = async () => {
@@ -40,6 +41,29 @@ export function RootShell({
 
     void loadPendingRequests()
   }, [user])
+
+  useEffect(() => {
+    const loadPendingAdminSubmissions = async () => {
+      if (!user || !canAccessAdmin) {
+        setHasPendingAdminSubmissions(false)
+        return
+      }
+
+      const { count, error } = await supabase
+        .from('community_submissions')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'pending')
+
+      if (error) {
+        setHasPendingAdminSubmissions(false)
+        return
+      }
+
+      setHasPendingAdminSubmissions((count || 0) > 0)
+    }
+
+    void loadPendingAdminSubmissions()
+  }, [user, canAccessAdmin])
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
@@ -208,7 +232,10 @@ export function RootShell({
                       fontSize: 16,
                       display: 'inline-flex',
                       alignItems: 'center',
-                      gap: 7
+                      gap: 7,
+                      boxShadow: hasPendingAdminSubmissions
+                        ? '0 0 0 3px rgba(250, 204, 21, 0.98), 0 0 22px rgba(245, 158, 11, 0.75)'
+                        : 'none'
                     }}
                   >
                     <Image src="/op-jolly.svg" alt="" width={13} height={13} />
@@ -267,4 +294,3 @@ export function RootShell({
     </html>
   )
 }
-
