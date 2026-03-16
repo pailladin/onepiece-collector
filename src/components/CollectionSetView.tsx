@@ -793,10 +793,10 @@ export function CollectionSetView({
 
   const totalCount = items.length
   const ownedCount = ownedItemsAll.length
-  const missingCount = Math.max(totalCount - ownedCount, 0)
+  const missingCount = missingItemsAll.length
   const lifePercent = totalCount > 0 ? Math.round((ownedCount / totalCount) * 100) : 0
-  const altCount = items.filter((item) => isAltVersion(item)).length
-  const normalCount = totalCount - altCount
+  const ownedAltCount = ownedItemsAll.filter((item) => isAltVersion(item)).length
+  const ownedNormalCount = ownedCount - ownedAltCount
 
   const renderGrid = (data: any[]) => (
     <div
@@ -1018,7 +1018,7 @@ export function CollectionSetView({
                 padding: '4px 10px'
               }}
             >
-              Normales: <strong>{normalCount}</strong>
+              Normales possedees: <strong>{ownedNormalCount}</strong>
             </div>
             <div
               style={{
@@ -1029,7 +1029,7 @@ export function CollectionSetView({
                 padding: '4px 10px'
               }}
             >
-              Alternatives: <strong>{altCount}</strong>
+              Alternatives possedees: <strong>{ownedAltCount}</strong>
             </div>
             <div
               style={{
