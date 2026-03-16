@@ -13,10 +13,15 @@ export type CardmarketTrend = {
 
 export type SetPricingResult = {
   prices: Record<string, number>
+  pricesByPrintId: Record<string, number>
   sources: Record<string, PriceSource>
+  sourcesByPrintId: Record<string, PriceSource>
   cardmarketProductIds: Record<string, string>
+  cardmarketProductIdsByPrintId: Record<string, string>
   cardmarketRanges: Record<string, CardmarketRange>
+  cardmarketRangesByPrintId: Record<string, CardmarketRange>
   cardmarketTrends: Record<string, CardmarketTrend>
+  cardmarketTrendsByPrintId: Record<string, CardmarketTrend>
   warnings: string[]
 }
 
@@ -96,15 +101,36 @@ function weightedAverage(parts: Array<{ value: number | null; weight: number }>)
   return sum / weightSum
 }
 
+function buildResult(params: {
+  prices: Record<string, number>
+  pricesByPrintId: Record<string, number>
+  sources: Record<string, PriceSource>
+  sourcesByPrintId: Record<string, PriceSource>
+  cardmarketProductIds: Record<string, string>
+  cardmarketProductIdsByPrintId: Record<string, string>
+  cardmarketRanges: Record<string, CardmarketRange>
+  cardmarketRangesByPrintId: Record<string, CardmarketRange>
+  cardmarketTrends: Record<string, CardmarketTrend>
+  cardmarketTrendsByPrintId: Record<string, CardmarketTrend>
+  warnings: string[]
+}): SetPricingResult {
+  return params
+}
+
 export async function getSetPricing(setCode: string): Promise<SetPricingResult> {
   const normalizedSetCode = normalizeSetCode(setCode)
   const apiSetCode = formatApiSetCode(setCode)
 
   const prices: Record<string, number> = {}
+  const pricesByPrintId: Record<string, number> = {}
   const sources: Record<string, PriceSource> = {}
+  const sourcesByPrintId: Record<string, PriceSource> = {}
   const cardmarketProductIds: Record<string, string> = {}
+  const cardmarketProductIdsByPrintId: Record<string, string> = {}
   const cardmarketRanges: Record<string, CardmarketRange> = {}
+  const cardmarketRangesByPrintId: Record<string, CardmarketRange> = {}
   const cardmarketTrends: Record<string, CardmarketTrend> = {}
+  const cardmarketTrendsByPrintId: Record<string, CardmarketTrend> = {}
   const warnings: string[] = []
 
   if (normalizedSetCode !== 'PROMO') {
@@ -134,7 +160,19 @@ export async function getSetPricing(setCode: string): Promise<SetPricingResult> 
     .maybeSingle()
 
   if (!setData?.id) {
-    return { prices, sources, cardmarketProductIds, cardmarketRanges, cardmarketTrends, warnings }
+    return buildResult({
+      prices,
+      pricesByPrintId,
+      sources,
+      sourcesByPrintId,
+      cardmarketProductIds,
+      cardmarketProductIdsByPrintId,
+      cardmarketRanges,
+      cardmarketRangesByPrintId,
+      cardmarketTrends,
+      cardmarketTrendsByPrintId,
+      warnings
+    })
   }
 
   const { data: printsData } = await supabaseServiceServer
@@ -148,7 +186,19 @@ export async function getSetPricing(setCode: string): Promise<SetPricingResult> 
     )
 
   if (prints.length === 0) {
-    return { prices, sources, cardmarketProductIds, cardmarketRanges, cardmarketTrends, warnings }
+    return buildResult({
+      prices,
+      pricesByPrintId,
+      sources,
+      sourcesByPrintId,
+      cardmarketProductIds,
+      cardmarketProductIdsByPrintId,
+      cardmarketRanges,
+      cardmarketRangesByPrintId,
+      cardmarketTrends,
+      cardmarketTrendsByPrintId,
+      warnings
+    })
   }
 
   const printCodeById = new Map<string, string>()
@@ -176,11 +226,24 @@ export async function getSetPricing(setCode: string): Promise<SetPricingResult> 
     const printCode = printCodeById.get(link.card_print_id)
     if (!printCode || !link.cardmarket_product_id) continue
     cardmarketProductIds[printCode] = link.cardmarket_product_id
+    cardmarketProductIdsByPrintId[link.card_print_id] = link.cardmarket_product_id
   }
 
   const productIds = [...new Set(links.map((row) => row.cardmarket_product_id).filter(Boolean))]
   if (productIds.length === 0) {
-    return { prices, sources, cardmarketProductIds, cardmarketRanges, cardmarketTrends, warnings }
+    return buildResult({
+      prices,
+      pricesByPrintId,
+      sources,
+      sourcesByPrintId,
+      cardmarketProductIds,
+      cardmarketProductIdsByPrintId,
+      cardmarketRanges,
+      cardmarketRangesByPrintId,
+      cardmarketTrends,
+      cardmarketTrendsByPrintId,
+      warnings
+    })
   }
 
   const catalogRows: Array<{
@@ -307,6 +370,7 @@ export async function getSetPricing(setCode: string): Promise<SetPricingResult> 
   }
 
   for (const link of links) {
+    const printId = link.card_print_id
     const printCode = printCodeById.get(link.card_print_id)
     if (!printCode) continue
     const current = byProductId.get(link.cardmarket_product_id)
@@ -318,13 +382,18 @@ export async function getSetPricing(setCode: string): Promise<SetPricingResult> 
     // Linked print => source must be Cardmarket only.
     delete prices[printCode]
     delete sources[printCode]
+    delete pricesByPrintId[printId]
+    delete sourcesByPrintId[printId]
 
     if (calcPrice != null && Number.isFinite(calcPrice)) {
       prices[printCode] = calcPrice
+      pricesByPrintId[printId] = calcPrice
       sources[printCode] = 'cardmarket'
+      sourcesByPrintId[printId] = 'cardmarket'
     }
     if (range) {
       cardmarketRanges[printCode] = range
+      cardmarketRangesByPrintId[printId] = range
     }
 
     const currentPrice = pickCardmarketPrice(range)
@@ -362,14 +431,28 @@ export async function getSetPricing(setCode: string): Promise<SetPricingResult> 
       else direction = 'flat'
     }
 
-    cardmarketTrends[printCode] = {
+    const trendPayload = {
       direction,
       score,
       pct1d,
       pct7d,
       pct30d
     }
+    cardmarketTrends[printCode] = trendPayload
+    cardmarketTrendsByPrintId[printId] = trendPayload
   }
 
-  return { prices, sources, cardmarketProductIds, cardmarketRanges, cardmarketTrends, warnings }
+  return buildResult({
+    prices,
+    pricesByPrintId,
+    sources,
+    sourcesByPrintId,
+    cardmarketProductIds,
+    cardmarketProductIdsByPrintId,
+    cardmarketRanges,
+    cardmarketRangesByPrintId,
+    cardmarketTrends,
+    cardmarketTrendsByPrintId,
+    warnings
+  })
 }

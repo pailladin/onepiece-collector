@@ -229,9 +229,22 @@ export default function CollectionWishlistPage() {
       const pricingBySet = new Map<
         string,
         {
+          pricesByPrintId: Record<string, number>
           prices: Record<string, number>
+          productIdsByPrintId: Record<string, string>
           productIds: Record<string, string>
+          rangesByPrintId: Record<string, { low: number | null; avg: number | null }>
           ranges: Record<string, { low: number | null; avg: number | null }>
+          trendsByPrintId: Record<
+            string,
+            {
+              direction?: 'up' | 'down' | 'flat' | 'unknown'
+              score?: number | null
+              pct1d?: number | null
+              pct7d?: number | null
+              pct30d?: number | null
+            }
+          >
           trends: Record<
             string,
             {
@@ -249,9 +262,13 @@ export default function CollectionWishlistPage() {
         const res = await fetch(`/api/optcg/prices/${encodeURIComponent(setCode)}`)
         const data = await res.json().catch(() => ({}))
         pricingBySet.set(setCode, {
+          pricesByPrintId: res.ok ? data?.pricesByPrintId || {} : {},
           prices: res.ok ? data?.prices || {} : {},
+          productIdsByPrintId: res.ok ? data?.cardmarketProductIdsByPrintId || {} : {},
           productIds: res.ok ? data?.cardmarketProductIds || {} : {},
+          rangesByPrintId: res.ok ? data?.cardmarketRangesByPrintId || {} : {},
           ranges: res.ok ? data?.cardmarketRanges || {} : {},
+          trendsByPrintId: res.ok ? data?.cardmarketTrendsByPrintId || {} : {},
           trends: res.ok ? data?.cardmarketTrends || {} : {}
         })
       }
@@ -260,18 +277,20 @@ export default function CollectionWishlistPage() {
         nextItems.map((item) => {
           const printCode = String(item.print_code || '').trim().toUpperCase()
           const pricing = pricingBySet.get(item.setCode)
-          const priceValue = Number(pricing?.prices?.[printCode])
+          const priceValue = Number(pricing?.pricesByPrintId?.[item.id] ?? pricing?.prices?.[printCode])
           const unitPrice = Number.isFinite(priceValue) ? priceValue : null
-          const trend = pricing?.trends?.[printCode] || {}
-          const lowValue = Number(pricing?.ranges?.[printCode]?.low)
-          const avgValue = Number(pricing?.ranges?.[printCode]?.avg)
+          const trend = pricing?.trendsByPrintId?.[item.id] || pricing?.trends?.[printCode] || {}
+          const range = pricing?.rangesByPrintId?.[item.id] || pricing?.ranges?.[printCode]
+          const lowValue = Number(range?.low)
+          const avgValue = Number(range?.avg)
           const low = Number.isFinite(lowValue) ? lowValue : null
           const avg = Number.isFinite(avgValue) ? avgValue : null
 
           return {
             ...item,
             price: unitPrice,
-            cardmarketProductId: pricing?.productIds?.[printCode] || null,
+            cardmarketProductId:
+              pricing?.productIdsByPrintId?.[item.id] || pricing?.productIds?.[printCode] || null,
             low,
             avg,
             trendDirection: trend.direction || 'unknown',

@@ -207,7 +207,7 @@ export default function CollectionPage() {
 
       const setById = new Map(sets.map((set) => [set.id, set]))
       const printById = new Map(printRows.map((row) => [row.id, row]))
-      const bySet = new Map<string, Array<{ printCode: string; quantity: number }>>()
+      const bySet = new Map<string, Array<{ printId: string; printCode: string; quantity: number }>>()
 
       for (const [printId, quantity] of totalByPrintId.entries()) {
         const print = printById.get(printId)
@@ -221,6 +221,7 @@ export default function CollectionPage() {
 
         if (!bySet.has(setRow.code)) bySet.set(setRow.code, [])
         bySet.get(setRow.code)?.push({
+          printId,
           printCode,
           quantity
         })
@@ -239,7 +240,9 @@ export default function CollectionPage() {
 
           const res = await fetch(`/api/optcg/prices/${setCode}`)
           const data = await res.json().catch(() => ({}))
+          const pricesByPrintId: Record<string, number> = res.ok ? data?.pricesByPrintId || {} : {}
           const prices: Record<string, number> = res.ok ? data?.prices || {} : {}
+          const sourcesByPrintId: Record<string, 'cardmarket' | 'us'> = res.ok ? data?.sourcesByPrintId || {} : {}
           const sources: Record<string, 'cardmarket' | 'us'> = res.ok ? data?.sources || {} : {}
 
           let setTotal = 0
@@ -247,12 +250,12 @@ export default function CollectionPage() {
           let setUsFallbackCount = 0
 
           for (const ownedPrint of ownedPrints) {
-            const unitPrice = prices[ownedPrint.printCode]
+            const unitPrice = pricesByPrintId[ownedPrint.printId] ?? prices[ownedPrint.printCode]
             if (!Number.isFinite(unitPrice)) continue
 
             setPricedCount += 1
             setTotal += unitPrice * ownedPrint.quantity
-            if (sources[ownedPrint.printCode] !== 'cardmarket') {
+            if ((sourcesByPrintId[ownedPrint.printId] ?? sources[ownedPrint.printCode]) !== 'cardmarket') {
               setUsFallbackCount += 1
             }
           }
@@ -360,11 +363,18 @@ export default function CollectionPage() {
           const pricing = await res.json().catch(() => ({}))
           if (!res.ok) return [] as OpportunityRow[]
 
+          const pricesByPrintId: Record<string, number> = pricing?.pricesByPrintId || {}
           const prices: Record<string, number> = pricing?.prices || {}
+          const sourcesByPrintId: Record<string, 'cardmarket' | 'us'> = pricing?.sourcesByPrintId || {}
           const sources: Record<string, 'cardmarket' | 'us'> = pricing?.sources || {}
+          const rangesByPrintId: Record<string, { low: number | null; avg: number | null }> =
+            pricing?.cardmarketRangesByPrintId || {}
           const ranges: Record<string, { low: number | null; avg: number | null }> =
             pricing?.cardmarketRanges || {}
+          const cardmarketProductIdsByPrintId: Record<string, string> =
+            pricing?.cardmarketProductIdsByPrintId || {}
           const cardmarketProductIds: Record<string, string> = pricing?.cardmarketProductIds || {}
+          const trendsByPrintId: Record<string, OpportunityTrend> = pricing?.cardmarketTrendsByPrintId || {}
           const trends: Record<string, OpportunityTrend> = pricing?.cardmarketTrends || {}
 
           const localRows: OpportunityRow[] = []
@@ -375,19 +385,19 @@ export default function CollectionPage() {
             const printCode = (print.print_code || '').trim().toUpperCase()
             if (!printCode) continue
 
-            const unitPrice = asFinite(prices[printCode])
+            const unitPrice = asFinite(pricesByPrintId[print.id] ?? prices[printCode])
             if (unitPrice == null) continue
-            if (sources[printCode] !== 'cardmarket') continue
+            if ((sourcesByPrintId[print.id] ?? sources[printCode]) !== 'cardmarket') continue
 
-            const trend = trends[printCode] || {
+            const trend = trendsByPrintId[print.id] || trends[printCode] || {
               direction: 'unknown',
               score: null,
               pct1d: null,
               pct7d: null,
               pct30d: null
             }
-            const low = asFinite(ranges[printCode]?.low)
-            const avg = asFinite(ranges[printCode]?.avg)
+            const low = asFinite((rangesByPrintId[print.id] || ranges[printCode])?.low)
+            const avg = asFinite((rangesByPrintId[print.id] || ranges[printCode])?.avg)
 
             const scoring = calculateInterestIndex({
               trend,
@@ -404,7 +414,8 @@ export default function CollectionPage() {
               setCode: setRow.code,
               printCode,
               cardName: cardNameById.get(print.card_id) || printCode,
-              cardmarketProductId: cardmarketProductIds[printCode] || null,
+              cardmarketProductId:
+                cardmarketProductIdsByPrintId[print.id] || cardmarketProductIds[printCode] || null,
               unitPrice,
               low,
               avg,

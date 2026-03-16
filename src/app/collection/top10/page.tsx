@@ -153,9 +153,9 @@ export default function CollectionTop10Page() {
         const setById = new Map(sets.map((row) => [row.id, row]))
         const printById = new Map(prints.map((row) => [row.id, row]))
         const cardById = new Map(cards.map((row) => [row.id, row]))
-        const pricesByPrintCode = new Map<string, number>()
-        const sourceByPrintCode = new Map<string, PriceSource>()
-        const productIdByPrintCode = new Map<string, string>()
+        const pricesByPrintId = new Map<string, number>()
+        const sourceByPrintId = new Map<string, PriceSource>()
+        const productIdByPrintId = new Map<string, string>()
 
         const setCodes = [...new Set(sets.map((set) => set.code))]
         await Promise.all(
@@ -164,22 +164,19 @@ export default function CollectionTop10Page() {
             const data = await res.json().catch(() => ({}))
             if (!res.ok) return
 
-            const prices: Record<string, number> = data?.prices || {}
-            const sources: Record<string, PriceSource> = data?.sources || {}
-            const cardmarketProductIds: Record<string, string> = data?.cardmarketProductIds || {}
+            const prices: Record<string, number> = data?.pricesByPrintId || {}
+            const sources: Record<string, PriceSource> = data?.sourcesByPrintId || {}
+            const cardmarketProductIds: Record<string, string> = data?.cardmarketProductIdsByPrintId || {}
 
-            for (const [printCode, value] of Object.entries(prices)) {
+            for (const [printId, value] of Object.entries(prices)) {
               if (!Number.isFinite(value)) continue
-              pricesByPrintCode.set(normalizePrintCode(printCode), value)
-              sourceByPrintCode.set(
-                normalizePrintCode(printCode),
-                sources[printCode] === 'cardmarket' ? 'cardmarket' : 'us'
-              )
+              pricesByPrintId.set(printId, value)
+              sourceByPrintId.set(printId, sources[printId] === 'cardmarket' ? 'cardmarket' : 'us')
             }
 
-            for (const [printCode, productId] of Object.entries(cardmarketProductIds)) {
+            for (const [printId, productId] of Object.entries(cardmarketProductIds)) {
               if (!productId) continue
-              productIdByPrintCode.set(normalizePrintCode(printCode), String(productId))
+              productIdByPrintId.set(printId, String(productId))
             }
           })
         )
@@ -192,7 +189,7 @@ export default function CollectionTop10Page() {
           const normalizedPrintCode = normalizePrintCode(print.print_code)
           if (!normalizedPrintCode) continue
 
-          const unitPriceRaw = pricesByPrintCode.get(normalizedPrintCode)
+          const unitPriceRaw = pricesByPrintId.get(print.id)
           if (!Number.isFinite(unitPriceRaw)) continue
           const unitPrice = Number(unitPriceRaw)
 
@@ -211,8 +208,8 @@ export default function CollectionTop10Page() {
               : CARD_PLACEHOLDER_IMAGE
 
           const totalPrice = unitPrice * quantity
-          const source = sourceByPrintCode.get(normalizedPrintCode) || 'us'
-          const cardmarketProductId = productIdByPrintCode.get(normalizedPrintCode) || null
+          const source = sourceByPrintId.get(print.id) || 'us'
+          const cardmarketProductId = productIdByPrintId.get(print.id) || null
 
           nextRows.push({
             printId: print.id,
