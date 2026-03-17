@@ -212,6 +212,7 @@ export function AuthPageClient() {
   }
 
   const googleLinked = linkedProviders.has('google')
+  const currentUserEmail = user?.email || ''
   const isAccountView = Boolean(user) && authMode !== 'reset'
 
   return (
@@ -275,7 +276,7 @@ export function AuthPageClient() {
             >
               <div>
                 <div style={{ fontSize: 12, color: '#64748b' }}>Compte connecte</div>
-                <div style={{ fontWeight: 700, color: '#0f172a' }}>{user.email}</div>
+                <div style={{ fontWeight: 700, color: '#0f172a' }}>{currentUserEmail}</div>
               </div>
 
               <div style={{ display: 'grid', gap: 8 }}>
