@@ -171,14 +171,16 @@ export function CollectionSetView({
   shareToken = null
 }: Props) {
   const { user } = useAuth()
-  const { isWishlisted, toggleWishlist, busyPrintId } = useWishlist(user?.id)
+  const userId = user?.id ?? null
+  const { isWishlisted, toggleWishlist, busyPrintId } = useWishlist(userId)
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const initialQuery = searchParams.toString()
-  const resolvedOwnerId = ownerUserId || user?.id || null
-  const canEdit = Boolean(editable && user?.id && user.id === resolvedOwnerId)
+  const resolvedOwnerId = ownerUserId || userId || null
+  const canEdit = Boolean(editable && userId && userId === resolvedOwnerId)
   const isSharedView = Boolean(shareToken)
+  const isFriendReadOnlyView = Boolean(ownerUserId && ownerUserId !== userId && !shareToken)
 
   const [items, setItems] = useState<any[]>([])
   const [setLanguages, setSetLanguages] = useState<string[]>([])
@@ -240,6 +242,30 @@ export function CollectionSetView({
         }
 
         setItems(data?.items || [])
+        setSetLanguages(resolveSetLanguages(data?.set?.availableLanguages))
+        setLoading(false)
+        return
+      }
+
+      if (isFriendReadOnlyView && ownerUserId) {
+        const { data: sessionData } = await supabase.auth.getSession()
+        const accessToken = sessionData.session?.access_token
+        const res = await fetch(
+          `/api/friends/${encodeURIComponent(ownerUserId)}/set/${encodeURIComponent(normalizeSetCode(code))}`,
+          {
+            headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {}
+          }
+        )
+        const data = await res.json().catch(() => ({}))
+
+        if (!res.ok) {
+          setItems([])
+          setSetLanguages([])
+          setLoading(false)
+          return
+        }
+
+        setItems(Array.isArray(data?.items) ? data.items : [])
         setSetLanguages(resolveSetLanguages(data?.set?.availableLanguages))
         setLoading(false)
         return
@@ -318,8 +344,8 @@ export function CollectionSetView({
       setLoading(false)
     }
 
-    fetchData()
-  }, [code, resolvedOwnerId, shareToken])
+    void fetchData()
+  }, [code, isFriendReadOnlyView, ownerUserId, resolvedOwnerId, shareToken])
 
 
   const filterOptions = useMemo(() => getFilterOptions(items), [items])

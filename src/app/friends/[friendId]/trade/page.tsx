@@ -4,41 +4,8 @@ import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
-import { DEFAULT_LOCALE } from '@/lib/locale'
-import { getDisplayPrintCode } from '@/lib/cards/printDisplay'
 import { parseCardCode } from '@/lib/sorting/parseCardCode'
 import { useAuth } from '@/lib/auth'
-import {
-  getCollectionLanguageFlag,
-  getCollectionLanguageLabel,
-  normalizeCollectionLanguage
-} from '@/lib/collections/languages'
-import { aggregateCollectionRows, type CollectionQuantityRow } from '@/lib/collections/quantities'
-
-type SetRow = {
-  id: string
-  code: string
-}
-
-type CardTranslationRow = {
-  locale: string
-  name: string
-}
-
-type CardRow = {
-  id: string
-  rarity: string | null
-  type: string | null
-  card_translations?: CardTranslationRow[] | null
-}
-
-type CardPrintRow = {
-  id: string
-  card_id: string
-  distribution_set_id: string
-  print_code: string | null
-  variant_type: string | null
-}
 
 type TradeItem = {
   id: string
@@ -53,15 +20,6 @@ type TradeItem = {
   languageFlag: string
   giverQty: number
   needQty: number
-}
-
-function chunkArray<T>(items: T[], size: number): T[][] {
-  if (items.length === 0) return []
-  const result: T[][] = []
-  for (let index = 0; index < items.length; index += size) {
-    result.push(items.slice(index, index + size))
-  }
-  return result
 }
 
 function sortTradeItems(items: TradeItem[]) {
@@ -87,6 +45,7 @@ function groupTradeItemsBySet(items: TradeItem[]) {
 
 export default function FriendTradePage() {
   const { user, loading: authLoading } = useAuth()
+  const userId = user?.id ?? null
   const params = useParams()
   const friendId = Array.isArray(params.friendId) ? params.friendId[0] : params.friendId
 
@@ -99,188 +58,34 @@ export default function FriendTradePage() {
 
   useEffect(() => {
     const loadTrade = async () => {
-      if (!user || !friendId) return
+      if (!userId || !friendId) return
       setLoading(true)
       setError(null)
 
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('username')
-        .eq('id', friendId)
-        .maybeSingle()
-      setFriendUsername(profileData?.username || 'Ami')
+      const { data: sessionData } = await supabase.auth.getSession()
+      const accessToken = sessionData.session?.access_token
+      const res = await fetch(`/api/friends/${encodeURIComponent(friendId)}/trade`, {
+        headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {}
+      })
+      const data = await res.json().catch(() => ({}))
 
-      const { data: setsData } = await supabase
-        .from('sets')
-        .select('id, code')
-
-      const setById = new Map<string, string>(
-        ((setsData as SetRow[] | null) || []).map((row) => [row.id, row.code])
-      )
-
-      const cardsById = new Map<string, CardRow>(
-        []
-      )
-
-      const { data: myCollectionData, error: myCollectionError } = await supabase
-        .from('collections')
-        .select('card_print_id, quantity, language_code')
-        .eq('user_id', user.id)
-
-      if (myCollectionError) {
-        setError(myCollectionError.message)
+      if (!res.ok) {
+        setError(data?.error || 'Erreur chargement echanges')
+        setFriendUsername('Ami')
+        setFriendCanGive([])
+        setICanGive([])
         setLoading(false)
         return
       }
 
-      const { data: friendCollectionData, error: friendCollectionError } = await supabase
-        .from('collections')
-        .select('card_print_id, quantity, language_code')
-        .eq('user_id', friendId)
-
-      if (friendCollectionError) {
-        setError(friendCollectionError.message)
-        setLoading(false)
-        return
-      }
-
-      const myAggregate = aggregateCollectionRows(
-        (myCollectionData as CollectionQuantityRow[] | null) || []
-      )
-      const friendAggregate = aggregateCollectionRows(
-        (friendCollectionData as CollectionQuantityRow[] | null) || []
-      )
-
-      const mineByPrint = myAggregate.totalByPrintId
-      const friendByPrint = friendAggregate.totalByPrintId
-
-      const relevantPrintIds = [
-        ...new Set(
-          [...mineByPrint.entries(), ...friendByPrint.entries()]
-            .filter(([, qty]) => qty > 0)
-            .map(([printId]) => printId)
-        )
-      ]
-
-      const prints: CardPrintRow[] = []
-      for (const idsChunk of chunkArray(relevantPrintIds, 500)) {
-        const { data: printsData, error: printsError } = await supabase
-          .from('card_prints')
-          .select('id, card_id, distribution_set_id, print_code, variant_type')
-          .in('id', idsChunk)
-
-        if (printsError) {
-          setError(printsError.message)
-          setLoading(false)
-          return
-        }
-
-        prints.push(...(((printsData as CardPrintRow[] | null) || []) as CardPrintRow[]))
-      }
-
-      const cardIds = [...new Set(prints.map((row) => row.card_id))]
-      for (const idsChunk of chunkArray(cardIds, 500)) {
-        const { data: cardsData, error: cardsError } = await supabase
-          .from('cards')
-          .select(
-            `
-              id,
-              rarity,
-              type,
-              card_translations (
-                locale,
-                name
-              )
-            `
-          )
-          .in('id', idsChunk)
-
-        if (cardsError) {
-          setError(cardsError.message)
-          setLoading(false)
-          return
-        }
-
-        ;(((cardsData as CardRow[] | null) || []) as CardRow[]).forEach((row) => {
-          cardsById.set(row.id, row)
-        })
-      }
-
-      const canGiveToMe: TradeItem[] = []
-      const canGiveToFriend: TradeItem[] = []
-
-      for (const print of prints) {
-        const friendQty = friendByPrint.get(print.id) || 0
-        const myQty = mineByPrint.get(print.id) || 0
-
-        if (friendQty <= 0 && myQty <= 0) continue
-
-        const card = cardsById.get(print.card_id)
-        const setCode = setById.get(print.distribution_set_id) || '?'
-        const fallbackName = getDisplayPrintCode(print) || (print.print_code || 'Carte')
-        const name =
-          card?.card_translations?.find((t) => t.locale === DEFAULT_LOCALE)?.name ||
-          card?.card_translations?.[0]?.name ||
-          fallbackName
-
-        const myLanguages = myAggregate.byPrintIdLanguage.get(print.id) || new Map<string, number>()
-        const friendLanguages =
-          friendAggregate.byPrintIdLanguage.get(print.id) || new Map<string, number>()
-
-        const relevantLanguages = new Set<string>([
-          ...myLanguages.keys(),
-          ...friendLanguages.keys()
-        ])
-
-        for (const rawLanguageCode of relevantLanguages) {
-          const languageCode = normalizeCollectionLanguage(rawLanguageCode)
-          const friendLanguageQty = friendLanguages.get(languageCode) || 0
-          const myLanguageQty = myLanguages.get(languageCode) || 0
-          const friendExtra = Math.max(friendLanguageQty - 1, 0)
-          const myExtra = Math.max(myLanguageQty - 1, 0)
-          const iNeed = myLanguageQty === 0 ? 1 : 0
-          const friendNeeds = friendLanguageQty === 0 ? 1 : 0
-
-          if (friendExtra === 0 && myExtra === 0) continue
-
-          const baseItem: Omit<TradeItem, 'giverQty' | 'needQty'> = {
-            id: print.id,
-            itemKey: `${print.id}:${languageCode}`,
-            setCode,
-            displayCode: getDisplayPrintCode(print),
-            name,
-            rarity: card?.rarity || '-',
-            type: card?.type || '-',
-            languageCode,
-            languageLabel: getCollectionLanguageLabel(languageCode),
-            languageFlag: getCollectionLanguageFlag(languageCode)
-          }
-
-          if (friendExtra > 0 && iNeed > 0) {
-            canGiveToMe.push({
-              ...baseItem,
-              giverQty: friendExtra,
-              needQty: iNeed
-            })
-          }
-
-          if (myExtra > 0 && friendNeeds > 0) {
-            canGiveToFriend.push({
-              ...baseItem,
-              giverQty: myExtra,
-              needQty: friendNeeds
-            })
-          }
-        }
-      }
-
-      setFriendCanGive(sortTradeItems(canGiveToMe))
-      setICanGive(sortTradeItems(canGiveToFriend))
+      setFriendUsername(data?.username || 'Ami')
+      setFriendCanGive(Array.isArray(data?.friendCanGive) ? data.friendCanGive : [])
+      setICanGive(Array.isArray(data?.iCanGive) ? data.iCanGive : [])
       setLoading(false)
     }
 
-    loadTrade()
-  }, [user, friendId])
+    void loadTrade()
+  }, [friendId, userId])
 
   const totalPotential = useMemo(
     () => friendCanGive.length + iCanGive.length,
