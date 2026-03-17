@@ -96,13 +96,14 @@ function formatPercent(value: number) {
 
 export default function CollectionWishlistPage() {
   const { user, loading: authLoading } = useAuth()
-  const { wishlistIds, toggleWishlist, busyPrintId, loading: wishlistLoading } = useWishlist(user?.id)
+  const userId = user?.id ?? null
+  const { wishlistIds, toggleWishlist, busyPrintId, loading: wishlistLoading } = useWishlist(userId)
   const [items, setItems] = useState<WishlistItem[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     const loadWishlist = async () => {
-      if (!user) {
+      if (!userId) {
         setItems([])
         setLoading(false)
         return
@@ -314,7 +315,7 @@ export default function CollectionWishlistPage() {
     }
 
     void loadWishlist()
-  }, [user, wishlistIds])
+  }, [userId, wishlistIds])
 
   const groupedItems = useMemo(() => {
     const grouped = new Map<string, WishlistItem[]>()

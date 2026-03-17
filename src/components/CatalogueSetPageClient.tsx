@@ -77,7 +77,8 @@ const ALT_RARITY_THEME: Record<string, { background: string; border: string }> =
 
 export function CatalogueSetPageClient() {
   const { user } = useAuth()
-  const { isWishlisted, toggleWishlist, busyPrintId } = useWishlist(user?.id)
+  const userId = user?.id ?? null
+  const { isWishlisted, toggleWishlist, busyPrintId } = useWishlist(userId)
   const params = useParams()
   const code = Array.isArray(params.code) ? params.code[0] : params.code
   const normalizedCode = (code || '').toString().replace('-', '').toUpperCase()
@@ -132,11 +133,11 @@ export function CatalogueSetPageClient() {
       let ownedMap = new Map<string, number>()
       let languageBreakdownByPrintId = new Map<string, Map<string, number>>()
 
-      if (user) {
+      if (userId) {
         const { data: collectionData } = await supabase
           .from('collections')
           .select('card_print_id, quantity, language_code')
-          .eq('user_id', user.id)
+          .eq('user_id', userId)
 
         const aggregated = aggregateCollectionRows(
           (collectionData as CollectionQuantityRow[] | null) || []
@@ -189,7 +190,7 @@ export function CatalogueSetPageClient() {
     }
 
     void fetchData()
-  }, [normalizedCode, user])
+  }, [normalizedCode, userId])
 
   const filterOptions = useMemo(() => getFilterOptions(items), [items])
 

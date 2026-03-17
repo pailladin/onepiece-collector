@@ -61,6 +61,7 @@ function chunkArray<T>(items: T[], size: number) {
 
 export default function CollectionPage() {
   const { user } = useAuth()
+  const userId = user?.id ?? null
   const [sets, setSets] = useState<SetRow[]>([])
   const [stats, setStats] = useState<Record<string, SetStats>>({})
   const [loading, setLoading] = useState(true)
@@ -78,7 +79,7 @@ export default function CollectionPage() {
 
   useEffect(() => {
     const fetchData = async () => {
-      if (!user) {
+      if (!userId) {
         setLoading(false)
         setSets([])
         setStats({})
@@ -86,14 +87,14 @@ export default function CollectionPage() {
       }
 
       setLoading(true)
-      const data = await fetchUserSetStats(user.id)
+      const data = await fetchUserSetStats(userId)
       setSets(data.sets)
       setStats(data.stats)
       setLoading(false)
     }
 
     fetchData()
-  }, [user])
+  }, [userId])
 
   if (loading) {
     return <div style={{ padding: 40 }}>Chargement...</div>
