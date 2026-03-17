@@ -258,7 +258,17 @@ export function RootShell({
             >
               {user ? (
                 <>
-                  <span style={{ fontSize: 13 }}>{user.email}</span>
+                  <Link
+                    href="/auth"
+                    style={{
+                      color: '#fff',
+                      textDecoration: 'none',
+                      fontSize: 13,
+                      fontWeight: 700
+                    }}
+                  >
+                    {user.email}
+                  </Link>
                   <button
                     onClick={handleLogout}
                     style={{

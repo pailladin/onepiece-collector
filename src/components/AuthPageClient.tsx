@@ -3,13 +3,27 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
+import { useAuth } from '@/lib/auth'
+import {
+  getLinkedProviders,
+  getProviderLabel,
+  linkOAuthProvider,
+  sendPasswordResetEmail,
+  signInWithOAuthProvider,
+  signInWithPassword,
+  signUpWithPassword,
+  updatePassword
+} from '@/lib/authClient'
 
 export function AuthPageClient() {
   const router = useRouter()
+  const { user } = useAuth()
+  const getInitialSearchParams = () =>
+    typeof window === 'undefined' ? new URLSearchParams() : new URLSearchParams(window.location.search)
   const [authMode, setAuthMode] = useState<'signin' | 'forgot' | 'reset'>(() => {
     if (typeof window === 'undefined') return 'signin'
     const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''))
-    const searchParams = new URLSearchParams(window.location.search)
+    const searchParams = getInitialSearchParams()
     return hashParams.get('type') === 'recovery' || searchParams.get('type') === 'recovery'
       ? 'reset'
       : 'signin'
@@ -18,8 +32,13 @@ export function AuthPageClient() {
   const [password, setPassword] = useState('')
   const [nextPassword, setNextPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
-  const [message, setMessage] = useState('')
+  const [message, setMessage] = useState(() => {
+    const searchParams = getInitialSearchParams()
+    return searchParams.get('oauth') === 'google-link' ? 'Compte Google lie avec succes.' : ''
+  })
   const [loading, setLoading] = useState(false)
+  const [linkedProviders, setLinkedProviders] = useState<Set<'google' | 'discord'>>(new Set())
+  const [loadingProviders, setLoadingProviders] = useState(false)
 
   const canSubmit = email.trim().length > 3 && password.length >= 6
   const canSendReset = email.trim().length > 3
@@ -31,13 +50,50 @@ export function AuthPageClient() {
       if (event === 'PASSWORD_RECOVERY') {
         setAuthMode('reset')
         setMessage('Choisis maintenant un nouveau mot de passe.')
+        return
+      }
+
+      if (event === 'SIGNED_IN' && authMode !== 'reset') {
+        router.push('/collection')
       }
     })
 
     return () => {
       listener.subscription.unsubscribe()
     }
-  }, [])
+  }, [authMode, router])
+
+  useEffect(() => {
+    const loadLinkedProviders = async () => {
+      if (!user) {
+        setLinkedProviders(new Set())
+        return
+      }
+
+      setLoadingProviders(true)
+      const { providers } = await getLinkedProviders()
+      setLinkedProviders(providers)
+      setLoadingProviders(false)
+    }
+
+    void loadLinkedProviders()
+  }, [user])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const searchParams = new URLSearchParams(window.location.search)
+    const oauthState = searchParams.get('oauth')
+
+    if (oauthState === 'google-signin' && user) {
+      router.replace('/collection')
+      return
+    }
+
+    if (oauthState === 'google-link' && user) {
+      router.replace('/auth')
+    }
+  }, [router, user])
 
   const buildUsernameFromEmail = (value: string) => {
     const localPart = (value.split('@')[0] || 'user').toLowerCase()
@@ -53,15 +109,11 @@ export function AuthPageClient() {
     setMessage('')
 
     const username = buildUsernameFromEmail(email.trim())
-    const { error } = await supabase.auth.signUp({
+    const { error } = await signUpWithPassword({
       email,
       password,
-      options: {
-        data: {
-          username
-        },
-        emailRedirectTo: `${window.location.origin}/auth`
-      }
+      username,
+      emailRedirectTo: `${window.location.origin}/auth`
     })
 
     if (error) {
@@ -77,10 +129,7 @@ export function AuthPageClient() {
     setLoading(true)
     setMessage('')
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password
-    })
+    const { error } = await signInWithPassword(email, password)
 
     if (error) {
       setMessage(error.message)
@@ -96,9 +145,10 @@ export function AuthPageClient() {
     setLoading(true)
     setMessage('')
 
-    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-      redirectTo: `${window.location.origin}/auth?type=recovery`
-    })
+    const { error } = await sendPasswordResetEmail(
+      email.trim(),
+      `${window.location.origin}/auth?type=recovery`
+    )
 
     if (error) {
       setMessage(error.message)
@@ -113,9 +163,7 @@ export function AuthPageClient() {
     setLoading(true)
     setMessage('')
 
-    const { error } = await supabase.auth.updateUser({
-      password: nextPassword
-    })
+    const { error } = await updatePassword(nextPassword)
 
     if (error) {
       setMessage(error.message)
@@ -130,6 +178,41 @@ export function AuthPageClient() {
     setAuthMode('signin')
     setLoading(false)
   }
+
+  const handleGoogleSignIn = async () => {
+    if (loading) return
+    setLoading(true)
+    setMessage('')
+
+    const { error } = await signInWithOAuthProvider(
+      'google',
+      `${window.location.origin}/auth?oauth=google-signin`
+    )
+
+    if (error) {
+      setMessage(error.message)
+      setLoading(false)
+    }
+  }
+
+  const handleLinkGoogle = async () => {
+    if (!user || loading) return
+    setLoading(true)
+    setMessage('')
+
+    const { error } = await linkOAuthProvider(
+      'google',
+      `${window.location.origin}/auth?oauth=google-link`
+    )
+
+    if (error) {
+      setMessage(error.message)
+      setLoading(false)
+    }
+  }
+
+  const googleLinked = linkedProviders.has('google')
+  const isAccountView = Boolean(user) && authMode !== 'reset'
 
   return (
     <div
@@ -172,13 +255,60 @@ export function AuthPageClient() {
             ? 'Entre ton email pour recevoir un lien de reinitialisation.'
             : authMode === 'reset'
               ? 'Definis un nouveau mot de passe pour retrouver ton compte.'
-              : 'Connecte-toi pour gerer ta collection, partager des sets et suivre ta progression.'}
+              : isAccountView
+                ? 'Gere tes moyens de connexion sans lier ton application a un seul fournisseur.'
+                : 'Connecte-toi pour gerer ta collection, partager des sets et suivre ta progression.'}
         </p>
 
         <div style={{ marginTop: 18, maxWidth: 380, marginInline: 'auto' }}>
+          {isAccountView && (
+            <div
+              style={{
+                display: 'grid',
+                gap: 12,
+                marginBottom: 16,
+                padding: 14,
+                borderRadius: 12,
+                border: '1px solid #dbeafe',
+                background: '#f8fbff'
+              }}
+            >
+              <div>
+                <div style={{ fontSize: 12, color: '#64748b' }}>Compte connecte</div>
+                <div style={{ fontWeight: 700, color: '#0f172a' }}>{user.email}</div>
+              </div>
+
+              <div style={{ display: 'grid', gap: 8 }}>
+                <div style={{ fontSize: 13, color: '#334155' }}>
+                  Google:{' '}
+                  <strong>{loadingProviders ? 'verification...' : googleLinked ? 'lie' : 'non lie'}</strong>
+                </div>
+                <button
+                  onClick={handleLinkGoogle}
+                  disabled={loading || loadingProviders || googleLinked}
+                  style={{
+                    background: googleLinked ? '#e2e8f0' : '#ffffff',
+                    color: googleLinked ? '#475569' : '#0f172a',
+                    border: '1px solid #cbd5e1',
+                    borderRadius: 8,
+                    padding: '10px 14px',
+                    cursor:
+                      loading || loadingProviders || googleLinked ? 'not-allowed' : 'pointer',
+                    opacity: loading || loadingProviders || googleLinked ? 0.7 : 1
+                  }}
+                >
+                  {googleLinked ? `${getProviderLabel('google')} deja lie` : `Lier ${getProviderLabel('google')}`}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {!isAccountView && (
           <label style={{ display: 'block', marginBottom: 6, color: '#334155' }}>
             Email
           </label>
+          )}
+          {!isAccountView && (
           <input
             type="email"
             placeholder="ton@email.com"
@@ -198,12 +328,16 @@ export function AuthPageClient() {
               outline: 'none'
             }}
           />
+          )}
 
           {authMode === 'signin' && (
             <>
+              {!isAccountView && (
               <label style={{ display: 'block', marginBottom: 6, color: '#334155' }}>
                 Mot de passe
               </label>
+              )}
+              {!isAccountView && (
               <input
                 type="password"
                 placeholder="Minimum 6 caracteres"
@@ -221,7 +355,9 @@ export function AuthPageClient() {
                   outline: 'none'
                 }}
               />
+              )}
 
+              {!isAccountView && (
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
                 <button
                   onClick={handleSignIn}
@@ -255,6 +391,27 @@ export function AuthPageClient() {
                   Creer un compte
                 </button>
               </div>
+              )}
+
+              {!isAccountView && (
+                <div style={{ marginTop: 10, display: 'flex', justifyContent: 'center' }}>
+                  <button
+                    onClick={handleGoogleSignIn}
+                    disabled={loading}
+                    style={{
+                      background: '#ffffff',
+                      color: '#0f172a',
+                      border: '1px solid #cbd5e1',
+                      borderRadius: 8,
+                      padding: '10px 14px',
+                      cursor: loading ? 'not-allowed' : 'pointer',
+                      opacity: loading ? 0.6 : 1
+                    }}
+                  >
+                    Continuer avec Google
+                  </button>
+                </div>
+              )}
             </>
           )}
 
@@ -343,7 +500,7 @@ export function AuthPageClient() {
           )}
 
           <div style={{ marginTop: 14, display: 'flex', justifyContent: 'center', gap: 12, flexWrap: 'wrap' }}>
-            {authMode === 'signin' && (
+            {authMode === 'signin' && !isAccountView && (
               <button
                 onClick={() => {
                   setMessage('')
@@ -362,7 +519,7 @@ export function AuthPageClient() {
               </button>
             )}
 
-            {authMode !== 'signin' && (
+            {authMode !== 'signin' && !isAccountView && (
               <button
                 onClick={() => {
                   setMessage('')
