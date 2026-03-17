@@ -1,13 +1,11 @@
 'use client'
 
+import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 import { useAuth } from '@/lib/auth'
 import {
-  getLinkedProviders,
-  getProviderLabel,
-  linkOAuthProvider,
   sendPasswordResetEmail,
   signInWithOAuthProvider,
   signInWithPassword,
@@ -34,12 +32,10 @@ export function AuthPageClient() {
   const [nextPassword, setNextPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [message, setMessage] = useState(() => {
-    const searchParams = getInitialSearchParams()
-    return searchParams.get('oauth') === 'google-link' ? 'Compte Google lie avec succes.' : ''
+    return ''
   })
   const [loading, setLoading] = useState(false)
-  const [linkedProviders, setLinkedProviders] = useState<Set<'google' | 'discord'>>(new Set())
-  const [loadingProviders, setLoadingProviders] = useState(false)
+  const [googleRiskAccepted, setGoogleRiskAccepted] = useState(false)
 
   const canSubmit = email.trim().length > 3 && password.length >= 6
   const canSendReset = email.trim().length > 3
@@ -65,22 +61,6 @@ export function AuthPageClient() {
   }, [authMode, router])
 
   useEffect(() => {
-    const loadLinkedProviders = async () => {
-      if (!user) {
-        setLinkedProviders(new Set())
-        return
-      }
-
-      setLoadingProviders(true)
-      const { providers } = await getLinkedProviders()
-      setLinkedProviders(providers)
-      setLoadingProviders(false)
-    }
-
-    void loadLinkedProviders()
-  }, [user])
-
-  useEffect(() => {
     if (typeof window === 'undefined') return
 
     const searchParams = new URLSearchParams(window.location.search)
@@ -92,7 +72,7 @@ export function AuthPageClient() {
     }
 
     if (oauthState === 'google-link' && user) {
-      router.replace('/auth')
+      router.replace('/account?linked=google')
     }
   }, [router, user])
 
@@ -196,24 +176,6 @@ export function AuthPageClient() {
     }
   }
 
-  const handleLinkGoogle = async () => {
-    if (!user || loading) return
-    setLoading(true)
-    setMessage('')
-
-    const { error } = await linkOAuthProvider(
-      'google',
-      `${window.location.origin}/auth?oauth=google-link`
-    )
-
-    if (error) {
-      setMessage(getAuthErrorMessage(error.message))
-      setLoading(false)
-    }
-  }
-
-  const googleLinked = linkedProviders.has('google')
-  const currentUserEmail = user?.email || ''
   const isAccountView = Boolean(user) && authMode !== 'reset'
 
   return (
@@ -247,7 +209,7 @@ export function AuthPageClient() {
           }}
         >
           {authMode === 'forgot'
-            ? 'Mot de passe oublie'
+              ? 'Mot de passe oublie'
             : authMode === 'reset'
               ? 'Nouveau mot de passe'
               : 'Connexion'}
@@ -257,9 +219,7 @@ export function AuthPageClient() {
             ? 'Entre ton email pour recevoir un lien de reinitialisation.'
             : authMode === 'reset'
               ? 'Definis un nouveau mot de passe pour retrouver ton compte.'
-              : isAccountView
-                ? 'Gere tes moyens de connexion sans lier ton application a un seul fournisseur.'
-                : 'Connecte-toi pour gerer ta collection, partager des sets et suivre ta progression.'}
+              : 'Connecte-toi pour gerer ta collection, partager des sets et suivre ta progression.'}
         </p>
 
         <div style={{ marginTop: 18, maxWidth: 380, marginInline: 'auto' }}>
@@ -275,32 +235,27 @@ export function AuthPageClient() {
                 background: '#f8fbff'
               }}
             >
-              <div>
-                <div style={{ fontSize: 12, color: '#64748b' }}>Compte connecte</div>
-                <div style={{ fontWeight: 700, color: '#0f172a' }}>{currentUserEmail}</div>
-              </div>
-
-              <div style={{ display: 'grid', gap: 8 }}>
-                <div style={{ fontSize: 13, color: '#334155' }}>
-                  Google:{' '}
-                  <strong>{loadingProviders ? 'verification...' : googleLinked ? 'lie' : 'non lie'}</strong>
+              <div style={{ display: 'grid', gap: 8, justifyItems: 'center', textAlign: 'center' }}>
+                <div style={{ fontWeight: 700, color: '#0f172a' }}>
+                  Tu es deja connecte.
                 </div>
-                <button
-                  onClick={handleLinkGoogle}
-                  disabled={loading || loadingProviders || googleLinked}
+                <div style={{ fontSize: 13, color: '#475569', lineHeight: 1.4 }}>
+                  La gestion des moyens de connexion se fait maintenant depuis la page compte.
+                </div>
+                <Link
+                  href="/account"
                   style={{
-                    background: googleLinked ? '#e2e8f0' : '#ffffff',
-                    color: googleLinked ? '#475569' : '#0f172a',
-                    border: '1px solid #cbd5e1',
+                    display: 'inline-block',
+                    textDecoration: 'none',
+                    background: '#0ea5e9',
+                    color: '#fff',
                     borderRadius: 8,
                     padding: '10px 14px',
-                    cursor:
-                      loading || loadingProviders || googleLinked ? 'not-allowed' : 'pointer',
-                    opacity: loading || loadingProviders || googleLinked ? 0.7 : 1
+                    fontWeight: 700
                   }}
                 >
-                  {googleLinked ? `${getProviderLabel('google')} deja lie` : `Lier ${getProviderLabel('google')}`}
-                </button>
+                  Aller a mon compte
+                </Link>
               </div>
             </div>
           )}
@@ -396,22 +351,83 @@ export function AuthPageClient() {
               )}
 
               {!isAccountView && (
+                <div
+                  style={{
+                    marginTop: 14,
+                    marginBottom: 10,
+                    padding: 12,
+                    borderRadius: 10,
+                    border: '1px solid #fde68a',
+                    background: '#fffbeb',
+                    color: '#92400e',
+                    fontSize: 13,
+                    lineHeight: 1.4
+                  }}
+                >
+                  Utilise Google surtout pour un nouveau compte.
+                  Si tu as deja un compte One Piece Collector avec un autre email ou un mot de
+                  passe, connecte-toi d&apos;abord puis lie Google depuis ton compte pour eviter de
+                  creer un second profil.
+                </div>
+              )}
+
+              {!isAccountView && (
+                <label
+                  style={{
+                    marginTop: 2,
+                    marginBottom: 10,
+                    display: 'flex',
+                    gap: 8,
+                    alignItems: 'flex-start',
+                    fontSize: 13,
+                    color: '#334155',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={googleRiskAccepted}
+                    onChange={(e) => setGoogleRiskAccepted(e.target.checked)}
+                    style={{ marginTop: 2 }}
+                  />
+                  <span>
+                    Je confirme que je n&apos;ai pas deja un compte a recuperer avec un autre email.
+                  </span>
+                </label>
+              )}
+
+              {!isAccountView && (
                 <div style={{ marginTop: 10, display: 'flex', justifyContent: 'center' }}>
                   <button
                     onClick={handleGoogleSignIn}
-                    disabled={loading}
+                    disabled={loading || !googleRiskAccepted}
                     style={{
                       background: '#ffffff',
                       color: '#0f172a',
                       border: '1px solid #cbd5e1',
                       borderRadius: 8,
                       padding: '10px 14px',
-                      cursor: loading ? 'not-allowed' : 'pointer',
-                      opacity: loading ? 0.6 : 1
+                      cursor: loading || !googleRiskAccepted ? 'not-allowed' : 'pointer',
+                      opacity: loading || !googleRiskAccepted ? 0.6 : 1
                     }}
                   >
                     Continuer avec Google
                   </button>
+                </div>
+              )}
+
+              {!isAccountView && (
+                <div
+                  style={{
+                    marginTop: 8,
+                    textAlign: 'center',
+                    fontSize: 12,
+                    color: '#64748b'
+                  }}
+                >
+                  Si tu as deja un compte, passe plutot par la connexion classique puis
+                  <br />
+                  lie Google depuis la page compte.
                 </div>
               )}
             </>

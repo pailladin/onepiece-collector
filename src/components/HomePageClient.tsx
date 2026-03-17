@@ -93,7 +93,6 @@ export function HomePageClient() {
             <li>Progression par set avec separation normales / alternatives / total.</li>
             <li>Filtres avances dans le catalogue et la collection.</li>
             <li>Lien de partage public d un set avec filtres conserves dans l URL.</li>
-            <li>Outils admin pour importer, mettre a jour et corriger les cartes.</li>
           </ul>
         </section>
       </div>
@@ -130,4 +129,3 @@ function LinkCard({
     </Link>
   )
 }
-

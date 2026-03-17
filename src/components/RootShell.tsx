@@ -259,7 +259,7 @@ export function RootShell({
               {user ? (
                 <>
                   <Link
-                    href="/auth"
+                    href="/account"
                     style={{
                       color: '#fff',
                       textDecoration: 'none',
