@@ -14,6 +14,7 @@ import {
   signUpWithPassword,
   updatePassword
 } from '@/lib/authClient'
+import { getAuthErrorMessage } from '@/lib/authMessages'
 
 export function AuthPageClient() {
   const router = useRouter()
@@ -117,7 +118,7 @@ export function AuthPageClient() {
     })
 
     if (error) {
-      setMessage(error.message)
+      setMessage(getAuthErrorMessage(error.message))
     } else {
       setMessage('Compte cree. Verifie ton email.')
     }
@@ -132,7 +133,7 @@ export function AuthPageClient() {
     const { error } = await signInWithPassword(email, password)
 
     if (error) {
-      setMessage(error.message)
+      setMessage(getAuthErrorMessage(error.message))
     } else {
       setMessage('Connexion reussie.')
       router.push('/collection')
@@ -151,7 +152,7 @@ export function AuthPageClient() {
     )
 
     if (error) {
-      setMessage(error.message)
+      setMessage(getAuthErrorMessage(error.message))
     } else {
       setMessage('Email envoye. Verifie ta boite mail pour reinitialiser ton mot de passe.')
     }
@@ -166,7 +167,7 @@ export function AuthPageClient() {
     const { error } = await updatePassword(nextPassword)
 
     if (error) {
-      setMessage(error.message)
+      setMessage(getAuthErrorMessage(error.message))
       setLoading(false)
       return
     }
@@ -190,7 +191,7 @@ export function AuthPageClient() {
     )
 
     if (error) {
-      setMessage(error.message)
+      setMessage(getAuthErrorMessage(error.message))
       setLoading(false)
     }
   }
@@ -206,7 +207,7 @@ export function AuthPageClient() {
     )
 
     if (error) {
-      setMessage(error.message)
+      setMessage(getAuthErrorMessage(error.message))
       setLoading(false)
     }
   }
