@@ -1,17 +1,43 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 
 export function AuthPageClient() {
   const router = useRouter()
+  const [authMode, setAuthMode] = useState<'signin' | 'forgot' | 'reset'>(() => {
+    if (typeof window === 'undefined') return 'signin'
+    const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''))
+    const searchParams = new URLSearchParams(window.location.search)
+    return hashParams.get('type') === 'recovery' || searchParams.get('type') === 'recovery'
+      ? 'reset'
+      : 'signin'
+  })
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [nextPassword, setNextPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [message, setMessage] = useState('')
   const [loading, setLoading] = useState(false)
 
   const canSubmit = email.trim().length > 3 && password.length >= 6
+  const canSendReset = email.trim().length > 3
+  const canUpdatePassword =
+    nextPassword.length >= 6 && confirmPassword.length >= 6 && nextPassword === confirmPassword
+
+  useEffect(() => {
+    const { data: listener } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setAuthMode('reset')
+        setMessage('Choisis maintenant un nouveau mot de passe.')
+      }
+    })
+
+    return () => {
+      listener.subscription.unsubscribe()
+    }
+  }, [])
 
   const buildUsernameFromEmail = (value: string) => {
     const localPart = (value.split('@')[0] || 'user').toLowerCase()
@@ -65,6 +91,46 @@ export function AuthPageClient() {
     setLoading(false)
   }
 
+  const handleForgotPassword = async () => {
+    if (!canSendReset || loading) return
+    setLoading(true)
+    setMessage('')
+
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: `${window.location.origin}/auth?type=recovery`
+    })
+
+    if (error) {
+      setMessage(error.message)
+    } else {
+      setMessage('Email envoye. Verifie ta boite mail pour reinitialiser ton mot de passe.')
+    }
+    setLoading(false)
+  }
+
+  const handleUpdatePassword = async () => {
+    if (!canUpdatePassword || loading) return
+    setLoading(true)
+    setMessage('')
+
+    const { error } = await supabase.auth.updateUser({
+      password: nextPassword
+    })
+
+    if (error) {
+      setMessage(error.message)
+      setLoading(false)
+      return
+    }
+
+    setMessage('Mot de passe mis a jour. Tu peux maintenant te connecter.')
+    setNextPassword('')
+    setConfirmPassword('')
+    setPassword('')
+    setAuthMode('signin')
+    setLoading(false)
+  }
+
   return (
     <div
       style={{
@@ -95,11 +161,18 @@ export function AuthPageClient() {
             textAlign: 'center'
           }}
         >
-          Connexion
+          {authMode === 'forgot'
+            ? 'Mot de passe oublie'
+            : authMode === 'reset'
+              ? 'Nouveau mot de passe'
+              : 'Connexion'}
         </h1>
         <p style={{ marginTop: 8, color: '#475569', fontSize: 14, textAlign: 'center' }}>
-          Connecte-toi pour gerer ta collection, partager des sets et suivre ta
-          progression.
+          {authMode === 'forgot'
+            ? 'Entre ton email pour recevoir un lien de reinitialisation.'
+            : authMode === 'reset'
+              ? 'Definis un nouveau mot de passe pour retrouver ton compte.'
+              : 'Connecte-toi pour gerer ta collection, partager des sets et suivre ta progression.'}
         </p>
 
         <div style={{ marginTop: 18, maxWidth: 380, marginInline: 'auto' }}>
@@ -112,7 +185,9 @@ export function AuthPageClient() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') handleSignIn()
+              if (e.key !== 'Enter') return
+              if (authMode === 'forgot') handleForgotPassword()
+              if (authMode === 'signin') handleSignIn()
             }}
             style={{
               width: '100%',
@@ -124,59 +199,187 @@ export function AuthPageClient() {
             }}
           />
 
-          <label style={{ display: 'block', marginBottom: 6, color: '#334155' }}>
-            Mot de passe
-          </label>
-          <input
-            type="password"
-            placeholder="Minimum 6 caracteres"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') handleSignIn()
-            }}
-            style={{
-              width: '100%',
-              marginBottom: 14,
-              padding: '10px 12px',
-              borderRadius: 8,
-              border: '1px solid #cbd5e1',
-              outline: 'none'
-            }}
-          />
+          {authMode === 'signin' && (
+            <>
+              <label style={{ display: 'block', marginBottom: 6, color: '#334155' }}>
+                Mot de passe
+              </label>
+              <input
+                type="password"
+                placeholder="Minimum 6 caracteres"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleSignIn()
+                }}
+                style={{
+                  width: '100%',
+                  marginBottom: 14,
+                  padding: '10px 12px',
+                  borderRadius: 8,
+                  border: '1px solid #cbd5e1',
+                  outline: 'none'
+                }}
+              />
 
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
-            <button
-              onClick={handleSignIn}
-              disabled={!canSubmit || loading}
-              style={{
-                background: '#0ea5e9',
-                color: '#fff',
-                border: 'none',
-                borderRadius: 8,
-                padding: '10px 14px',
-                cursor: !canSubmit || loading ? 'not-allowed' : 'pointer',
-                opacity: !canSubmit || loading ? 0.6 : 1
-              }}
-            >
-              {loading ? 'Connexion...' : 'Se connecter'}
-            </button>
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
+                <button
+                  onClick={handleSignIn}
+                  disabled={!canSubmit || loading}
+                  style={{
+                    background: '#0ea5e9',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: 8,
+                    padding: '10px 14px',
+                    cursor: !canSubmit || loading ? 'not-allowed' : 'pointer',
+                    opacity: !canSubmit || loading ? 0.6 : 1
+                  }}
+                >
+                  {loading ? 'Connexion...' : 'Se connecter'}
+                </button>
 
-            <button
-              onClick={handleSignUp}
-              disabled={!canSubmit || loading}
-              style={{
-                background: '#0f766e',
-                color: '#fff',
-                border: 'none',
-                borderRadius: 8,
-                padding: '10px 14px',
-                cursor: !canSubmit || loading ? 'not-allowed' : 'pointer',
-                opacity: !canSubmit || loading ? 0.6 : 1
-              }}
-            >
-              Creer un compte
-            </button>
+                <button
+                  onClick={handleSignUp}
+                  disabled={!canSubmit || loading}
+                  style={{
+                    background: '#0f766e',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: 8,
+                    padding: '10px 14px',
+                    cursor: !canSubmit || loading ? 'not-allowed' : 'pointer',
+                    opacity: !canSubmit || loading ? 0.6 : 1
+                  }}
+                >
+                  Creer un compte
+                </button>
+              </div>
+            </>
+          )}
+
+          {authMode === 'forgot' && (
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
+              <button
+                onClick={handleForgotPassword}
+                disabled={!canSendReset || loading}
+                style={{
+                  background: '#d97706',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: 8,
+                  padding: '10px 14px',
+                  cursor: !canSendReset || loading ? 'not-allowed' : 'pointer',
+                  opacity: !canSendReset || loading ? 0.6 : 1
+                }}
+              >
+                {loading ? 'Envoi...' : 'Envoyer le lien'}
+              </button>
+            </div>
+          )}
+
+          {authMode === 'reset' && (
+            <>
+              <label style={{ display: 'block', marginBottom: 6, color: '#334155' }}>
+                Nouveau mot de passe
+              </label>
+              <input
+                type="password"
+                placeholder="Minimum 6 caracteres"
+                value={nextPassword}
+                onChange={(e) => setNextPassword(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleUpdatePassword()
+                }}
+                style={{
+                  width: '100%',
+                  marginBottom: 12,
+                  padding: '10px 12px',
+                  borderRadius: 8,
+                  border: '1px solid #cbd5e1',
+                  outline: 'none'
+                }}
+              />
+
+              <label style={{ display: 'block', marginBottom: 6, color: '#334155' }}>
+                Confirmer le mot de passe
+              </label>
+              <input
+                type="password"
+                placeholder="Retape le mot de passe"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleUpdatePassword()
+                }}
+                style={{
+                  width: '100%',
+                  marginBottom: 14,
+                  padding: '10px 12px',
+                  borderRadius: 8,
+                  border: '1px solid #cbd5e1',
+                  outline: 'none'
+                }}
+              />
+
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
+                <button
+                  onClick={handleUpdatePassword}
+                  disabled={!canUpdatePassword || loading}
+                  style={{
+                    background: '#0f766e',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: 8,
+                    padding: '10px 14px',
+                    cursor: !canUpdatePassword || loading ? 'not-allowed' : 'pointer',
+                    opacity: !canUpdatePassword || loading ? 0.6 : 1
+                  }}
+                >
+                  {loading ? 'Mise a jour...' : 'Mettre a jour'}
+                </button>
+              </div>
+            </>
+          )}
+
+          <div style={{ marginTop: 14, display: 'flex', justifyContent: 'center', gap: 12, flexWrap: 'wrap' }}>
+            {authMode === 'signin' && (
+              <button
+                onClick={() => {
+                  setMessage('')
+                  setAuthMode('forgot')
+                }}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: '#1d4ed8',
+                  cursor: 'pointer',
+                  textDecoration: 'underline',
+                  padding: 0
+                }}
+              >
+                Mot de passe oublie ?
+              </button>
+            )}
+
+            {authMode !== 'signin' && (
+              <button
+                onClick={() => {
+                  setMessage('')
+                  setAuthMode('signin')
+                }}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: '#1d4ed8',
+                  cursor: 'pointer',
+                  textDecoration: 'underline',
+                  padding: 0
+                }}
+              >
+                Retour a la connexion
+              </button>
+            )}
           </div>
 
           <p style={{ marginTop: 14, minHeight: 20, color: '#334155', fontSize: 14 }}>
@@ -187,4 +390,3 @@ export function AuthPageClient() {
     </div>
   )
 }
-
