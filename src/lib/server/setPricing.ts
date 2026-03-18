@@ -26,6 +26,15 @@ export type SetPricingResult = {
 }
 
 const IN_CHUNK_SIZE = 200
+const PRICING_CACHE_TTL_MS = 60 * 60 * 1000
+
+type PricingCacheEntry = {
+  expiresAt: number
+  value: SetPricingResult
+}
+
+const pricingCache = new Map<string, PricingCacheEntry>()
+const pricingInFlight = new Map<string, Promise<SetPricingResult>>()
 
 function chunkArray<T>(items: T[], size: number): T[][] {
   const chunks: T[][] = []
@@ -117,7 +126,7 @@ function buildResult(params: {
   return params
 }
 
-export async function getSetPricing(setCode: string): Promise<SetPricingResult> {
+async function computeSetPricing(setCode: string): Promise<SetPricingResult> {
   const normalizedSetCode = normalizeSetCode(setCode)
   const apiSetCode = formatApiSetCode(setCode)
 
@@ -132,26 +141,6 @@ export async function getSetPricing(setCode: string): Promise<SetPricingResult> 
   const cardmarketTrends: Record<string, CardmarketTrend> = {}
   const cardmarketTrendsByPrintId: Record<string, CardmarketTrend> = {}
   const warnings: string[] = []
-
-  if (normalizedSetCode !== 'PROMO') {
-    const response = await fetch(`https://www.optcgapi.com/api/sets/${apiSetCode}/`)
-    if (response.ok) {
-      const cards = await response.json()
-      if (Array.isArray(cards)) {
-        for (const card of cards) {
-          const key = normalizePrintCode(card?.card_image_id)
-          const price = Number(card?.inventory_price)
-          if (!key || !Number.isFinite(price)) continue
-          prices[key] = price
-          sources[key] = 'us'
-        }
-      } else {
-        warnings.push('Source US invalide: format inattendu')
-      }
-    } else {
-      warnings.push(`Source US indisponible: HTTP ${response.status}`)
-    }
-  }
 
   const { data: setData } = await supabaseServiceServer
     .from('sets')
@@ -230,216 +219,238 @@ export async function getSetPricing(setCode: string): Promise<SetPricingResult> 
   }
 
   const productIds = [...new Set(links.map((row) => row.cardmarket_product_id).filter(Boolean))]
-  if (productIds.length === 0) {
-    return buildResult({
-      prices,
-      pricesByPrintId,
-      sources,
-      sourcesByPrintId,
-      cardmarketProductIds,
-      cardmarketProductIdsByPrintId,
-      cardmarketRanges,
-      cardmarketRangesByPrintId,
-      cardmarketTrends,
-      cardmarketTrendsByPrintId,
-      warnings
-    })
-  }
-
-  const catalogRows: Array<{
-    entry_key: string
-    product_id: string
-    avg_price: number | null
-    low_price: number | null
-    avg: number | null
-    low: number | null
-    trend: number | null
-    avg1: number | null
-    avg7: number | null
-    avg30: number | null
-  }> = []
-
-  for (const idsChunk of chunkArray(productIds, IN_CHUNK_SIZE)) {
-    const { data: catalogPriceData } = await supabaseServiceServer
-      .from('cardmarket_price_guide_entries')
-      .select('entry_key, product_id, avg_price, low_price, avg, low, trend, avg1, avg7, avg30')
-      .in('product_id', idsChunk)
-
-    catalogRows.push(
-      ...(((catalogPriceData as Array<{
-        entry_key: string
-        product_id: string
-        avg_price: number | null
-        low_price: number | null
-        avg: number | null
-        low: number | null
-        trend: number | null
-        avg1: number | null
-        avg7: number | null
-        avg30: number | null
-      }> | null) || []) as Array<{
-        entry_key: string
-        product_id: string
-        avg_price: number | null
-        low_price: number | null
-        avg: number | null
-        low: number | null
-        trend: number | null
-        avg1: number | null
-        avg7: number | null
-        avg30: number | null
-      }>)
-    )
-  }
-
-  const byProductId = new Map<
-    string,
-    {
-      range: CardmarketRange
+  if (productIds.length > 0) {
+    const catalogRows: Array<{
+      entry_key: string
+      product_id: string
+      avg_price: number | null
+      low_price: number | null
+      avg: number | null
+      low: number | null
       trend: number | null
       avg1: number | null
       avg7: number | null
       avg30: number | null
+    }> = []
+
+    for (const idsChunk of chunkArray(productIds, IN_CHUNK_SIZE)) {
+      const { data: catalogPriceData } = await supabaseServiceServer
+        .from('cardmarket_price_guide_entries')
+        .select('entry_key, product_id, avg_price, low_price, avg, low, trend, avg1, avg7, avg30')
+        .in('product_id', idsChunk)
+
+      catalogRows.push(
+        ...(((catalogPriceData as Array<{
+          entry_key: string
+          product_id: string
+          avg_price: number | null
+          low_price: number | null
+          avg: number | null
+          low: number | null
+          trend: number | null
+          avg1: number | null
+          avg7: number | null
+          avg30: number | null
+        }> | null) || []) as Array<{
+          entry_key: string
+          product_id: string
+          avg_price: number | null
+          low_price: number | null
+          avg: number | null
+          low: number | null
+          trend: number | null
+          avg1: number | null
+          avg7: number | null
+          avg30: number | null
+        }>)
+      )
     }
-  >()
-  for (const row of catalogRows) {
-    if (!row.product_id) continue
-    const avgFromJson = Number(row.avg)
-    const avgFromLegacy = Number(row.avg_price)
-    const lowFromJson = Number(row.low)
-    const lowFromLegacy = Number(row.low_price)
 
-    const avg = Number.isFinite(avgFromJson)
-      ? avgFromJson
-      : Number.isFinite(avgFromLegacy)
-        ? avgFromLegacy
-        : null
-    const low = Number.isFinite(lowFromJson)
-      ? lowFromJson
-      : Number.isFinite(lowFromLegacy)
-        ? lowFromLegacy
-        : null
+    const byProductId = new Map<
+      string,
+      {
+        range: CardmarketRange
+        trend: number | null
+        avg1: number | null
+        avg7: number | null
+        avg30: number | null
+      }
+    >()
+    for (const row of catalogRows) {
+      if (!row.product_id) continue
+      const avgFromJson = Number(row.avg)
+      const avgFromLegacy = Number(row.avg_price)
+      const lowFromJson = Number(row.low)
+      const lowFromLegacy = Number(row.low_price)
 
-    byProductId.set(row.product_id, {
-      range: { low, avg },
-      trend: Number.isFinite(Number(row.trend)) ? Number(row.trend) : null,
-      avg1: Number.isFinite(Number(row.avg1)) ? Number(row.avg1) : null,
-      avg7: Number.isFinite(Number(row.avg7)) ? Number(row.avg7) : null,
-      avg30: Number.isFinite(Number(row.avg30)) ? Number(row.avg30) : null
-    })
+      const avg = Number.isFinite(avgFromJson)
+        ? avgFromJson
+        : Number.isFinite(avgFromLegacy)
+          ? avgFromLegacy
+          : null
+      const low = Number.isFinite(lowFromJson)
+        ? lowFromJson
+        : Number.isFinite(lowFromLegacy)
+          ? lowFromLegacy
+          : null
+
+      byProductId.set(row.product_id, {
+        range: { low, avg },
+        trend: Number.isFinite(Number(row.trend)) ? Number(row.trend) : null,
+        avg1: Number.isFinite(Number(row.avg1)) ? Number(row.avg1) : null,
+        avg7: Number.isFinite(Number(row.avg7)) ? Number(row.avg7) : null,
+        avg30: Number.isFinite(Number(row.avg30)) ? Number(row.avg30) : null
+      })
+    }
+
+    const snapshotRows: Array<{
+      product_id: string
+      snapshot_date: string
+      low: number | null
+      avg: number | null
+    }> = []
+    const snapshotLookback = new Date(Date.now() - 45 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+    for (const idsChunk of chunkArray(productIds, IN_CHUNK_SIZE)) {
+      const { data: historyData } = await supabaseServiceServer
+        .from('cardmarket_price_guide_snapshots')
+        .select('product_id, snapshot_date, low, avg')
+        .in('product_id', idsChunk)
+        .gte('snapshot_date', snapshotLookback)
+        .order('snapshot_date', { ascending: false })
+
+      snapshotRows.push(
+        ...(((historyData as Array<{
+          product_id: string
+          snapshot_date: string
+          low: number | null
+          avg: number | null
+        }> | null) || []) as Array<{
+          product_id: string
+          snapshot_date: string
+          low: number | null
+          avg: number | null
+        }>)
+      )
+    }
+
+    const snapshotsByProductId = new Map<
+      string,
+      Array<{ snapshot_date: string; low: number | null; avg: number | null }>
+    >()
+    for (const row of snapshotRows) {
+      if (!row.product_id || !row.snapshot_date) continue
+      if (!snapshotsByProductId.has(row.product_id)) snapshotsByProductId.set(row.product_id, [])
+      snapshotsByProductId.get(row.product_id)?.push(row)
+    }
+
+    for (const link of links) {
+      const printId = link.card_print_id
+      const printCode = printCodeById.get(link.card_print_id)
+      if (!printCode) continue
+      const current = byProductId.get(link.cardmarket_product_id)
+      const range = current?.range
+      const low = range?.low ?? null
+      const avg = range?.avg ?? null
+      const calcPrice = low ?? avg
+
+      if (calcPrice != null && Number.isFinite(calcPrice)) {
+        prices[printCode] = calcPrice
+        pricesByPrintId[printId] = calcPrice
+        sources[printCode] = 'cardmarket'
+        sourcesByPrintId[printId] = 'cardmarket'
+      }
+      if (range) {
+        cardmarketRanges[printCode] = range
+        cardmarketRangesByPrintId[printId] = range
+      }
+
+      const currentPrice = pickCardmarketPrice(range)
+      const historyRows = snapshotsByProductId.get(link.cardmarket_product_id) || []
+      const latestHistoryDate = historyRows[0]?.snapshot_date || null
+      const prev1 = latestHistoryDate
+        ? historyRows.find((row) => row.snapshot_date < latestHistoryDate) || null
+        : null
+      const prev7 = latestHistoryDate ? pickHistoricalReference(historyRows, latestHistoryDate, 7) : null
+      const prev30 = latestHistoryDate ? pickHistoricalReference(historyRows, latestHistoryDate, 30) : null
+
+      const pct1d = pctChange(currentPrice, pickCardmarketPrice(prev1))
+      const pct7d = pctChange(currentPrice, pickCardmarketPrice(prev7))
+      const pct30d = pctChange(currentPrice, pickCardmarketPrice(prev30))
+
+      const nativeScore = weightedAverage([
+        { value: pctChange(current?.avg1 ?? null, current?.avg7 ?? null), weight: 0.35 },
+        { value: pctChange(current?.avg7 ?? null, current?.avg30 ?? null), weight: 0.4 },
+        { value: pctChange(current?.trend ?? null, current?.avg30 ?? null), weight: 0.25 }
+      ])
+      const snapshotScore = weightedAverage([
+        { value: pct1d, weight: 0.5 },
+        { value: pct7d, weight: 0.3 },
+        { value: pct30d, weight: 0.2 }
+      ])
+      const score = weightedAverage([
+        { value: snapshotScore, weight: 0.65 },
+        { value: nativeScore, weight: 0.35 }
+      ])
+
+      let direction: CardmarketTrendDirection = 'unknown'
+      if (Number.isFinite(score)) {
+        if ((score as number) >= 0.015) direction = 'up'
+        else if ((score as number) <= -0.015) direction = 'down'
+        else direction = 'flat'
+      }
+
+      const trendPayload = {
+        direction,
+        score,
+        pct1d,
+        pct7d,
+        pct30d
+      }
+      cardmarketTrends[printCode] = trendPayload
+      cardmarketTrendsByPrintId[printId] = trendPayload
+    }
   }
 
-  const snapshotRows: Array<{
-    product_id: string
-    snapshot_date: string
-    low: number | null
-    avg: number | null
-  }> = []
-  const snapshotLookback = new Date(Date.now() - 45 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
-  for (const idsChunk of chunkArray(productIds, IN_CHUNK_SIZE)) {
-    const { data: historyData } = await supabaseServiceServer
-      .from('cardmarket_price_guide_snapshots')
-      .select('product_id, snapshot_date, low, avg')
-      .in('product_id', idsChunk)
-      .gte('snapshot_date', snapshotLookback)
-      .order('snapshot_date', { ascending: false })
-
-    snapshotRows.push(
-      ...(((historyData as Array<{
-        product_id: string
-        snapshot_date: string
-        low: number | null
-        avg: number | null
-      }> | null) || []) as Array<{
-        product_id: string
-        snapshot_date: string
-        low: number | null
-        avg: number | null
-      }>)
+  const linkedPrintIds = new Set(links.map((row) => row.card_print_id).filter(Boolean))
+  const missingPrintCodes = prints
+    .map((row) => ({
+      printId: row.id,
+      printCode: normalizePrintCode(row.print_code)
+    }))
+    .filter(
+      (row) =>
+        Boolean(row.printCode) &&
+        !linkedPrintIds.has(row.printId) &&
+        !Object.prototype.hasOwnProperty.call(pricesByPrintId, row.printId)
     )
-  }
 
-  const snapshotsByProductId = new Map<
-    string,
-    Array<{ snapshot_date: string; low: number | null; avg: number | null }>
-  >()
-  for (const row of snapshotRows) {
-    if (!row.product_id || !row.snapshot_date) continue
-    if (!snapshotsByProductId.has(row.product_id)) snapshotsByProductId.set(row.product_id, [])
-    snapshotsByProductId.get(row.product_id)?.push(row)
-  }
+  if (normalizedSetCode !== 'PROMO' && missingPrintCodes.length > 0) {
+    const response = await fetch(`https://www.optcgapi.com/api/sets/${apiSetCode}/`)
+    if (response.ok) {
+      const cards = await response.json()
+      if (Array.isArray(cards)) {
+        const usPricesByPrintCode: Record<string, number> = {}
+        for (const card of cards) {
+          const key = normalizePrintCode(card?.card_image_id)
+          const price = Number(card?.inventory_price)
+          if (!key || !Number.isFinite(price)) continue
+          usPricesByPrintCode[key] = price
+        }
 
-  for (const link of links) {
-    const printId = link.card_print_id
-    const printCode = printCodeById.get(link.card_print_id)
-    if (!printCode) continue
-    const current = byProductId.get(link.cardmarket_product_id)
-    const range = current?.range
-    const low = range?.low ?? null
-    const avg = range?.avg ?? null
-    const calcPrice = low ?? avg
-
-    // Linked print => source must be Cardmarket only.
-    delete prices[printCode]
-    delete sources[printCode]
-    delete pricesByPrintId[printId]
-    delete sourcesByPrintId[printId]
-
-    if (calcPrice != null && Number.isFinite(calcPrice)) {
-      prices[printCode] = calcPrice
-      pricesByPrintId[printId] = calcPrice
-      sources[printCode] = 'cardmarket'
-      sourcesByPrintId[printId] = 'cardmarket'
+        for (const row of missingPrintCodes) {
+          const fallbackPrice = usPricesByPrintCode[row.printCode]
+          if (!Number.isFinite(fallbackPrice)) continue
+          prices[row.printCode] = fallbackPrice
+          pricesByPrintId[row.printId] = fallbackPrice
+          sources[row.printCode] = 'us'
+          sourcesByPrintId[row.printId] = 'us'
+        }
+      } else {
+        warnings.push('Source US invalide: format inattendu')
+      }
+    } else {
+      warnings.push(`Source US indisponible: HTTP ${response.status}`)
     }
-    if (range) {
-      cardmarketRanges[printCode] = range
-      cardmarketRangesByPrintId[printId] = range
-    }
-
-    const currentPrice = pickCardmarketPrice(range)
-    const historyRows = snapshotsByProductId.get(link.cardmarket_product_id) || []
-    const latestHistoryDate = historyRows[0]?.snapshot_date || null
-    const prev1 = latestHistoryDate
-      ? historyRows.find((row) => row.snapshot_date < latestHistoryDate) || null
-      : null
-    const prev7 = latestHistoryDate ? pickHistoricalReference(historyRows, latestHistoryDate, 7) : null
-    const prev30 = latestHistoryDate ? pickHistoricalReference(historyRows, latestHistoryDate, 30) : null
-
-    const pct1d = pctChange(currentPrice, pickCardmarketPrice(prev1))
-    const pct7d = pctChange(currentPrice, pickCardmarketPrice(prev7))
-    const pct30d = pctChange(currentPrice, pickCardmarketPrice(prev30))
-
-    const nativeScore = weightedAverage([
-      { value: pctChange(current?.avg1 ?? null, current?.avg7 ?? null), weight: 0.35 },
-      { value: pctChange(current?.avg7 ?? null, current?.avg30 ?? null), weight: 0.4 },
-      { value: pctChange(current?.trend ?? null, current?.avg30 ?? null), weight: 0.25 }
-    ])
-    const snapshotScore = weightedAverage([
-      { value: pct1d, weight: 0.5 },
-      { value: pct7d, weight: 0.3 },
-      { value: pct30d, weight: 0.2 }
-    ])
-    const score = weightedAverage([
-      { value: snapshotScore, weight: 0.65 },
-      { value: nativeScore, weight: 0.35 }
-    ])
-
-    let direction: CardmarketTrendDirection = 'unknown'
-    if (Number.isFinite(score)) {
-      if ((score as number) >= 0.015) direction = 'up'
-      else if ((score as number) <= -0.015) direction = 'down'
-      else direction = 'flat'
-    }
-
-    const trendPayload = {
-      direction,
-      score,
-      pct1d,
-      pct7d,
-      pct30d
-    }
-    cardmarketTrends[printCode] = trendPayload
-    cardmarketTrendsByPrintId[printId] = trendPayload
   }
 
   return buildResult({
@@ -455,4 +466,36 @@ export async function getSetPricing(setCode: string): Promise<SetPricingResult> 
     cardmarketTrendsByPrintId,
     warnings
   })
+}
+
+export async function getSetPricing(setCode: string): Promise<SetPricingResult> {
+  const normalizedSetCode = normalizeSetCode(setCode)
+  const now = Date.now()
+  const cached = pricingCache.get(normalizedSetCode)
+
+  if (cached && cached.expiresAt > now) {
+    return cached.value
+  }
+
+  const inFlight = pricingInFlight.get(normalizedSetCode)
+  if (inFlight) {
+    return inFlight
+  }
+
+  const pending = computeSetPricing(normalizedSetCode)
+    .then((value) => {
+      pricingCache.set(normalizedSetCode, {
+        value,
+        expiresAt: Date.now() + PRICING_CACHE_TTL_MS
+      })
+      pricingInFlight.delete(normalizedSetCode)
+      return value
+    })
+    .catch((error) => {
+      pricingInFlight.delete(normalizedSetCode)
+      throw error
+    })
+
+  pricingInFlight.set(normalizedSetCode, pending)
+  return pending
 }

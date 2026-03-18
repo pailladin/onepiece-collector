@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabaseClient'
 import { isAltVersion } from '@/lib/filtering/filterCardPrints'
-import { aggregateCollectionRows, type CollectionQuantityRow } from '@/lib/collections/quantities'
+import { aggregateCollectionRows, fetchAllUserCollectionRows } from '@/lib/collections/quantities'
 
 export type SetStats = {
   total: number
@@ -37,6 +37,7 @@ async function fetchAllCardPrints() {
     const { data, error } = await supabase
       .from('card_prints')
       .select('id, distribution_set_id, print_code, variant_type')
+      .order('id', { ascending: true })
       .range(from, to)
 
     if (error || !data) break
@@ -47,30 +48,6 @@ async function fetchAllCardPrints() {
 
   return rows
 }
-
-async function fetchAllUserCollections(userId: string) {
-  const pageSize = 1000
-  let from = 0
-  const rows: CollectionQuantityRow[] = []
-
-  while (true) {
-    const to = from + pageSize - 1
-    const { data, error } = await supabase
-      .from('collections')
-      .select('card_print_id, quantity, language_code')
-      .gt('quantity', 0)
-      .eq('user_id', userId)
-      .range(from, to)
-
-    if (error || !data) break
-    rows.push(...(data as CollectionQuantityRow[]))
-    if (data.length < pageSize) break
-    from += pageSize
-  }
-
-  return rows
-}
-
 export async function fetchUserSetStats(userId: string) {
   const { data: setsData } = await supabase
     .from('sets')
@@ -79,7 +56,7 @@ export async function fetchUserSetStats(userId: string) {
 
   const [printsData, collectionData] = await Promise.all([
     fetchAllCardPrints(),
-    fetchAllUserCollections(userId)
+    fetchAllUserCollectionRows({ supabase, userId })
   ])
 
   const { totalByPrintId } = aggregateCollectionRows(collectionData)

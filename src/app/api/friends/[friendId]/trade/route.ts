@@ -7,7 +7,7 @@ import {
   getCollectionLanguageLabel,
   normalizeCollectionLanguage
 } from '@/lib/collections/languages'
-import { aggregateCollectionRows, type CollectionQuantityRow } from '@/lib/collections/quantities'
+import { aggregateCollectionRows, fetchAllUserCollectionRows } from '@/lib/collections/quantities'
 import { getRequestUser } from '@/lib/server/authUser'
 import { supabaseServiceServer } from '@/lib/server/supabaseServer'
 
@@ -125,34 +125,38 @@ export async function GET(
     return NextResponse.json({ error: `Erreur profil ami: ${profileError.message}` }, { status: 500 })
   }
 
-  const [{ data: setsData, error: setsError }, { data: myCollectionData, error: myCollectionError }, { data: friendCollectionData, error: friendCollectionError }] =
+  const [{ data: setsData, error: setsError }, myCollectionResult, friendCollectionResult] =
     await Promise.all([
       supabaseServiceServer.from('sets').select('id, code'),
-      supabaseServiceServer
-        .from('collections')
-        .select('card_print_id, quantity, language_code')
-        .eq('user_id', userResult.user.id),
-      supabaseServiceServer
-        .from('collections')
-        .select('card_print_id, quantity, language_code')
-        .eq('user_id', friendId)
+      fetchAllUserCollectionRows({ supabase: supabaseServiceServer, userId: userResult.user.id })
+        .then((data) => ({ data, error: null as string | null }))
+        .catch((error) => ({
+          data: null,
+          error: error instanceof Error ? error.message : 'Erreur ma collection'
+        })),
+      fetchAllUserCollectionRows({ supabase: supabaseServiceServer, userId: friendId })
+        .then((data) => ({ data, error: null as string | null }))
+        .catch((error) => ({
+          data: null,
+          error: error instanceof Error ? error.message : 'Erreur collection ami'
+        }))
     ])
 
   if (setsError) {
     return NextResponse.json({ error: `Erreur sets: ${setsError.message}` }, { status: 500 })
   }
-  if (myCollectionError) {
-    return NextResponse.json({ error: `Erreur ma collection: ${myCollectionError.message}` }, { status: 500 })
+  if (myCollectionResult.error) {
+    return NextResponse.json({ error: `Erreur ma collection: ${myCollectionResult.error}` }, { status: 500 })
   }
-  if (friendCollectionError) {
+  if (friendCollectionResult.error) {
     return NextResponse.json(
-      { error: `Erreur collection ami: ${friendCollectionError.message}` },
+      { error: `Erreur collection ami: ${friendCollectionResult.error}` },
       { status: 500 }
     )
   }
 
-  const myAggregate = aggregateCollectionRows((myCollectionData as CollectionQuantityRow[] | null) || [])
-  const friendAggregate = aggregateCollectionRows((friendCollectionData as CollectionQuantityRow[] | null) || [])
+  const myAggregate = aggregateCollectionRows(myCollectionResult.data || [])
+  const friendAggregate = aggregateCollectionRows(friendCollectionResult.data || [])
   const mineByPrint = myAggregate.totalByPrintId
   const friendByPrint = friendAggregate.totalByPrintId
 

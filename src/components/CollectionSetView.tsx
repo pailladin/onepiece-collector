@@ -24,7 +24,7 @@ import {
 } from '@/lib/collections/languages'
 import {
   aggregateCollectionRows,
-  type CollectionQuantityRow
+  fetchUserCollectionRowsForPrintIds
 } from '@/lib/collections/quantities'
 import { WishlistHeartButton } from '@/components/WishlistHeartButton'
 import { useWishlist } from '@/lib/useWishlist'
@@ -319,14 +319,13 @@ export function CollectionSetView({
       let languageBreakdownByPrintId = new Map<string, Map<string, number>>()
 
       if (resolvedOwnerId) {
-        const { data: collectionData } = await supabase
-          .from('collections')
-          .select('card_print_id, quantity, language_code')
-          .eq('user_id', resolvedOwnerId)
+        const collectionData = await fetchUserCollectionRowsForPrintIds({
+          supabase,
+          userId: resolvedOwnerId,
+          printIds: printsData.map((print) => String(print.id || ''))
+        })
 
-        const aggregated = aggregateCollectionRows(
-          (collectionData as CollectionQuantityRow[] | null) || []
-        )
+        const aggregated = aggregateCollectionRows(collectionData)
         ownedMap = aggregated.totalByPrintId
         languageBreakdownByPrintId = aggregated.byPrintIdLanguage
       }

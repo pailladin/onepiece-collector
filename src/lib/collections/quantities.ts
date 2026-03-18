@@ -11,6 +11,16 @@ export type CollectionQuantityRow = {
   language_code?: string | null
 }
 
+function chunkArray<T>(items: T[], size: number): T[][] {
+  if (items.length === 0) return []
+
+  const chunks: T[][] = []
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size))
+  }
+  return chunks
+}
+
 export function aggregateCollectionRows(rows: CollectionQuantityRow[] | null | undefined) {
   const totalByPrintId = new Map<string, number>()
   const byPrintIdLanguage = new Map<string, Map<string, number>>()
@@ -50,4 +60,64 @@ export function getLanguageBreakdownEntries(
       shortLabel: getCollectionLanguageShortLabel(languageCode),
       flag: getCollectionLanguageFlag(languageCode)
     }))
+}
+
+export async function fetchAllUserCollectionRows(params: {
+  supabase: any
+  userId: string
+}) {
+  const pageSize = 1000
+  let from = 0
+  const rows: CollectionQuantityRow[] = []
+
+  while (true) {
+    const to = from + pageSize - 1
+    const { data, error } = await params.supabase
+      .from('collections')
+      .select('card_print_id, quantity, language_code')
+      .eq('user_id', params.userId)
+      .gt('quantity', 0)
+      .order('card_print_id', { ascending: true })
+      .order('language_code', { ascending: true, nullsFirst: true })
+      .range(from, to)
+
+    if (error) {
+      throw new Error(error.message)
+    }
+
+    const page = (data as CollectionQuantityRow[] | null) || []
+    rows.push(...page)
+    if (page.length < pageSize) break
+    from += pageSize
+  }
+
+  return rows
+}
+
+export async function fetchUserCollectionRowsForPrintIds(params: {
+  supabase: any
+  userId: string
+  printIds: string[]
+}) {
+  const normalizedPrintIds = [...new Set(params.printIds.map((id) => String(id || '').trim()).filter(Boolean))]
+  if (normalizedPrintIds.length === 0) return [] as CollectionQuantityRow[]
+
+  const rows: CollectionQuantityRow[] = []
+
+  for (const idsChunk of chunkArray(normalizedPrintIds, 500)) {
+    const { data, error } = await params.supabase
+      .from('collections')
+      .select('card_print_id, quantity, language_code')
+      .eq('user_id', params.userId)
+      .gt('quantity', 0)
+      .in('card_print_id', idsChunk)
+
+    if (error) {
+      throw new Error(error.message)
+    }
+
+    rows.push(...(((data as CollectionQuantityRow[] | null) || []) as CollectionQuantityRow[]))
+  }
+
+  return rows
 }

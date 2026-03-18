@@ -1,6 +1,6 @@
 import { supabaseServiceServer } from '@/lib/server/supabaseServer'
 import { getSetPricing } from '@/lib/server/setPricing'
-import { aggregateCollectionRows, type CollectionQuantityRow } from '@/lib/collections/quantities'
+import { aggregateCollectionRows, fetchAllUserCollectionRows } from '@/lib/collections/quantities'
 
 type CardPrintLookupRow = {
   id: string
@@ -67,17 +67,14 @@ function getUtcWeekBounds(now: Date = new Date()) {
 export async function computeUserCollectionSnapshot(userId: string): Promise<UserCollectionSnapshot> {
   const { periodStart, periodEnd } = getUtcWeekBounds()
 
-  const { data: ownedData, error: ownedError } = await supabaseServiceServer
-    .from('collections')
-    .select('card_print_id, quantity, language_code')
-    .eq('user_id', userId)
-    .gt('quantity', 0)
-
-  if (ownedError) {
-    throw new Error(`Erreur collection: ${ownedError.message}`)
-  }
-
-  const ownedRows = (ownedData as CollectionQuantityRow[] | null) || []
+  const ownedRows = await fetchAllUserCollectionRows({
+    supabase: supabaseServiceServer,
+    userId
+  }).catch((error) => {
+    throw new Error(
+      `Erreur collection: ${error instanceof Error ? error.message : 'lecture impossible'}`
+    )
+  })
   if (ownedRows.length === 0) {
     return {
       periodStart,

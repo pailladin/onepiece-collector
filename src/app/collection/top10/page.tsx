@@ -6,7 +6,7 @@ import { useAuth } from '@/lib/auth'
 import { DEFAULT_LOCALE } from '@/lib/locale'
 import { supabase } from '@/lib/supabaseClient'
 import { getDisplayPrintCode } from '@/lib/cards/printDisplay'
-import { aggregateCollectionRows, type CollectionQuantityRow } from '@/lib/collections/quantities'
+import { aggregateCollectionRows, fetchAllUserCollectionRows } from '@/lib/collections/quantities'
 
 const STORAGE_BASE_URL = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/cards-images`
 const MISSING_IMAGE_PATH = '__missing__'
@@ -91,15 +91,10 @@ export default function CollectionTop10Page() {
       setError(null)
 
       try {
-        const { data: ownedData, error: ownedError } = await supabase
-          .from('collections')
-          .select('card_print_id, quantity, language_code')
-          .eq('user_id', user.id)
-          .gt('quantity', 0)
-
-        if (ownedError) throw new Error(`Erreur collection: ${ownedError.message}`)
-
-        const ownedRows = (ownedData as CollectionQuantityRow[] | null) || []
+        const ownedRows = await fetchAllUserCollectionRows({
+          supabase,
+          userId: user.id
+        })
         if (ownedRows.length === 0) {
           setRows([])
           setLoading(false)

@@ -17,7 +17,7 @@ import {
 } from '@/lib/filtering/filterCardPrints'
 import {
   aggregateCollectionRows,
-  type CollectionQuantityRow
+  fetchUserCollectionRowsForPrintIds
 } from '@/lib/collections/quantities'
 import {
   COLLECTION_LANGUAGE_OPTIONS,
@@ -134,14 +134,13 @@ export function CatalogueSetPageClient() {
       let languageBreakdownByPrintId = new Map<string, Map<string, number>>()
 
       if (userId) {
-        const { data: collectionData } = await supabase
-          .from('collections')
-          .select('card_print_id, quantity, language_code')
-          .eq('user_id', userId)
+        const collectionData = await fetchUserCollectionRowsForPrintIds({
+          supabase,
+          userId,
+          printIds: baseItems.map((print: any) => String(print.id || ''))
+        })
 
-        const aggregated = aggregateCollectionRows(
-          (collectionData as CollectionQuantityRow[] | null) || []
-        )
+        const aggregated = aggregateCollectionRows(collectionData)
         ownedMap = aggregated.totalByPrintId
         languageBreakdownByPrintId = aggregated.byPrintIdLanguage
       }

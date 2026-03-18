@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { isAltVersion } from '@/lib/filtering/filterCardPrints'
-import { aggregateCollectionRows, type CollectionQuantityRow } from '@/lib/collections/quantities'
+import { aggregateCollectionRows, fetchAllUserCollectionRows } from '@/lib/collections/quantities'
 import { getRequestUser } from '@/lib/server/authUser'
 import { supabaseServiceServer } from '@/lib/server/supabaseServer'
 
@@ -39,6 +39,7 @@ async function fetchAllCardPrints() {
     const { data, error } = await supabaseServiceServer
       .from('card_prints')
       .select('id, distribution_set_id, print_code, variant_type')
+      .order('id', { ascending: true })
       .range(from, to)
 
     if (error) {
@@ -53,34 +54,6 @@ async function fetchAllCardPrints() {
 
   return rows
 }
-
-async function fetchAllUserCollections(userId: string) {
-  const pageSize = 1000
-  let from = 0
-  const rows: CollectionQuantityRow[] = []
-
-  while (true) {
-    const to = from + pageSize - 1
-    const { data, error } = await supabaseServiceServer
-      .from('collections')
-      .select('card_print_id, quantity, language_code')
-      .gt('quantity', 0)
-      .eq('user_id', userId)
-      .range(from, to)
-
-    if (error) {
-      throw new Error(`Erreur lecture collection ami: ${error.message}`)
-    }
-
-    const page = (data as CollectionQuantityRow[] | null) || []
-    rows.push(...page)
-    if (page.length < pageSize) break
-    from += pageSize
-  }
-
-  return rows
-}
-
 export async function GET(
   request: Request,
   context: { params: Promise<{ friendId: string }> }
@@ -137,7 +110,7 @@ export async function GET(
   try {
     const [printsData, collectionData] = await Promise.all([
       fetchAllCardPrints(),
-      fetchAllUserCollections(friendId)
+      fetchAllUserCollectionRows({ supabase: supabaseServiceServer, userId: friendId })
     ])
 
     const { totalByPrintId } = aggregateCollectionRows(collectionData)
