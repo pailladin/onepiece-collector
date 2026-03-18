@@ -6,7 +6,13 @@ type ShareTokenPayload = {
   exp: number
 }
 
+type WishlistShareTokenPayload = {
+  u: string
+  exp: number
+}
+
 const TOKEN_VERSION = 'v1'
+const WISHLIST_TOKEN_VERSION = 'w1'
 const TOKEN_TTL_SECONDS = 60 * 60 * 24 * 365 // 1 year
 
 function getSecret() {
@@ -73,5 +79,53 @@ export function verifyShareSetToken(token: string): { userId: string; setCode: s
   return {
     userId: payload.u,
     setCode: normalizeSetCode(payload.c)
+  }
+}
+
+export function createShareWishlistToken(params: { userId: string }) {
+  const payload: WishlistShareTokenPayload = {
+    u: params.userId,
+    exp: Math.floor(Date.now() / 1000) + TOKEN_TTL_SECONDS
+  }
+
+  const body = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url')
+  const signature = sign(`${WISHLIST_TOKEN_VERSION}.${body}`)
+  return `${WISHLIST_TOKEN_VERSION}.${body}.${signature}`
+}
+
+export function verifyShareWishlistToken(token: string): { userId: string } {
+  const parts = token.split('.')
+  if (parts.length !== 3) {
+    throw new Error('Invalid token format')
+  }
+
+  const [version, body, signature] = parts
+  if (version !== WISHLIST_TOKEN_VERSION) {
+    throw new Error('Invalid token version')
+  }
+
+  const expected = sign(`${version}.${body}`)
+  const expectedBuffer = Buffer.from(expected)
+  const signatureBuffer = Buffer.from(signature)
+  if (
+    expectedBuffer.length !== signatureBuffer.length ||
+    !crypto.timingSafeEqual(expectedBuffer, signatureBuffer)
+  ) {
+    throw new Error('Invalid token signature')
+  }
+
+  const payload = JSON.parse(
+    Buffer.from(body, 'base64url').toString('utf8')
+  ) as WishlistShareTokenPayload
+
+  if (!payload?.u || !payload?.exp) {
+    throw new Error('Invalid token payload')
+  }
+  if (payload.exp < Math.floor(Date.now() / 1000)) {
+    throw new Error('Token expired')
+  }
+
+  return {
+    userId: payload.u
   }
 }
