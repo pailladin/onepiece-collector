@@ -162,6 +162,11 @@ export function AccountPageClient() {
             Si tu as deja un compte One Piece Collector, lie Google ici plutot que de cliquer
             directement sur &quot;Continuer avec Google&quot; depuis la page de connexion.
           </div>
+          <div style={{ fontSize: 13, color: '#475569', lineHeight: 1.4 }}>
+            Important: le compte Google doit idealement utiliser la meme adresse email que ce
+            compte ({user.email || 'email inconnu'}), sinon la liaison peut etre refusee par
+            Supabase.
+          </div>
           <div style={{ fontSize: 13, color: '#334155' }}>
             Google:{' '}
             <strong>{loadingProviders ? 'verification...' : googleLinked ? 'lie' : 'non lie'}</strong>
