@@ -8,6 +8,7 @@ import { DEFAULT_LOCALE } from '@/lib/locale'
 import { getDisplayPrintCode } from '@/lib/cards/printDisplay'
 import { WishlistHeartButton } from '@/components/WishlistHeartButton'
 import { useWishlist } from '@/lib/useWishlist'
+import { buildCardmarketProductOrSearchUrl } from '@/lib/cardmarketUrls'
 
 const STORAGE_BASE_URL = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/cards-images`
 const MISSING_IMAGE_PATH = '__missing__'
@@ -492,13 +493,10 @@ export default function CollectionWishlistPage() {
                         </strong>
                       </div>
                       <a
-                        href={
-                          item.cardmarketProductId
-                            ? `https://www.cardmarket.com/en/OnePiece/Products?idProduct=${encodeURIComponent(item.cardmarketProductId)}`
-                            : `https://www.cardmarket.com/fr/OnePiece/Products/Singles?searchMode=v2&idCategory=1621&idExpansion=0&searchString=${encodeURIComponent(
-                                String(item.print_code || '').split('_')[0] || item.name
-                              )}&idRarity=0&perSite=30`
-                        }
+                        href={buildCardmarketProductOrSearchUrl({
+                          productId: item.cardmarketProductId,
+                          search: String(item.print_code || '').split('_')[0] || item.name
+                        })}
                         target="_blank"
                         rel="noreferrer"
                         style={{ color: '#0369a1', fontWeight: 700, textDecoration: 'none' }}

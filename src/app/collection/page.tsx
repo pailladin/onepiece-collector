@@ -11,6 +11,7 @@ import {
 } from '@/lib/collections/fetchUserSetStats'
 import { CollectionSetsGrid } from '@/components/CollectionSetsGrid'
 import { aggregateCollectionRows, fetchAllUserCollectionRows } from '@/lib/collections/quantities'
+import { buildCardmarketProductOrSearchUrl } from '@/lib/cardmarketUrls'
 
 type CardPrintLookupRow = {
   id: string
@@ -764,15 +765,10 @@ export default function CollectionPage() {
                       {row.trend.score != null ? formatPercent(row.trend.score) : '-'}
                     </div>
                     <a
-                      href={
-                        row.cardmarketProductId
-                          ? `https://www.cardmarket.com/en/OnePiece/Products?idProduct=${encodeURIComponent(
-                              row.cardmarketProductId
-                            )}`
-                          : `https://www.cardmarket.com/fr/OnePiece/Products/Singles?searchMode=v2&idCategory=1621&idExpansion=0&searchString=${encodeURIComponent(
-                              row.printCode.split('_')[0] || row.printCode
-                            )}&idRarity=0&perSite=30`
-                      }
+                      href={buildCardmarketProductOrSearchUrl({
+                        productId: row.cardmarketProductId,
+                        search: row.printCode.split('_')[0] || row.printCode
+                      })}
                       target="_blank"
                       rel="noreferrer"
                       style={{ color: '#0369a1', fontWeight: 700 }}

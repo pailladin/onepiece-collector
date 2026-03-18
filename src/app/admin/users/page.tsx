@@ -117,6 +117,25 @@ export default function AdminUsersPage() {
     }
   }
 
+  const startSupportMode = async (targetUserId: string) => {
+    const authHeaders = await getAuthHeader()
+    const res = await fetch('/api/admin/support/start', {
+      method: 'POST',
+      headers: {
+        ...authHeaders,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ userId: targetUserId })
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      setLogs([data?.error || 'Erreur demarrage mode support'])
+      return
+    }
+
+    window.location.href = '/admin/support/collection'
+  }
+
   if (authLoading || loading) return <div style={{ padding: 40 }}>Chargement...</div>
   if (!canAccessAdmin) return <div style={{ padding: 40 }}>Acces refuse.</div>
 
@@ -160,7 +179,7 @@ export default function AdminUsersPage() {
           style={{
             display: 'grid',
             gridTemplateColumns:
-              '30px minmax(220px,1.3fr) 110px 110px minmax(150px,1fr) minmax(150px,1fr) minmax(150px,1fr)',
+              '30px minmax(220px,1.3fr) 110px 110px minmax(150px,1fr) minmax(150px,1fr) minmax(150px,1fr) 110px',
             gap: 10,
             padding: '8px 10px',
             background: '#f8fafc',
@@ -175,18 +194,19 @@ export default function AdminUsersPage() {
           <div>Cree le</div>
           <div>Derniere connexion</div>
           <div>Email confirme</div>
+          <div>Support</div>
         </div>
 
         {users.length === 0 ? (
           <div style={{ padding: 12 }}>Aucun utilisateur.</div>
         ) : (
           users.map((row) => (
-            <label
+            <div
               key={row.id}
               style={{
                 display: 'grid',
                 gridTemplateColumns:
-                  '30px minmax(220px,1.3fr) 110px 110px minmax(150px,1fr) minmax(150px,1fr) minmax(150px,1fr)',
+                  '30px minmax(220px,1.3fr) 110px 110px minmax(150px,1fr) minmax(150px,1fr) minmax(150px,1fr) 110px',
                 gap: 10,
                 padding: '10px',
                 borderBottom: '1px solid #eee',
@@ -216,7 +236,22 @@ export default function AdminUsersPage() {
               <div>{formatDate(row.createdAt)}</div>
               <div>{formatDate(row.lastSignInAt)}</div>
               <div>{formatDate(row.emailConfirmedAt)}</div>
-            </label>
+              <div>
+                <button
+                  onClick={() => void startSupportMode(row.id)}
+                  style={{
+                    border: '1px solid #2563eb',
+                    background: '#eff6ff',
+                    color: '#1d4ed8',
+                    borderRadius: 8,
+                    padding: '6px 10px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Lecture seule
+                </button>
+              </div>
+            </div>
           ))
         )}
       </div>

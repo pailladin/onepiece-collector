@@ -7,6 +7,7 @@ import { DEFAULT_LOCALE } from '@/lib/locale'
 import { supabase } from '@/lib/supabaseClient'
 import { getDisplayPrintCode } from '@/lib/cards/printDisplay'
 import { aggregateCollectionRows, fetchAllUserCollectionRows } from '@/lib/collections/quantities'
+import { buildCardmarketProductOrSearchUrl } from '@/lib/cardmarketUrls'
 
 const STORAGE_BASE_URL = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/cards-images`
 const MISSING_IMAGE_PATH = '__missing__'
@@ -263,9 +264,10 @@ export default function CollectionTop10Page() {
         <div style={{ marginTop: 20, display: 'grid', gap: 10 }}>
           {rows.map((row, index) => {
             const baseCode = (row.printCode || '').split('_')[0] || ''
-            const link = row.cardmarketProductId
-              ? `https://www.cardmarket.com/en/OnePiece/Products?idProduct=${encodeURIComponent(row.cardmarketProductId)}`
-              : `https://www.cardmarket.com/fr/OnePiece/Products/Singles?searchMode=v2&idCategory=1621&idExpansion=0&searchString=${encodeURIComponent(baseCode)}&idRarity=0&perSite=30`
+            const link = buildCardmarketProductOrSearchUrl({
+              productId: row.cardmarketProductId,
+              search: baseCode
+            })
 
             return (
               <div

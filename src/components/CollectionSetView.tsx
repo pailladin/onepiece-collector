@@ -28,6 +28,7 @@ import {
 } from '@/lib/collections/quantities'
 import { WishlistHeartButton } from '@/components/WishlistHeartButton'
 import { useWishlist } from '@/lib/useWishlist'
+import { buildCardmarketProductOrSearchUrl } from '@/lib/cardmarketUrls'
 
 const STORAGE_BASE_URL = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/cards-images`
 const MISSING_IMAGE_PATH = '__missing__'
@@ -113,6 +114,7 @@ type Props = {
   editable?: boolean
   title?: string
   shareToken?: string | null
+  supportMode?: boolean
 }
 
 function normalizeSetCode(value: string) {
@@ -168,7 +170,8 @@ export function CollectionSetView({
   ownerUserId = null,
   editable = true,
   title,
-  shareToken = null
+  shareToken = null,
+  supportMode = false
 }: Props) {
   const { user } = useAuth()
   const userId = user?.id ?? null
@@ -242,6 +245,30 @@ export function CollectionSetView({
         }
 
         setItems(data?.items || [])
+        setSetLanguages(resolveSetLanguages(data?.set?.availableLanguages))
+        setLoading(false)
+        return
+      }
+
+      if (supportMode) {
+        const { data: sessionData } = await supabase.auth.getSession()
+        const accessToken = sessionData.session?.access_token
+        const res = await fetch(
+          `/api/admin/support/collection/${encodeURIComponent(normalizeSetCode(code))}`,
+          {
+            headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {}
+          }
+        )
+        const data = await res.json().catch(() => ({}))
+
+        if (!res.ok) {
+          setItems([])
+          setSetLanguages([])
+          setLoading(false)
+          return
+        }
+
+        setItems(Array.isArray(data?.items) ? data.items : [])
         setSetLanguages(resolveSetLanguages(data?.set?.availableLanguages))
         setLoading(false)
         return
@@ -344,7 +371,7 @@ export function CollectionSetView({
     }
 
     void fetchData()
-  }, [code, isFriendReadOnlyView, ownerUserId, resolvedOwnerId, shareToken])
+  }, [code, isFriendReadOnlyView, ownerUserId, resolvedOwnerId, shareToken, supportMode])
 
 
   const filterOptions = useMemo(() => getFilterOptions(items), [items])
@@ -1446,9 +1473,10 @@ export function CollectionSetView({
               {priceDetails.map((row) => (
                 (() => {
                   const baseCode = (row.printCode || '').split('_')[0] || ''
-                  const cardmarketUrl = row.cardmarketProductId
-                    ? `https://www.cardmarket.com/en/OnePiece/Products?idProduct=${encodeURIComponent(row.cardmarketProductId)}`
-                    : `https://www.cardmarket.com/fr/OnePiece/Products/Singles?searchMode=v2&idCategory=1621&idExpansion=0&searchString=${encodeURIComponent(baseCode)}&idRarity=0&perSite=30`
+                  const cardmarketUrl = buildCardmarketProductOrSearchUrl({
+                    productId: row.cardmarketProductId,
+                    search: baseCode
+                  })
                   return (
                 <div
                   key={row.id}

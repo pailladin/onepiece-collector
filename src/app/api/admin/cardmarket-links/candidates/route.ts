@@ -2,6 +2,10 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
 import { isAdminEmail, parseAdminEmails } from '@/lib/admin'
+import {
+  buildCardmarketProductUrl,
+  buildCardmarketSearchPageUrl
+} from '@/lib/cardmarketUrls'
 import { DEFAULT_LOCALE } from '@/lib/locale'
 import { getRequestUser } from '@/lib/server/authUser'
 
@@ -258,9 +262,7 @@ export async function GET(request: Request) {
   const effectiveExpansionId = Number.isFinite(expansionIdOverride)
     ? expansionIdOverride
     : inferredExpansionId
-  const searchUrl = `https://www.cardmarket.com/en/OnePiece/Products/Search?searchMode=v2&idCategory=0&idExpansion=0&searchString=${encodeURIComponent(
-    searchCode
-  )}&idRarity=0&perSite=30`
+  const searchUrl = buildCardmarketSearchPageUrl(searchCode)
 
   const byCodeQuery = supabase
     .from('cardmarket_catalog_entries')
@@ -355,7 +357,7 @@ export async function GET(request: Request) {
           .map((url) => `/api/cardmarket/image?src=${encodeURIComponent(url)}`),
         imageCode: row.product_id,
         productId: row.product_id,
-        cardmarketUrl: `https://www.cardmarket.com/en/OnePiece/Products?idProduct=${row.product_id}`,
+        cardmarketUrl: buildCardmarketProductUrl(row.product_id),
         cardName: row.name,
         score,
         idExpansion: row.id_expansion,

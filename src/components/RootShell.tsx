@@ -17,6 +17,13 @@ export function RootShell({
   const canAccessAdmin = isAdminEmail(user?.email, adminEmails)
   const [hasPendingFriendRequests, setHasPendingFriendRequests] = useState(false)
   const [hasPendingAdminSubmissions, setHasPendingAdminSubmissions] = useState(false)
+  const [supportTarget, setSupportTarget] = useState<{ id: string; email: string; username: string } | null>(null)
+
+  const getAuthHeader = async () => {
+    const { data } = await supabase.auth.getSession()
+    const accessToken = data.session?.access_token
+    return accessToken ? ({ Authorization: `Bearer ${accessToken}` } as Record<string, string>) : {}
+  }
 
   useEffect(() => {
     const loadPendingRequests = async () => {
@@ -65,9 +72,44 @@ export function RootShell({
     void loadPendingAdminSubmissions()
   }, [user, canAccessAdmin])
 
+  useEffect(() => {
+    const loadSupportTarget = async () => {
+      if (!user || !canAccessAdmin) {
+        setSupportTarget(null)
+        return
+      }
+
+      const authHeaders = await getAuthHeader()
+      const res = await fetch('/api/admin/support/current', { headers: authHeaders })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.active || !data?.user) {
+        setSupportTarget(null)
+        return
+      }
+
+      setSupportTarget({
+        id: data.user.id,
+        email: data.user.email || '',
+        username: data.user.username || ''
+      })
+    }
+
+    void loadSupportTarget()
+  }, [user, canAccessAdmin])
+
   const handleLogout = async () => {
     await supabase.auth.signOut()
     window.location.href = '/'
+  }
+
+  const stopSupportMode = async () => {
+    const authHeaders = await getAuthHeader()
+    await fetch('/api/admin/support/stop', {
+      method: 'POST',
+      headers: authHeaders
+    })
+    setSupportTarget(null)
+    window.location.href = '/admin/users'
   }
 
   return (
@@ -298,6 +340,46 @@ export function RootShell({
             </div>
           </div>
         </header>
+
+        {supportTarget && (
+          <div
+            style={{
+              background: '#7f1d1d',
+              color: '#fff',
+              padding: '10px 18px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12,
+              flexWrap: 'wrap'
+            }}
+          >
+            <div style={{ fontWeight: 700 }}>
+              Mode support lecture seule actif: {supportTarget.username || supportTarget.email || supportTarget.id}
+            </div>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+              <Link href="/admin/support/account" style={{ color: '#fff' }}>
+                Compte
+              </Link>
+              <Link href="/admin/support/collection" style={{ color: '#fff' }}>
+                Collection
+              </Link>
+              <button
+                onClick={() => void stopSupportMode()}
+                style={{
+                  border: '1px solid rgba(255,255,255,0.5)',
+                  background: 'rgba(255,255,255,0.12)',
+                  color: '#fff',
+                  borderRadius: 999,
+                  padding: '6px 12px',
+                  cursor: 'pointer'
+                }}
+              >
+                Quitter le mode support
+              </button>
+            </div>
+          </div>
+        )}
 
         <main>{children}</main>
       </body>
