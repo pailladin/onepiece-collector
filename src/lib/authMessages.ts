@@ -38,6 +38,10 @@ export function getAuthErrorMessage(message: string | null | undefined) {
     return 'Ce mode de connexion nest pas encore active.'
   }
 
+  if (normalized.includes('manual linking is disabled')) {
+    return 'La liaison manuelle des comptes est desactivee cote Supabase. Il faut activer le compte linking dans la configuration Auth du projet.'
+  }
+
   if (normalized.includes('identity is already linked')) {
     return 'Ce compte externe est deja lie.'
   }
