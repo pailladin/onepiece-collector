@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 import { useAuth } from '@/lib/auth'
 import { DEFAULT_LOCALE } from '@/lib/locale'
@@ -36,6 +36,28 @@ const CARD_PLACEHOLDER_IMAGE =
 
 type SortKey = 'number' | 'name' | 'rarity' | 'type'
 type SortDirection = 'asc' | 'desc'
+
+type CardTranslation = {
+  locale: string
+  name: string
+}
+
+type CatalogueCard = {
+  rarity: string | null
+  type: string | null
+  card_translations?: CardTranslation[] | null
+}
+
+type CatalogueItem = {
+  id: string
+  print_code: string | null
+  variant_type: string | null
+  image_path: string | null
+  available_languages?: string[] | null
+  card: CatalogueCard | null
+  quantity: number
+  languageBreakdown: Map<string, number>
+}
 
 const RARITY_PRIORITY: Record<string, number> = {
   C: 1,
@@ -75,15 +97,23 @@ const ALT_RARITY_THEME: Record<string, { background: string; border: string }> =
   L: { background: 'linear-gradient(145deg, #fff9db, #fde68a)', border: '#eab308' }
 }
 
+function isSetScopedFallbackPrint(printCode: string | null | undefined, setCode: string) {
+  const raw = (printCode || '').toString().trim().toUpperCase()
+  if (!raw || !setCode) return false
+  return raw.includes(`_${setCode}`)
+}
+
 export function CatalogueSetPageClient() {
   const { user } = useAuth()
   const userId = user?.id ?? null
   const { isWishlisted, toggleWishlist, busyPrintId } = useWishlist(userId)
   const params = useParams()
+  const searchParams = useSearchParams()
   const code = Array.isArray(params.code) ? params.code[0] : params.code
   const normalizedCode = (code || '').toString().replace('-', '').toUpperCase()
+  const initialQuery = searchParams.get('q') || ''
 
-  const [items, setItems] = useState<any[]>([])
+  const [items, setItems] = useState<CatalogueItem[]>([])
   const [setLanguages, setSetLanguages] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -92,18 +122,16 @@ export function CatalogueSetPageClient() {
 
   const [sortKey, setSortKey] = useState<SortKey>('number')
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
-  const [searchQuery, setSearchQuery] = useState('')
+  const [searchQuery, setSearchQuery] = useState(initialQuery)
   const [rarityFilter, setRarityFilter] = useState('all')
   const [typeFilter, setTypeFilter] = useState('all')
   const [altFilter, setAltFilter] = useState<AltFilter>('all')
   const [altTypeFilter, setAltTypeFilter] = useState('all')
   const normalizedSetCode = normalizedCode
 
-  const isSetScopedFallbackPrint = (printCode: string | null | undefined) => {
-    const raw = (printCode || '').toString().trim().toUpperCase()
-    if (!raw || !normalizedSetCode) return false
-    return raw.includes(`_${normalizedSetCode}`)
-  }
+  useEffect(() => {
+    setSearchQuery(initialQuery)
+  }, [initialQuery])
 
   useEffect(() => {
     const fetchData = async () => {
@@ -123,7 +151,9 @@ export function CatalogueSetPageClient() {
 
       setSetLanguages(resolveSetLanguages(payload?.set?.availableLanguages))
 
-      const baseItems = Array.isArray(payload?.items) ? payload.items : []
+      const baseItems = (Array.isArray(payload?.items) ? payload.items : []) as Array<
+        Omit<CatalogueItem, 'quantity' | 'languageBreakdown'>
+      >
       if (baseItems.length === 0) {
         setItems([])
         setLoading(false)
@@ -137,7 +167,7 @@ export function CatalogueSetPageClient() {
         const collectionData = await fetchUserCollectionRowsForPrintIds({
           supabase,
           userId,
-          printIds: baseItems.map((print: any) => String(print.id || ''))
+          printIds: baseItems.map((print) => String(print.id || ''))
         })
 
         const aggregated = aggregateCollectionRows(collectionData)
@@ -145,13 +175,13 @@ export function CatalogueSetPageClient() {
         languageBreakdownByPrintId = aggregated.byPrintIdLanguage
       }
 
-      const merged = baseItems.map((print: any) => ({
+      const merged: CatalogueItem[] = baseItems.map((print) => ({
         ...print,
         quantity: ownedMap.get(print.id) || 0,
         languageBreakdown: languageBreakdownByPrintId.get(print.id) || new Map<string, number>()
       }))
 
-      const dedupedByVisualKey = new Map<string, any>()
+      const dedupedByVisualKey = new Map<string, CatalogueItem>()
       for (const item of merged) {
         const baseCode = String(item.print_code || '')
           .trim()
@@ -169,8 +199,8 @@ export function CatalogueSetPageClient() {
           continue
         }
 
-        const existingFallback = isSetScopedFallbackPrint(existing.print_code)
-        const currentFallback = isSetScopedFallbackPrint(item.print_code)
+        const existingFallback = isSetScopedFallbackPrint(existing.print_code, normalizedSetCode)
+        const currentFallback = isSetScopedFallbackPrint(item.print_code, normalizedSetCode)
         const existingMissingImage =
           !existing.image_path || existing.image_path === MISSING_IMAGE_PATH
         const currentMissingImage = !item.image_path || item.image_path === MISSING_IMAGE_PATH
@@ -189,7 +219,7 @@ export function CatalogueSetPageClient() {
     }
 
     void fetchData()
-  }, [normalizedCode, userId])
+  }, [normalizedCode, normalizedSetCode, userId])
 
   const filterOptions = useMemo(() => getFilterOptions(items), [items])
 
@@ -210,9 +240,9 @@ export function CatalogueSetPageClient() {
 
     return [...filteredItems].sort((a, b) => {
       const nameA =
-        a.card?.card_translations?.find((t: any) => t.locale === DEFAULT_LOCALE)?.name || ''
+        a.card?.card_translations?.find((t) => t.locale === DEFAULT_LOCALE)?.name || ''
       const nameB =
-        b.card?.card_translations?.find((t: any) => t.locale === DEFAULT_LOCALE)?.name || ''
+        b.card?.card_translations?.find((t) => t.locale === DEFAULT_LOCALE)?.name || ''
 
       switch (sortKey) {
         case 'number': {
@@ -525,7 +555,7 @@ export function CatalogueSetPageClient() {
       >
         {sortedItems.map((item) => {
           const translation = item.card?.card_translations?.find(
-            (t: any) => t.locale === DEFAULT_LOCALE
+            (t) => t.locale === DEFAULT_LOCALE
           )
           const itemLanguages = resolveAvailableLanguages({
             setLanguages,

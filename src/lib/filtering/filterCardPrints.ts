@@ -13,6 +13,25 @@ export type CardPrintFilterOptions = {
   altType?: AltTypeFilter
 }
 
+type CardTranslationLike = {
+  locale?: string | null
+  name?: string | null
+}
+
+type CardPrintFilterItem = {
+  print_code?: string | null
+  variant_type?: string | null
+  set?: {
+    code?: string | null
+    name?: string | null
+  } | null
+  card?: {
+    rarity?: string | null
+    type?: string | null
+    card_translations?: CardTranslationLike[] | null
+  } | null
+}
+
 export function isAltVersion(print: {
   print_code?: string
   variant_type?: string
@@ -56,25 +75,27 @@ export function getAltTypeLabel(value: string): string {
   return value
 }
 
-export function filterCardPrints<T extends any[]>(
-  items: T,
+export function filterCardPrints<T extends CardPrintFilterItem>(
+  items: T[],
   options: CardPrintFilterOptions
-): T {
+): T[] {
   const query = (options.query || '').trim().toLowerCase()
   const rarity = options.rarity || 'all'
   const type = options.type || 'all'
   const alt = options.alt || 'all'
   const altType = (options.altType || 'all').toLowerCase()
 
-  return items.filter((item: any) => {
+  return items.filter((item) => {
     const name =
-      item.card?.card_translations?.find((t: any) => t.locale === DEFAULT_LOCALE)
+      item.card?.card_translations?.find((t) => t.locale === DEFAULT_LOCALE)
         ?.name || ''
 
     if (query) {
       const displayCode = getDisplayPrintCode(item)
       const searchable =
-        `${item.print_code || ''} ${displayCode} ${name} ${item.variant_type || ''}`.toLowerCase()
+        `${item.print_code || ''} ${displayCode} ${name} ${item.variant_type || ''} ${
+          item.set?.code || ''
+        } ${item.set?.name || ''}`.toLowerCase()
       if (!searchable.includes(query)) return false
     }
 
@@ -87,10 +108,10 @@ export function filterCardPrints<T extends any[]>(
     if (altType !== 'all' && getAltTypeKey(item) !== altType) return false
 
     return true
-  }) as T
+  })
 }
 
-export function getFilterOptions(items: any[]) {
+export function getFilterOptions<T extends CardPrintFilterItem>(items: T[]) {
   const rarities = Array.from(
     new Set(items.map((item) => item.card?.rarity).filter(Boolean))
   ).sort((a, b) => String(a).localeCompare(String(b)))

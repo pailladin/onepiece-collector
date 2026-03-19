@@ -44,11 +44,14 @@ export default async function CataloguePage() {
   const { sets, error } = await fetchSets()
 
   return (
-    <div style={{ padding: 40 }}>
-      <h1 style={{ fontSize: 24, fontWeight: 'bold', marginBottom: 30 }}>
-        Catalogue des Sets
-      </h1>
-
+    <div
+      style={{
+        padding: '18px 28px 28px',
+        background:
+          'radial-gradient(circle at 10% 20%, #f0f9ff 0%, #eef2ff 35%, #fff7ed 100%)',
+        minHeight: '100vh'
+      }}
+    >
       {error && <div style={{ color: '#b91c1c', marginBottom: 24 }}>Erreur de chargement: {error}</div>}
 
       {!error && sets.length === 0 && (
