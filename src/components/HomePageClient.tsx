@@ -24,7 +24,6 @@ export function HomePageClient() {
           className="home-hero-grid"
           style={{
             display: 'grid',
-            gridTemplateColumns: 'minmax(0, 1.3fr) minmax(280px, 0.9fr)',
             gap: 20,
             alignItems: 'stretch'
           }}
@@ -146,7 +145,6 @@ export function HomePageClient() {
           className="home-link-grid"
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))',
             gap: 14,
             marginBottom: 4
           }}
@@ -189,7 +187,6 @@ export function HomePageClient() {
           className="home-info-grid"
           style={{
             display: 'grid',
-            gridTemplateColumns: 'minmax(0, 1.1fr) minmax(280px, 0.9fr)',
             gap: 18
           }}
         >

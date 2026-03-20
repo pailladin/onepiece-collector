@@ -29,11 +29,34 @@ body {
   overflow-x: hidden;
 }
 
-@media (max-width: 860px) {
-  .home-hero-grid,
-  .home-info-grid {
-    grid-template-columns: 1fr !important;
+.home-hero-grid,
+.home-info-grid,
+.home-link-grid,
+.home-stats-grid {
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 641px) {
+  .home-link-grid {
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
   }
+
+  .home-stats-grid {
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  }
+}
+
+@media (min-width: 861px) {
+  .home-hero-grid {
+    grid-template-columns: minmax(0, 1.3fr) minmax(280px, 0.9fr);
+  }
+
+  .home-info-grid {
+    grid-template-columns: minmax(0, 1.1fr) minmax(280px, 0.9fr);
+  }
+}
+
+@media (max-width: 860px) {
 
   .home-hero-grid {
     gap: 14px !important;
@@ -91,7 +114,6 @@ body {
 
   .home-stats-grid,
   .home-link-grid {
-    grid-template-columns: 1fr !important;
     gap: 10px !important;
   }
 
