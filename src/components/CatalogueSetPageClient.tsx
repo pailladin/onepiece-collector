@@ -261,8 +261,8 @@ export function CatalogueSetPageClient() {
             return (parsedA.variant - parsedB.variant) * multiplier
           }
 
-          const varA = VARIANT_PRIORITY[a.variant_type] ?? 99
-          const varB = VARIANT_PRIORITY[b.variant_type] ?? 99
+          const varA = VARIANT_PRIORITY[a.variant_type ?? ''] ?? 99
+          const varB = VARIANT_PRIORITY[b.variant_type ?? ''] ?? 99
           return (varA - varB) * multiplier
         }
 
@@ -270,8 +270,8 @@ export function CatalogueSetPageClient() {
           return nameA.localeCompare(nameB) * multiplier
 
         case 'rarity': {
-          const rA = RARITY_PRIORITY[a.card?.rarity] ?? 99
-          const rB = RARITY_PRIORITY[b.card?.rarity] ?? 99
+          const rA = RARITY_PRIORITY[a.card?.rarity ?? ''] ?? 99
+          const rB = RARITY_PRIORITY[b.card?.rarity ?? ''] ?? 99
           return (rA - rB) * multiplier
         }
 
@@ -579,7 +579,7 @@ export function CatalogueSetPageClient() {
           const altType = getAltTypeKey(item)
           const isFoil = altType === 'foil'
           const altBadgeLabel = altType === 'foil' ? 'FOIL' : 'ALT'
-          const rarityTheme = ALT_RARITY_THEME[item.card?.rarity] || {
+          const rarityTheme = ALT_RARITY_THEME[item.card?.rarity ?? ''] || {
             background: 'linear-gradient(145deg, #f3f4f6, #e5e7eb)',
             border: '#9ca3af'
           }

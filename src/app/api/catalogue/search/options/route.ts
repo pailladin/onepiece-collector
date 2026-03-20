@@ -19,17 +19,15 @@ type RangeQueryResult<T> = {
   error: { message: string } | null
 }
 
-type RangeQuery<T> = {
-  range: (from: number, to: number) => Promise<RangeQueryResult<T>>
-}
-
-async function fetchAllRows<T>(query: () => RangeQuery<T>) {
+async function fetchAllRows<T>(
+  query: (from: number, to: number) => PromiseLike<RangeQueryResult<T>>
+) {
   const rows: T[] = []
   let from = 0
 
   while (true) {
     const to = from + PAGE_SIZE - 1
-    const { data, error } = await query().range(from, to)
+    const { data, error } = await query(from, to)
 
     if (error) {
       throw new Error(error.message)
@@ -48,9 +46,11 @@ async function fetchAllRows<T>(query: () => RangeQuery<T>) {
 export async function GET() {
   try {
     const [cardsRows, printsRows] = await Promise.all([
-      fetchAllRows<CardRow>(() => supabaseServiceServer.from('cards').select('rarity, type')),
-      fetchAllRows<PrintRow>(() =>
-        supabaseServiceServer.from('card_prints').select('print_code, variant_type')
+      fetchAllRows<CardRow>((from, to) =>
+        supabaseServiceServer.from('cards').select('rarity, type').range(from, to)
+      ),
+      fetchAllRows<PrintRow>((from, to) =>
+        supabaseServiceServer.from('card_prints').select('print_code, variant_type').range(from, to)
       )
     ])
 
@@ -65,7 +65,12 @@ export async function GET() {
     const altTypes = Array.from(
       new Set(
         printsRows
-          .map((row) => getAltTypeKey(row))
+          .map((row) =>
+            getAltTypeKey({
+              print_code: row.print_code ?? undefined,
+              variant_type: row.variant_type ?? undefined
+            })
+          )
           .filter((value) => value !== 'normal')
       )
     ).sort((a, b) => String(a).localeCompare(String(b)))

@@ -32,9 +32,13 @@ type CardPrintFilterItem = {
   } | null
 }
 
+function isNonEmptyString(value: string | null | undefined): value is string {
+  return typeof value === 'string' && value.length > 0
+}
+
 export function isAltVersion(print: {
-  print_code?: string
-  variant_type?: string
+  print_code?: string | null
+  variant_type?: string | null
 }): boolean {
   const parsed = parseCardCode(print.print_code || 'OP00-000')
   const variant = normalizeVariantType(print.variant_type)
@@ -52,8 +56,8 @@ const ALT_TYPE_ORDER: Record<string, number> = {
 const ALLOWED_ALT_TYPES = new Set(['parallel', 'foil', 'sp', 'manga', 'wanted poster'])
 
 export function getAltTypeKey(print: {
-  print_code?: string
-  variant_type?: string
+  print_code?: string | null
+  variant_type?: string | null
 }): string {
   const parsed = parseCardCode(print.print_code || 'OP00-000')
   const variant = normalizeVariantType(print.variant_type)
@@ -113,11 +117,11 @@ export function filterCardPrints<T extends CardPrintFilterItem>(
 
 export function getFilterOptions<T extends CardPrintFilterItem>(items: T[]) {
   const rarities = Array.from(
-    new Set(items.map((item) => item.card?.rarity).filter(Boolean))
+    new Set(items.map((item) => item.card?.rarity).filter(isNonEmptyString))
   ).sort((a, b) => String(a).localeCompare(String(b)))
 
   const types = Array.from(
-    new Set(items.map((item) => item.card?.type).filter(Boolean))
+    new Set(items.map((item) => item.card?.type).filter(isNonEmptyString))
   ).sort((a, b) => String(a).localeCompare(String(b)))
 
   const altTypes = Array.from(
