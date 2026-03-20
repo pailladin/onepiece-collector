@@ -141,8 +141,9 @@ export function RootShell({
 
   return (
     <html lang="fr">
-      <body style={{ margin: 0, fontFamily: 'Arial, sans-serif' }}>
+      <body className="root-shell-body" style={{ margin: 0, fontFamily: 'Arial, sans-serif' }}>
         <header
+          className="root-shell-header"
           style={{
             color: 'white',
             padding: '10px 18px 10px',
@@ -166,6 +167,7 @@ export function RootShell({
           />
 
           <div
+            className="root-shell-header-inner"
             style={{
               position: 'relative',
               display: 'flex',
@@ -175,9 +177,10 @@ export function RootShell({
               flexWrap: 'wrap'
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <div className="root-shell-brand-nav" style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
               <Link
                 href="/"
+                className="root-shell-home-link"
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -189,15 +192,17 @@ export function RootShell({
                 <Image
                   src="/maison_pirate.png?v=1"
                   alt="Accueil"
+                  className="root-shell-nav-image root-shell-home-image"
                   width={96}
                   height={64}
                   unoptimized
                 />
               </Link>
 
-              <nav style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <nav className="root-shell-nav" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                 <Link
                   href="/catalogue"
+                  className="root-shell-nav-link"
                   style={{
                     textDecoration: 'none',
                     display: 'inline-flex',
@@ -209,6 +214,7 @@ export function RootShell({
                   <Image
                     src="/bouton_catalogue.png?v=3"
                     alt="Catalogue"
+                    className="root-shell-nav-image"
                     width={96}
                     height={64}
                     unoptimized
@@ -218,6 +224,7 @@ export function RootShell({
                 {user && (
                   <Link
                     href="/collection"
+                    className="root-shell-nav-link"
                     style={{
                       textDecoration: 'none',
                       display: 'inline-flex',
@@ -229,6 +236,7 @@ export function RootShell({
                     <Image
                       src="/bouton_collection.png?v=3"
                       alt="Ma Collection"
+                      className="root-shell-nav-image"
                       width={96}
                       height={64}
                       unoptimized
@@ -239,6 +247,7 @@ export function RootShell({
                 {user && (
                   <Link
                     href="/friends"
+                    className="root-shell-nav-link"
                     style={{
                       textDecoration: 'none',
                       padding: 0,
@@ -254,6 +263,7 @@ export function RootShell({
                     <Image
                       src="/bouton_amis.png?v=3"
                       alt="Amis"
+                      className="root-shell-nav-image"
                       width={96}
                       height={64}
                       unoptimized
@@ -264,6 +274,7 @@ export function RootShell({
                 {user && (
                   <Link
                     href="/community"
+                    className="root-shell-nav-link root-shell-community-link"
                     style={{
                       textDecoration: 'none',
                       display: 'inline-flex',
@@ -280,6 +291,7 @@ export function RootShell({
                     <Image
                       src="/bouton_contributions.png?v=1"
                       alt="Contributions"
+                      className="root-shell-nav-image"
                       fill
                       style={{ objectFit: 'cover', objectPosition: 'center 62%' }}
                       unoptimized
@@ -290,6 +302,7 @@ export function RootShell({
                 {user && canAccessAdmin && (
                   <Link
                     href="/admin"
+                    className="root-shell-admin-link"
                     style={{
                       color: '#fffbeb',
                       textDecoration: 'none',
@@ -315,6 +328,7 @@ export function RootShell({
             </div>
 
             <div
+              className="root-shell-account"
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -329,6 +343,7 @@ export function RootShell({
                 <>
                   <Link
                     href="/account"
+                    className="root-shell-account-link"
                     style={{
                       display: 'inline-flex',
                       alignItems: 'center',
@@ -360,6 +375,7 @@ export function RootShell({
                   </Link>
                   <button
                     onClick={handleLogout}
+                    className="root-shell-logout"
                     style={{
                       border: '1px solid rgba(255,255,255,0.35)',
                       background: 'rgba(255,255,255,0.15)',

@@ -23,8 +23,9 @@ export function CollectionSetsGrid({
   headerActions
 }: Props) {
   return (
-    <div style={{ padding: 40 }}>
+    <div className="collection-grid-page" style={{ padding: 40 }}>
       <div
+        className="collection-grid-header"
         style={{
           display: 'flex',
           justifyContent: 'space-between',
@@ -33,11 +34,12 @@ export function CollectionSetsGrid({
           marginBottom: 30
         }}
       >
-        <h1 style={{ fontSize: 24, fontWeight: 'bold', margin: 0 }}>{title}</h1>
+        <h1 className="collection-grid-title" style={{ fontSize: 24, fontWeight: 'bold', margin: 0 }}>{title}</h1>
         {headerActions}
       </div>
 
       <div
+        className="collection-grid-cards"
         style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
@@ -54,9 +56,11 @@ export function CollectionSetsGrid({
             <Link
               key={set.id}
               href={getSetHref(set.code)}
+              className="collection-grid-card-link"
               style={{ textDecoration: 'none', color: 'inherit' }}
             >
               <div
+                className="collection-grid-card"
                 style={{
                   border: '1px solid #ddd',
                   borderRadius: 10,
@@ -67,6 +71,7 @@ export function CollectionSetsGrid({
                 }}
               >
                 <div
+                  className="collection-grid-image"
                   style={{
                     height: 300,
                     width: '100%',

@@ -457,9 +457,10 @@ export default function CollectionPage() {
         stats={stats}
         getSetHref={(setCode) => `/collection/${setCode}`}
         headerActions={
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <div className="collection-page-actions" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <Link
               href="/collection/wishlist"
+              className="collection-page-action collection-page-action-pink"
               style={{
                 border: '1px solid #db2777',
                 background: '#db2777',
@@ -473,6 +474,7 @@ export default function CollectionPage() {
             </Link>
             <Link
               href="/collection/history"
+              className="collection-page-action collection-page-action-blue"
               style={{
                 border: '1px solid #1d4ed8',
                 background: '#1d4ed8',
@@ -486,6 +488,7 @@ export default function CollectionPage() {
             </Link>
             <Link
               href="/collection/top10"
+              className="collection-page-action collection-page-action-green"
               style={{
                 border: '1px solid #0f766e',
                 background: '#0f766e',
@@ -500,6 +503,7 @@ export default function CollectionPage() {
             <button
               onClick={calculateCollectionPrice}
               disabled={priceLoading || visibleSets.length === 0}
+              className="collection-page-action collection-page-action-blue"
               style={{
                 border: '1px solid #2563eb',
                 background: '#2563eb',
@@ -515,6 +519,7 @@ export default function CollectionPage() {
             <button
               onClick={calculateOpportunities}
               disabled={opportunityLoading || visibleSets.length === 0}
+              className="collection-page-action collection-page-action-purple"
               style={{
                 border: '1px solid #7c3aed',
                 background: '#7c3aed',
