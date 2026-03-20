@@ -18,6 +18,7 @@ export function RootShell({
   const [hasPendingFriendRequests, setHasPendingFriendRequests] = useState(false)
   const [hasPendingAdminSubmissions, setHasPendingAdminSubmissions] = useState(false)
   const [supportTarget, setSupportTarget] = useState<{ id: string; email: string; username: string } | null>(null)
+  const [profileUsername, setProfileUsername] = useState<string>('')
 
   const getAuthHeader = async () => {
     const { data } = await supabase.auth.getSession()
@@ -73,6 +74,30 @@ export function RootShell({
   }, [user, canAccessAdmin])
 
   useEffect(() => {
+    const loadProfileUsername = async () => {
+      if (!user) {
+        setProfileUsername('')
+        return
+      }
+
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('username')
+        .eq('id', user.id)
+        .maybeSingle()
+
+      if (error) {
+        setProfileUsername('')
+        return
+      }
+
+      setProfileUsername(typeof data?.username === 'string' ? data.username : '')
+    }
+
+    void loadProfileUsername()
+  }, [user])
+
+  useEffect(() => {
     const loadSupportTarget = async () => {
       if (!user || !canAccessAdmin) {
         setSupportTarget(null)
@@ -111,6 +136,8 @@ export function RootShell({
     setSupportTarget(null)
     window.location.href = '/admin/users'
   }
+
+  const displayIdentity = profileUsername.trim() || user?.email || ''
 
   return (
     <html lang="fr">
@@ -303,13 +330,33 @@ export function RootShell({
                   <Link
                     href="/account"
                     style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 8,
                       color: '#fff',
                       textDecoration: 'none',
                       fontSize: 13,
                       fontWeight: 700
                     }}
                   >
-                    {user.email}
+                    <span
+                      aria-hidden="true"
+                      style={{
+                        width: 24,
+                        height: 24,
+                        borderRadius: 999,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        background: 'rgba(255,255,255,0.16)',
+                        border: '1px solid rgba(255,255,255,0.22)',
+                        fontSize: 13,
+                        lineHeight: 1
+                      }}
+                    >
+                      👤
+                    </span>
+                    {displayIdentity}
                   </Link>
                   <button
                     onClick={handleLogout}

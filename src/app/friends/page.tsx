@@ -744,7 +744,21 @@ export default function FriendsPage() {
                 <div style={{ fontWeight: 600, color: '#0f172a' }}>{friend.username}</div>
                 {friend.discord_username && (
                   <div style={{ fontSize: 12, color: '#64748b', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                    <span>Discord: {friend.discord_username}</span>
+                    <button
+                      onClick={() => void copyDiscordUsername(friend.discord_username!)}
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        padding: 0,
+                        margin: 0,
+                        color: '#1d4ed8',
+                        fontSize: 12,
+                        cursor: 'pointer',
+                        textDecoration: 'underline'
+                      }}
+                    >
+                      Discord: {friend.discord_username}
+                    </button>
                     <button
                       onClick={() => void copyDiscordUsername(friend.discord_username!)}
                       style={{
