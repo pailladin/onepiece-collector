@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import type { ReactNode } from 'react'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
@@ -204,13 +205,35 @@ export function AuthPageClient() {
   }
 
   const isAccountView = Boolean(user) && authMode !== 'reset'
+  const authTitle =
+    authMode === 'forgot'
+      ? 'Mot de passe oublie'
+      : authMode === 'reset'
+        ? 'Nouveau mot de passe'
+        : 'Connexion'
+  const authSubtitle =
+    authMode === 'forgot'
+      ? 'Entre ton email pour recevoir un lien de reinitialisation.'
+      : authMode === 'reset'
+        ? 'Definis un nouveau mot de passe pour retrouver ton compte.'
+        : 'Connecte-toi pour gerer ta collection, partager des sets et suivre ta progression.'
+  const inputStyle = {
+    width: '100%',
+    boxSizing: 'border-box' as const,
+    marginBottom: 12,
+    padding: '12px 14px',
+    borderRadius: 12,
+    border: '1px solid #cbd5e1',
+    outline: 'none',
+    background: '#fff'
+  }
 
   return (
     <div
       style={{
         minHeight: 'calc(100dvh - 70px)',
         background:
-          'radial-gradient(circle at 12% 8%, #ffeedd 0%, #e0f2fe 45%, #eef2ff 100%)',
+          'radial-gradient(circle at 12% 8%, #fff0df 0%, #e0f2fe 42%, #eef2ff 100%)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -219,35 +242,45 @@ export function AuthPageClient() {
     >
       <div
         style={{
-          width: 'min(460px, 100%)',
-          background: '#fff',
-          border: '1px solid #dbeafe',
-          borderRadius: 14,
-          boxShadow: '0 24px 40px -32px #0f172a',
-          padding: 24
+          width: 'min(520px, 100%)',
+          background: 'linear-gradient(180deg, #ffffff 0%, #f8fbff 100%)',
+          border: '1px solid rgba(191, 219, 254, 0.9)',
+          borderRadius: 24,
+          boxShadow: '0 32px 70px -42px rgba(15, 23, 42, 0.48)',
+          padding: 28
         }}
       >
-        <h1
-          style={{
-            margin: 0,
-            fontSize: 28,
-            color: '#0f172a',
-            textAlign: 'center'
-          }}
-        >
-          {authMode === 'forgot'
-              ? 'Mot de passe oublie'
-            : authMode === 'reset'
-              ? 'Nouveau mot de passe'
-              : 'Connexion'}
-        </h1>
-        <p style={{ marginTop: 8, color: '#475569', fontSize: 14, textAlign: 'center' }}>
-          {authMode === 'forgot'
-            ? 'Entre ton email pour recevoir un lien de reinitialisation.'
-            : authMode === 'reset'
-              ? 'Definis un nouveau mot de passe pour retrouver ton compte.'
-              : 'Connecte-toi pour gerer ta collection, partager des sets et suivre ta progression.'}
-        </p>
+        <div style={{ textAlign: 'center', marginBottom: 18 }}>
+          <div
+            style={{
+              display: 'inline-flex',
+              padding: '6px 10px',
+              borderRadius: 999,
+              background: '#dbeafe',
+              color: '#1d4ed8',
+              fontSize: 12,
+              fontWeight: 800,
+              textTransform: 'uppercase',
+              letterSpacing: 0.4
+            }}
+          >
+            One Piece Collector
+          </div>
+          <h1
+            style={{
+              margin: '16px 0 0',
+              fontSize: 32,
+              color: '#0f172a',
+              textAlign: 'center',
+              lineHeight: 1.05
+            }}
+          >
+            {authTitle}
+          </h1>
+          <p style={{ marginTop: 10, color: '#475569', fontSize: 14, textAlign: 'center', lineHeight: 1.6 }}>
+            {authSubtitle}
+          </p>
+        </div>
 
         <div style={{ marginTop: 18, maxWidth: 380, marginInline: 'auto' }}>
           {isAccountView && (
@@ -272,12 +305,15 @@ export function AuthPageClient() {
                 <Link
                   href="/account"
                   style={{
-                    display: 'inline-block',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
                     textDecoration: 'none',
-                    background: '#0ea5e9',
+                    background: '#0f172a',
                     color: '#fff',
-                    borderRadius: 8,
-                    padding: '10px 14px',
+                    borderRadius: 10,
+                    minHeight: 42,
+                    padding: '0 16px',
                     fontWeight: 700
                   }}
                 >
@@ -304,12 +340,7 @@ export function AuthPageClient() {
               if (authMode === 'signin') handleSignIn()
             }}
             style={{
-              width: '100%',
-              marginBottom: 12,
-              padding: '10px 12px',
-              borderRadius: 8,
-              border: '1px solid #cbd5e1',
-              outline: 'none'
+              ...inputStyle
             }}
           />
           )}
@@ -331,27 +362,24 @@ export function AuthPageClient() {
                   if (e.key === 'Enter') handleSignIn()
                 }}
                 style={{
-                  width: '100%',
-                  marginBottom: 14,
-                  padding: '10px 12px',
-                  borderRadius: 8,
-                  border: '1px solid #cbd5e1',
-                  outline: 'none'
+                  ...inputStyle
                 }}
               />
               )}
 
               {!isAccountView && (
-              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 4 }}>
                 <button
                   onClick={handleSignIn}
                   disabled={!canSubmit || loading}
                   style={{
-                    background: '#0ea5e9',
+                    minHeight: 46,
+                    background: '#0f172a',
                     color: '#fff',
                     border: 'none',
-                    borderRadius: 8,
-                    padding: '10px 14px',
+                    borderRadius: 12,
+                    padding: '0 14px',
+                    fontWeight: 700,
                     cursor: !canSubmit || loading ? 'not-allowed' : 'pointer',
                     opacity: !canSubmit || loading ? 0.6 : 1
                   }}
@@ -363,11 +391,13 @@ export function AuthPageClient() {
                   onClick={handleSignUp}
                   disabled={!canSubmit || loading}
                   style={{
+                    minHeight: 46,
                     background: '#0f766e',
                     color: '#fff',
                     border: 'none',
-                    borderRadius: 8,
-                    padding: '10px 14px',
+                    borderRadius: 12,
+                    padding: '0 14px',
+                    fontWeight: 700,
                     cursor: !canSubmit || loading ? 'not-allowed' : 'pointer',
                     opacity: !canSubmit || loading ? 0.6 : 1
                   }}
@@ -378,12 +408,34 @@ export function AuthPageClient() {
               )}
 
               {!isAccountView && (
+                <div style={{ position: 'relative', margin: '20px 0 14px' }}>
+                  <div style={{ borderTop: '1px solid #e2e8f0' }} />
+                  <div
+                    style={{
+                      position: 'absolute',
+                      left: '50%',
+                      top: '50%',
+                      transform: 'translate(-50%, -50%)',
+                      background: '#f8fbff',
+                      padding: '0 12px',
+                      fontSize: 12,
+                      fontWeight: 800,
+                      letterSpacing: 0.4,
+                      color: '#64748b',
+                      textTransform: 'uppercase'
+                    }}
+                  >
+                    Connexion externe
+                  </div>
+                </div>
+              )}
+
+              {!isAccountView && (
                 <div
                   style={{
-                    marginTop: 14,
                     marginBottom: 10,
-                    padding: 12,
-                    borderRadius: 10,
+                    padding: 14,
+                    borderRadius: 14,
                     border: '1px solid #fde68a',
                     background: '#fffbeb',
                     color: '#92400e',
@@ -424,23 +476,14 @@ export function AuthPageClient() {
               )}
 
               {!isAccountView && (
-                <div style={{ marginTop: 10, display: 'flex', justifyContent: 'center' }}>
-                  <button
-                    onClick={handleGoogleSignIn}
-                    disabled={loading || !googleRiskAccepted}
-                    style={{
-                      background: '#ffffff',
-                      color: '#0f172a',
-                      border: '1px solid #cbd5e1',
-                      borderRadius: 8,
-                      padding: '10px 14px',
-                      cursor: loading || !googleRiskAccepted ? 'not-allowed' : 'pointer',
-                      opacity: loading || !googleRiskAccepted ? 0.6 : 1
-                    }}
-                  >
-                    Continuer avec Google
-                  </button>
-                </div>
+                <OAuthActionButton
+                  onClick={handleGoogleSignIn}
+                  disabled={loading || !googleRiskAccepted}
+                  tone="light"
+                  icon={<GoogleLogo />}
+                >
+                  Continuer avec Google
+                </OAuthActionButton>
               )}
 
               {!isAccountView && (
@@ -461,10 +504,9 @@ export function AuthPageClient() {
               {!isAccountView && (
                 <div
                   style={{
-                    marginTop: 14,
                     marginBottom: 10,
-                    padding: 12,
-                    borderRadius: 10,
+                    padding: 14,
+                    borderRadius: 14,
                     border: '1px solid #c7d2fe',
                     background: '#eef2ff',
                     color: '#3730a3',
@@ -504,23 +546,14 @@ export function AuthPageClient() {
               )}
 
               {!isAccountView && (
-                <div style={{ marginTop: 10, display: 'flex', justifyContent: 'center' }}>
-                  <button
-                    onClick={handleDiscordSignIn}
-                    disabled={loading || !discordRiskAccepted}
-                    style={{
-                      background: '#5865f2',
-                      color: '#ffffff',
-                      border: '1px solid #5865f2',
-                      borderRadius: 8,
-                      padding: '10px 14px',
-                      cursor: loading || !discordRiskAccepted ? 'not-allowed' : 'pointer',
-                      opacity: loading || !discordRiskAccepted ? 0.6 : 1
-                    }}
-                  >
-                    Continuer avec Discord
-                  </button>
-                </div>
+                <OAuthActionButton
+                  onClick={handleDiscordSignIn}
+                  disabled={loading || !discordRiskAccepted}
+                  tone="discord"
+                  icon={<DiscordLogo />}
+                >
+                  Continuer avec Discord
+                </OAuthActionButton>
               )}
 
               {!isAccountView && (
@@ -546,11 +579,13 @@ export function AuthPageClient() {
                 onClick={handleForgotPassword}
                 disabled={!canSendReset || loading}
                 style={{
+                  minHeight: 46,
                   background: '#d97706',
                   color: '#fff',
                   border: 'none',
-                  borderRadius: 8,
-                  padding: '10px 14px',
+                  borderRadius: 12,
+                  padding: '0 18px',
+                  fontWeight: 700,
                   cursor: !canSendReset || loading ? 'not-allowed' : 'pointer',
                   opacity: !canSendReset || loading ? 0.6 : 1
                 }}
@@ -574,12 +609,7 @@ export function AuthPageClient() {
                   if (e.key === 'Enter') handleUpdatePassword()
                 }}
                 style={{
-                  width: '100%',
-                  marginBottom: 12,
-                  padding: '10px 12px',
-                  borderRadius: 8,
-                  border: '1px solid #cbd5e1',
-                  outline: 'none'
+                  ...inputStyle
                 }}
               />
 
@@ -595,12 +625,7 @@ export function AuthPageClient() {
                   if (e.key === 'Enter') handleUpdatePassword()
                 }}
                 style={{
-                  width: '100%',
-                  marginBottom: 14,
-                  padding: '10px 12px',
-                  borderRadius: 8,
-                  border: '1px solid #cbd5e1',
-                  outline: 'none'
+                  ...inputStyle
                 }}
               />
 
@@ -609,11 +634,13 @@ export function AuthPageClient() {
                   onClick={handleUpdatePassword}
                   disabled={!canUpdatePassword || loading}
                   style={{
+                    minHeight: 46,
                     background: '#0f766e',
                     color: '#fff',
                     border: 'none',
-                    borderRadius: 8,
-                    padding: '10px 14px',
+                    borderRadius: 12,
+                    padding: '0 18px',
+                    fontWeight: 700,
                     cursor: !canUpdatePassword || loading ? 'not-allowed' : 'pointer',
                     opacity: !canUpdatePassword || loading ? 0.6 : 1
                   }}
@@ -664,11 +691,84 @@ export function AuthPageClient() {
             )}
           </div>
 
-          <p style={{ marginTop: 14, minHeight: 20, color: '#334155', fontSize: 14 }}>
+          <p
+            style={{
+              marginTop: 16,
+              minHeight: 20,
+              color: '#334155',
+              fontSize: 14,
+              textAlign: 'center',
+              lineHeight: 1.5
+            }}
+          >
             {message}
           </p>
         </div>
       </div>
     </div>
+  )
+}
+
+function OAuthActionButton({
+  children,
+  icon,
+  tone,
+  disabled,
+  onClick
+}: {
+  children: ReactNode
+  icon: ReactNode
+  tone: 'light' | 'discord'
+  disabled: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      style={{
+        width: '100%',
+        minHeight: 48,
+        marginTop: 10,
+        borderRadius: 12,
+        border: tone === 'discord' ? '1px solid #5865f2' : '1px solid #cbd5e1',
+        background: tone === 'discord' ? '#5865f2' : '#ffffff',
+        color: tone === 'discord' ? '#ffffff' : '#0f172a',
+        fontWeight: 700,
+        fontSize: 15,
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.6 : 1,
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 10,
+        boxShadow: tone === 'discord' ? '0 14px 28px -22px rgba(88, 101, 242, 0.95)' : 'none'
+      }}
+    >
+      {icon}
+      {children}
+    </button>
+  )
+}
+
+function GoogleLogo() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        fill="#EA4335"
+        d="M12 10.2v3.9h5.5c-.2 1.3-1.5 3.9-5.5 3.9-3.3 0-6-2.8-6-6.2s2.7-6.2 6-6.2c1.9 0 3.1.8 3.8 1.4l2.6-2.5C16.8 3 14.6 2 12 2 6.9 2 2.8 6.4 2.8 11.8S6.9 21.5 12 21.5c6.1 0 9.1-4.4 9.1-8.8 0-.6-.1-1-.2-1.5z"
+      />
+      <path fill="#34A853" d="M2.8 11.8c0 1.7.6 3.3 1.7 4.6l3-2.3c-.3-.7-.5-1.5-.5-2.3s.2-1.6.5-2.3l-3-2.3c-1.1 1.3-1.7 2.9-1.7 4.6z" />
+      <path fill="#4285F4" d="M12 21.5c2.5 0 4.7-.8 6.3-2.3l-3.1-2.4c-.8.6-1.8 1-3.2 1-2.5 0-4.7-1.7-5.4-4.1l-3.1 2.4c1.7 3.2 4.9 5.4 8.5 5.4z" />
+      <path fill="#FBBC05" d="M6.6 13.7c-.2-.6-.4-1.2-.4-1.9s.1-1.3.4-1.9l-3.1-2.4C2.8 8.8 2.4 10.3 2.4 11.8s.4 3 1.1 4.3z" />
+    </svg>
+  )
+}
+
+function DiscordLogo() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">
+      <path d="M20.3 4.4A16.7 16.7 0 0 0 16.1 3l-.2.5a11.4 11.4 0 0 1 3.3 1.6 11.8 11.8 0 0 0-3.5-1.7 15.5 15.5 0 0 0-7.4 0A11.8 11.8 0 0 0 4.8 5a11.4 11.4 0 0 1 3.3-1.6L7.9 3a16.7 16.7 0 0 0-4.2 1.4C1 8.4.4 12.2.7 16c1.8 1.3 3.6 2.1 5.4 2.6l1.2-2c-.7-.2-1.4-.5-2-.9l.5-.4c3.9 1.8 8.1 1.8 12 0l.5.4c-.6.4-1.3.7-2 .9l1.2 2c1.8-.5 3.6-1.3 5.4-2.6.4-4.3-.7-8.1-3-11.6ZM9.6 13.8c-1.1 0-1.9-1-1.9-2.2s.9-2.2 1.9-2.2 1.9 1 1.9 2.2-.8 2.2-1.9 2.2Zm4.8 0c-1.1 0-1.9-1-1.9-2.2s.8-2.2 1.9-2.2 1.9 1 1.9 2.2-.8 2.2-1.9 2.2Z" />
+    </svg>
   )
 }
