@@ -18,7 +18,9 @@ export function AccountPageClient() {
   const [message, setMessage] = useState(() => {
     if (typeof window === 'undefined') return ''
     const searchParams = new URLSearchParams(window.location.search)
-    return searchParams.get('linked') === 'google' ? 'Compte Google lie avec succes.' : ''
+    if (searchParams.get('linked') === 'google') return 'Compte Google lie avec succes.'
+    if (searchParams.get('linked') === 'discord') return 'Compte Discord lie avec succes.'
+    return ''
   })
   const [loading, setLoading] = useState(false)
   const [loadingProviders, setLoadingProviders] = useState(false)
@@ -29,6 +31,7 @@ export function AccountPageClient() {
   const canUpdatePassword =
     nextPassword.length >= 6 && confirmPassword.length >= 6 && nextPassword === confirmPassword
   const googleLinked = linkedProviders.has('google')
+  const discordLinked = linkedProviders.has('discord')
 
   useEffect(() => {
     if (!user) return
@@ -47,7 +50,7 @@ export function AccountPageClient() {
     if (typeof window === 'undefined') return
 
     const searchParams = new URLSearchParams(window.location.search)
-    if (searchParams.get('linked') === 'google') {
+    if (searchParams.get('linked') === 'google' || searchParams.get('linked') === 'discord') {
       router.replace('/account')
     }
   }, [router])
@@ -60,6 +63,22 @@ export function AccountPageClient() {
     const { error } = await linkOAuthProvider(
       'google',
       `${window.location.origin}/auth?oauth=google-link`
+    )
+
+    if (error) {
+      setMessage(getAuthErrorMessage(error.message))
+      setLoading(false)
+    }
+  }
+
+  const handleLinkDiscord = async () => {
+    if (!user || loading) return
+    setLoading(true)
+    setMessage('')
+
+    const { error } = await linkOAuthProvider(
+      'discord',
+      `${window.location.origin}/auth?oauth=discord-link`
     )
 
     if (error) {
@@ -159,34 +178,58 @@ export function AccountPageClient() {
         >
           <div style={{ fontWeight: 700, color: '#0f172a' }}>Connexions externes</div>
           <div style={{ fontSize: 13, color: '#475569', lineHeight: 1.4 }}>
-            Si tu as deja un compte One Piece Collector, lie Google ici plutot que de cliquer
-            directement sur &quot;Continuer avec Google&quot; depuis la page de connexion.
+            Si tu as deja un compte One Piece Collector, lie tes comptes externes ici plutot
+            que d utiliser directement les boutons OAuth depuis la page de connexion.
           </div>
           <div style={{ fontSize: 13, color: '#475569', lineHeight: 1.4 }}>
-            Important: le compte Google doit idealement utiliser la meme adresse email que ce
-            compte ({user.email || 'email inconnu'}), sinon la liaison peut etre refusee par
-            Supabase.
+            Important: les comptes Google ou Discord doivent idealement correspondre au meme
+            utilisateur que ce compte ({user.email || 'email inconnu'}), sinon la liaison peut
+            etre refusee par Supabase.
           </div>
-          <div style={{ fontSize: 13, color: '#334155' }}>
-            Google:{' '}
-            <strong>{loadingProviders ? 'verification...' : googleLinked ? 'lie' : 'non lie'}</strong>
+          <div style={{ display: 'grid', gap: 10 }}>
+            <div style={{ fontSize: 13, color: '#334155' }}>
+              Google:{' '}
+              <strong>{loadingProviders ? 'verification...' : googleLinked ? 'lie' : 'non lie'}</strong>
+            </div>
+            <button
+              onClick={handleLinkGoogle}
+              disabled={loading || loadingProviders || googleLinked}
+              style={{
+                justifySelf: 'start',
+                background: googleLinked ? '#e2e8f0' : '#ffffff',
+                color: googleLinked ? '#475569' : '#0f172a',
+                border: '1px solid #cbd5e1',
+                borderRadius: 8,
+                padding: '10px 14px',
+                cursor: loading || loadingProviders || googleLinked ? 'not-allowed' : 'pointer',
+                opacity: loading || loadingProviders || googleLinked ? 0.7 : 1
+              }}
+            >
+              {googleLinked ? `${getProviderLabel('google')} deja lie` : `Lier ${getProviderLabel('google')}`}
+            </button>
           </div>
-          <button
-            onClick={handleLinkGoogle}
-            disabled={loading || loadingProviders || googleLinked}
-            style={{
-              justifySelf: 'start',
-              background: googleLinked ? '#e2e8f0' : '#ffffff',
-              color: googleLinked ? '#475569' : '#0f172a',
-              border: '1px solid #cbd5e1',
-              borderRadius: 8,
-              padding: '10px 14px',
-              cursor: loading || loadingProviders || googleLinked ? 'not-allowed' : 'pointer',
-              opacity: loading || loadingProviders || googleLinked ? 0.7 : 1
-            }}
-          >
-            {googleLinked ? `${getProviderLabel('google')} deja lie` : `Lier ${getProviderLabel('google')}`}
-          </button>
+          <div style={{ display: 'grid', gap: 10 }}>
+            <div style={{ fontSize: 13, color: '#334155' }}>
+              Discord:{' '}
+              <strong>{loadingProviders ? 'verification...' : discordLinked ? 'lie' : 'non lie'}</strong>
+            </div>
+            <button
+              onClick={handleLinkDiscord}
+              disabled={loading || loadingProviders || discordLinked}
+              style={{
+                justifySelf: 'start',
+                background: discordLinked ? '#e2e8f0' : '#5865f2',
+                color: discordLinked ? '#475569' : '#ffffff',
+                border: discordLinked ? '1px solid #cbd5e1' : '1px solid #5865f2',
+                borderRadius: 8,
+                padding: '10px 14px',
+                cursor: loading || loadingProviders || discordLinked ? 'not-allowed' : 'pointer',
+                opacity: loading || loadingProviders || discordLinked ? 0.7 : 1
+              }}
+            >
+              {discordLinked ? `${getProviderLabel('discord')} deja lie` : `Lier ${getProviderLabel('discord')}`}
+            </button>
+          </div>
         </section>
 
         <section

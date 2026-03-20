@@ -36,6 +36,7 @@ export function AuthPageClient() {
   })
   const [loading, setLoading] = useState(false)
   const [googleRiskAccepted, setGoogleRiskAccepted] = useState(false)
+  const [discordRiskAccepted, setDiscordRiskAccepted] = useState(false)
 
   const canSubmit = email.trim().length > 3 && password.length >= 6
   const canSendReset = email.trim().length > 3
@@ -71,8 +72,18 @@ export function AuthPageClient() {
       return
     }
 
+    if (oauthState === 'discord-signin' && user) {
+      router.replace('/collection')
+      return
+    }
+
     if (oauthState === 'google-link' && user) {
       router.replace('/account?linked=google')
+      return
+    }
+
+    if (oauthState === 'discord-link' && user) {
+      router.replace('/account?linked=discord')
     }
   }, [router, user])
 
@@ -168,6 +179,22 @@ export function AuthPageClient() {
     const { error } = await signInWithOAuthProvider(
       'google',
       `${window.location.origin}/auth?oauth=google-signin`
+    )
+
+    if (error) {
+      setMessage(getAuthErrorMessage(error.message))
+      setLoading(false)
+    }
+  }
+
+  const handleDiscordSignIn = async () => {
+    if (loading) return
+    setLoading(true)
+    setMessage('')
+
+    const { error } = await signInWithOAuthProvider(
+      'discord',
+      `${window.location.origin}/auth?oauth=discord-signin`
     )
 
     if (error) {
@@ -428,6 +455,86 @@ export function AuthPageClient() {
                   Si tu as deja un compte, passe plutot par la connexion classique puis
                   <br />
                   lie Google depuis la page compte.
+                </div>
+              )}
+
+              {!isAccountView && (
+                <div
+                  style={{
+                    marginTop: 14,
+                    marginBottom: 10,
+                    padding: 12,
+                    borderRadius: 10,
+                    border: '1px solid #c7d2fe',
+                    background: '#eef2ff',
+                    color: '#3730a3',
+                    fontSize: 13,
+                    lineHeight: 1.4
+                  }}
+                >
+                  Discord peut aussi servir de connexion rapide.
+                  Si tu as deja un compte One Piece Collector, connecte-toi d abord puis lie
+                  Discord depuis la page compte pour eviter de creer un second profil.
+                </div>
+              )}
+
+              {!isAccountView && (
+                <label
+                  style={{
+                    marginTop: 2,
+                    marginBottom: 10,
+                    display: 'flex',
+                    gap: 8,
+                    alignItems: 'flex-start',
+                    fontSize: 13,
+                    color: '#334155',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={discordRiskAccepted}
+                    onChange={(e) => setDiscordRiskAccepted(e.target.checked)}
+                    style={{ marginTop: 2 }}
+                  />
+                  <span>
+                    Je confirme que je n ai pas deja un compte a recuperer avant d utiliser Discord.
+                  </span>
+                </label>
+              )}
+
+              {!isAccountView && (
+                <div style={{ marginTop: 10, display: 'flex', justifyContent: 'center' }}>
+                  <button
+                    onClick={handleDiscordSignIn}
+                    disabled={loading || !discordRiskAccepted}
+                    style={{
+                      background: '#5865f2',
+                      color: '#ffffff',
+                      border: '1px solid #5865f2',
+                      borderRadius: 8,
+                      padding: '10px 14px',
+                      cursor: loading || !discordRiskAccepted ? 'not-allowed' : 'pointer',
+                      opacity: loading || !discordRiskAccepted ? 0.6 : 1
+                    }}
+                  >
+                    Continuer avec Discord
+                  </button>
+                </div>
+              )}
+
+              {!isAccountView && (
+                <div
+                  style={{
+                    marginTop: 8,
+                    textAlign: 'center',
+                    fontSize: 12,
+                    color: '#64748b'
+                  }}
+                >
+                  Si tu as deja un compte, passe plutot par la connexion classique puis
+                  <br />
+                  lie Discord depuis la page compte.
                 </div>
               )}
             </>
