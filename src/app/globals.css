@@ -35,6 +35,10 @@ body {
     grid-template-columns: 1fr !important;
   }
 
+  .home-hero-grid {
+    gap: 14px !important;
+  }
+
   .home-shell {
     gap: 18px !important;
   }
@@ -59,43 +63,52 @@ body {
 
 @media (max-width: 640px) {
   .home-page {
-    padding: 20px 14px 36px !important;
+    padding: 14px 10px 28px !important;
   }
 
   .home-shell {
-    gap: 14px !important;
+    gap: 12px !important;
   }
 
   .home-panel,
   .home-panel-main,
   .home-panel-side,
   .home-cta {
-    padding: 18px !important;
+    padding: 16px !important;
   }
 
   .home-hero-title {
-    font-size: 28px !important;
-    line-height: 1.1 !important;
+    font-size: 24px !important;
+    line-height: 1.08 !important;
+    margin-top: 12px !important;
   }
 
   .home-hero-copy {
-    font-size: 15px !important;
-    line-height: 1.55 !important;
+    font-size: 14px !important;
+    line-height: 1.5 !important;
+    margin-top: 12px !important;
   }
 
   .home-stats-grid,
   .home-link-grid {
     grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+
+  .home-info-grid {
+    gap: 12px !important;
   }
 
   .home-actions {
     display: grid !important;
     grid-template-columns: 1fr !important;
     width: 100%;
+    gap: 10px !important;
   }
 
   .home-action-link {
     width: 100%;
+    min-height: 42px !important;
   }
 
   .home-cta {
@@ -103,11 +116,65 @@ body {
   }
 
   .home-cta-title {
-    font-size: 24px !important;
+    font-size: 21px !important;
     line-height: 1.15 !important;
   }
 
   .home-link-card {
-    padding: 16px !important;
+    padding: 14px !important;
+  }
+
+  .home-badge,
+  .home-side-title {
+    font-size: 11px !important;
+  }
+
+  .home-feature-list,
+  .home-info-list,
+  .home-steps-list {
+    gap: 10px !important;
+    margin-top: 12px !important;
+  }
+
+  .home-feature-point,
+  .home-stat-card,
+  .home-step-card {
+    padding: 12px !important;
+    border-radius: 14px !important;
+  }
+
+  .home-step-card {
+    grid-template-columns: 32px minmax(0, 1fr) !important;
+    gap: 10px !important;
+  }
+
+  .home-step-card > div:first-child {
+    width: 32px !important;
+    height: 32px !important;
+    font-size: 13px !important;
+  }
+
+  .home-info-row {
+    padding: 10px 0 !important;
+  }
+
+  .home-panel-side {
+    order: 3;
+  }
+
+  .home-link-grid {
+    order: 2;
+  }
+
+  .home-info-grid {
+    order: 4;
+  }
+
+  .home-cta {
+    order: 5;
+  }
+
+  .home-panel-side .home-feature-point:nth-child(3) {
+    display: none;
   }
 }

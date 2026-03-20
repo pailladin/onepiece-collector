@@ -40,6 +40,7 @@ export function HomePageClient() {
             }}
           >
             <div
+              className="home-badge"
               style={{
                 display: 'inline-flex',
                 padding: '6px 10px',
@@ -121,10 +122,10 @@ export function HomePageClient() {
               boxShadow: '0 20px 50px -36px rgba(15, 23, 42, 0.7)'
             }}
           >
-            <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: 0.2, color: '#93c5fd' }}>
+            <div className="home-side-title" style={{ fontSize: 13, fontWeight: 700, letterSpacing: 0.2, color: '#93c5fd' }}>
               Ce que tu peux faire
             </div>
-            <div style={{ display: 'grid', gap: 14, marginTop: 18 }}>
+            <div className="home-feature-list" style={{ display: 'grid', gap: 14, marginTop: 18 }}>
               <FeaturePoint
                 title="Verifier un set rapidement"
                 text="Vois instantanement les cartes presentes, les variantes et ce qu il te manque."
@@ -202,7 +203,7 @@ export function HomePageClient() {
             }}
           >
             <h2 style={{ margin: 0, color: '#0f172a', fontSize: 26 }}>Fonctionnalites principales</h2>
-            <div style={{ display: 'grid', gap: 12, marginTop: 16 }}>
+            <div className="home-info-list" style={{ display: 'grid', gap: 12, marginTop: 16 }}>
               <InfoRow
                 title="Progression par set"
                 text="Visualise tes avances avec separation normales, alternatives et total."
@@ -228,7 +229,7 @@ export function HomePageClient() {
             }}
           >
             <h2 style={{ margin: 0, color: '#7c2d12', fontSize: 24 }}>Comment ca marche</h2>
-            <div style={{ display: 'grid', gap: 12, marginTop: 16 }}>
+            <div className="home-steps-list" style={{ display: 'grid', gap: 12, marginTop: 16 }}>
               <StepCard
                 step="1"
                 title="Explore"
@@ -319,6 +320,7 @@ function ActionLink({
 function HeroStat({ value, label }: { value: string; label: string }) {
   return (
     <div
+      className="home-stat-card"
       style={{
         borderRadius: 16,
         padding: 14,
@@ -335,6 +337,7 @@ function HeroStat({ value, label }: { value: string; label: string }) {
 function FeaturePoint({ title, text }: { title: string; text: string }) {
   return (
     <div
+      className="home-feature-point"
       style={{
         borderRadius: 16,
         padding: 16,
@@ -351,6 +354,7 @@ function FeaturePoint({ title, text }: { title: string; text: string }) {
 function InfoRow({ title, text }: { title: string; text: string }) {
   return (
     <div
+      className="home-info-row"
       style={{
         padding: '14px 0',
         borderTop: '1px solid #e2e8f0'
@@ -373,6 +377,7 @@ function StepCard({
 }) {
   return (
     <div
+      className="home-step-card"
       style={{
         display: 'grid',
         gridTemplateColumns: '40px minmax(0, 1fr)',
