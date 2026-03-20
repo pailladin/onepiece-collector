@@ -11,6 +11,7 @@ export function HomePageClient() {
 
   return (
     <div
+      className="home-page"
       style={{
         minHeight: 'calc(100vh - 70px)',
         background:
@@ -18,8 +19,9 @@ export function HomePageClient() {
         padding: '40px 24px 56px'
       }}
     >
-      <div style={{ maxWidth: 1100, margin: '0 auto', display: 'grid', gap: 24 }}>
+      <div className="home-shell" style={{ maxWidth: 1100, margin: '0 auto', display: 'grid', gap: 24 }}>
         <section
+          className="home-hero-grid"
           style={{
             display: 'grid',
             gridTemplateColumns: 'minmax(0, 1.3fr) minmax(280px, 0.9fr)',
@@ -28,6 +30,7 @@ export function HomePageClient() {
           }}
         >
           <div
+            className="home-panel home-panel-main"
             style={{
               background: 'linear-gradient(135deg, rgba(255,255,255,0.96), rgba(239,246,255,0.9))',
               border: '1px solid rgba(191,219,254,0.95)',
@@ -52,6 +55,7 @@ export function HomePageClient() {
               Collection One Piece TCG
             </div>
             <h1
+              className="home-hero-title"
               style={{
                 fontSize: 42,
                 lineHeight: 1.05,
@@ -62,6 +66,7 @@ export function HomePageClient() {
               Suis chaque carte, chaque set, et chaque progression au meme endroit.
             </h1>
             <p
+              className="home-hero-copy"
               style={{
                 marginTop: 16,
                 color: '#334155',
@@ -74,7 +79,7 @@ export function HomePageClient() {
               partage facilement ta collection avec tes amis.
             </p>
 
-            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 22 }}>
+            <div className="home-actions" style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 22 }}>
               <ActionLink href={primaryHref} primary>
                 {primaryLabel}
               </ActionLink>
@@ -82,6 +87,7 @@ export function HomePageClient() {
             </div>
 
             <div
+              className="home-stats-grid"
               style={{
                 display: 'grid',
                 gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
@@ -105,6 +111,7 @@ export function HomePageClient() {
           </div>
 
           <div
+            className="home-panel home-panel-side"
             style={{
               background: 'linear-gradient(180deg, rgba(15,23,42,0.96), rgba(30,41,59,0.92))',
               border: '1px solid rgba(148,163,184,0.35)',
@@ -135,6 +142,7 @@ export function HomePageClient() {
         </section>
 
         <section
+          className="home-link-grid"
           style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))',
@@ -177,6 +185,7 @@ export function HomePageClient() {
         </section>
 
         <section
+          className="home-info-grid"
           style={{
             display: 'grid',
             gridTemplateColumns: 'minmax(0, 1.1fr) minmax(280px, 0.9fr)',
@@ -184,6 +193,7 @@ export function HomePageClient() {
           }}
         >
           <div
+            className="home-panel"
             style={{
               background: '#ffffffd9',
               border: '1px solid #dbeafe',
@@ -209,6 +219,7 @@ export function HomePageClient() {
           </div>
 
           <div
+            className="home-panel"
             style={{
               background: '#fff7ed',
               border: '1px solid #fdba74',
@@ -238,6 +249,7 @@ export function HomePageClient() {
         </section>
 
         <section
+          className="home-cta"
           style={{
             background: 'linear-gradient(135deg, rgba(255,255,255,0.88), rgba(224,242,254,0.88))',
             border: '1px solid #bfdbfe',
@@ -251,7 +263,7 @@ export function HomePageClient() {
           }}
         >
           <div style={{ maxWidth: 700 }}>
-            <h2 style={{ margin: 0, color: '#0f172a', fontSize: 28 }}>
+            <h2 className="home-cta-title" style={{ margin: 0, color: '#0f172a', fontSize: 28 }}>
               Tout est pret pour suivre ta collection plus facilement.
             </h2>
             <p style={{ margin: '10px 0 0', color: '#334155', lineHeight: 1.6 }}>
@@ -259,7 +271,7 @@ export function HomePageClient() {
               ta progression et utiliser les fonctions sociales.
             </p>
           </div>
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+          <div className="home-actions" style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
             <ActionLink href="/catalogue">Explorer</ActionLink>
             <ActionLink href={primaryHref} primary>
               {primaryLabel}
@@ -282,6 +294,7 @@ function ActionLink({
 }) {
   return (
     <Link
+      className={primary ? 'home-action-link home-action-link-primary' : 'home-action-link'}
       href={href}
       style={{
         display: 'inline-flex',
@@ -405,6 +418,7 @@ function LinkCard({
 }) {
   return (
     <Link
+      className="home-link-card"
       href={href}
       style={{
         textDecoration: 'none',
