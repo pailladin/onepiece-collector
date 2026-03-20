@@ -34,6 +34,42 @@ function cardStyle() {
   } as const
 }
 
+function actionLinkStyle(variant: 'primary' | 'secondary' = 'secondary') {
+  return {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 38,
+    padding: '0 14px',
+    borderRadius: 10,
+    textDecoration: 'none',
+    fontSize: 14,
+    fontWeight: 700,
+    whiteSpace: 'nowrap',
+    transition: 'background 120ms ease, border-color 120ms ease, color 120ms ease',
+    background: variant === 'primary' ? '#0f172a' : '#eff6ff',
+    color: variant === 'primary' ? '#ffffff' : '#1d4ed8',
+    border: variant === 'primary' ? '1px solid #0f172a' : '1px solid #bfdbfe',
+    boxShadow: variant === 'primary' ? '0 10px 24px -18px rgba(15, 23, 42, 0.9)' : 'none'
+  } as const
+}
+
+function dangerActionButtonStyle(disabled = false) {
+  return {
+    minHeight: 38,
+    padding: '0 14px',
+    borderRadius: 10,
+    fontSize: 14,
+    fontWeight: 700,
+    whiteSpace: 'nowrap',
+    background: disabled ? '#fff5f5' : '#fff1f2',
+    color: '#b91c1c',
+    border: '1px solid #fecaca',
+    cursor: disabled ? 'not-allowed' : 'pointer',
+    opacity: disabled ? 0.7 : 1
+  } as const
+}
+
 export default function FriendsPage() {
   const { user, loading } = useAuth()
   const [username, setUsername] = useState('')
@@ -697,13 +733,14 @@ export default function FriendsPage() {
                 justifyContent: 'space-between',
                 alignItems: 'center',
                 border: '1px solid #e2e8f0',
-                borderRadius: 8,
-                padding: '10px 12px',
+                borderRadius: 14,
+                padding: '14px 16px',
                 background: '#fff',
-                gap: 12
+                gap: 16,
+                flexWrap: 'wrap'
               }}
             >
-              <div>
+              <div style={{ flex: '1 1 220px', minWidth: 0 }}>
                 <div style={{ fontWeight: 600, color: '#0f172a' }}>{friend.username}</div>
                 {friend.discord_username && (
                   <div style={{ fontSize: 12, color: '#64748b', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -725,20 +762,26 @@ export default function FriendsPage() {
                   </div>
                 )}
               </div>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <Link href={`/friends/${friend.id}`}>Voir ses collections</Link>
-                <Link href={`/friends/${friend.id}/trade`}>Voir echanges</Link>
+              <div
+                style={{
+                  display: 'flex',
+                  gap: 10,
+                  flexWrap: 'wrap',
+                  justifyContent: 'flex-end',
+                  alignItems: 'center',
+                  flex: '0 1 auto'
+                }}
+              >
+                <Link href={`/friends/${friend.id}`} style={actionLinkStyle('secondary')}>
+                  Voir ses collections
+                </Link>
+                <Link href={`/friends/${friend.id}/trade`} style={actionLinkStyle('primary')}>
+                  Voir echanges
+                </Link>
                 <button
                   onClick={() => void removeFriend(friend.id)}
                   disabled={busyAction === `remove:${friend.id}`}
-                  style={{
-                    background: '#fff',
-                    color: '#b91c1c',
-                    border: '1px solid #fca5a5',
-                    borderRadius: 8,
-                    padding: '7px 10px',
-                    cursor: 'pointer'
-                  }}
+                  style={dangerActionButtonStyle(busyAction === `remove:${friend.id}`)}
                 >
                   Supprimer
                 </button>

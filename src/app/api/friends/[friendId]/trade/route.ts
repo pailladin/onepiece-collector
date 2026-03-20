@@ -212,6 +212,16 @@ export async function GET(
   const setById = new Map<string, string>(((setsData as SetRow[] | null) || []).map((row) => [row.id, row.code]))
   const friendCanGive: TradeItem[] = []
   const iCanGive: TradeItem[] = []
+  const myOwnedSetIds = new Set<string>()
+  const friendOwnedSetIds = new Set<string>()
+
+  for (const print of prints) {
+    const friendQty = friendByPrint.get(print.id) || 0
+    const myQty = mineByPrint.get(print.id) || 0
+
+    if (myQty > 0) myOwnedSetIds.add(print.distribution_set_id)
+    if (friendQty > 0) friendOwnedSetIds.add(print.distribution_set_id)
+  }
 
   for (const print of prints) {
     const friendQty = friendByPrint.get(print.id) || 0
@@ -256,7 +266,7 @@ export async function GET(
         languageFlag: getCollectionLanguageFlag(languageCode)
       }
 
-      if (friendExtra > 0 && iNeed > 0) {
+      if (friendExtra > 0 && iNeed > 0 && myOwnedSetIds.has(print.distribution_set_id)) {
         friendCanGive.push({
           ...baseItem,
           giverQty: friendExtra,
@@ -264,7 +274,7 @@ export async function GET(
         })
       }
 
-      if (myExtra > 0 && friendNeeds > 0) {
+      if (myExtra > 0 && friendNeeds > 0 && friendOwnedSetIds.has(print.distribution_set_id)) {
         iCanGive.push({
           ...baseItem,
           giverQty: myExtra,
