@@ -10,6 +10,7 @@ type Profile = {
   username: string
   postal_code?: string | null
   discord_username?: string | null
+  discord_user_id?: string | null
 }
 
 type FriendRow = {
@@ -132,7 +133,7 @@ export default function FriendsPage() {
     } else {
       const { data: profilesData } = await supabase
         .from('profiles')
-        .select('id, username, discord_username')
+        .select('id, username, discord_username, discord_user_id')
         .in('id', ids)
         .order('username')
 
@@ -152,7 +153,7 @@ export default function FriendsPage() {
     if (requestProfileIds.length > 0) {
       const { data: requestProfilesData } = await supabase
         .from('profiles')
-        .select('id, username, discord_username')
+        .select('id, username, discord_username, discord_user_id')
         .in('id', requestProfileIds)
 
       requestProfilesById = new Map(
@@ -183,7 +184,7 @@ export default function FriendsPage() {
 
       const { data: profile } = await supabase
         .from('profiles')
-        .select('id, username, postal_code, discord_username')
+        .select('id, username, postal_code, discord_username, discord_user_id')
         .eq('id', user.id)
         .maybeSingle()
 
@@ -205,7 +206,7 @@ export default function FriendsPage() {
 
       const { data } = await supabase
         .from('profiles')
-        .select('id, username, discord_username')
+        .select('id, username, discord_username, discord_user_id')
         .ilike('username', `%${search.trim()}%`)
         .neq('id', user.id)
         .limit(10)
@@ -226,7 +227,7 @@ export default function FriendsPage() {
       const departmentCode = postalCode.trim().slice(0, 2)
       const { data } = await supabase
         .from('profiles')
-        .select('id, username, discord_username, postal_code')
+        .select('id, username, discord_username, discord_user_id, postal_code')
         .like('postal_code', `${departmentCode}%`)
         .neq('id', user.id)
         .limit(12)
@@ -744,18 +745,22 @@ export default function FriendsPage() {
                 <div style={{ fontWeight: 600, color: '#0f172a' }}>{friend.username}</div>
                 {friend.discord_username && (
                   <div style={{ fontSize: 12, color: '#64748b', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                    <a
-                      href="https://discord.com/channels/@me"
-                      target="_blank"
-                      rel="noreferrer"
-                      style={{
-                        color: '#1d4ed8',
-                        fontSize: 12,
-                        textDecoration: 'underline'
-                      }}
-                    >
-                      Discord: {friend.discord_username}
-                    </a>
+                    {friend.discord_user_id ? (
+                      <a
+                        href={`https://discord.com/users/${encodeURIComponent(friend.discord_user_id)}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{
+                          color: '#1d4ed8',
+                          fontSize: 12,
+                          textDecoration: 'underline'
+                        }}
+                      >
+                        Discord: {friend.discord_username}
+                      </a>
+                    ) : (
+                      <span>Discord: {friend.discord_username}</span>
+                    )}
                     <button
                       onClick={() => void copyDiscordUsername(friend.discord_username!)}
                       style={{

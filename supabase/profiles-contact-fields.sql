@@ -1,6 +1,7 @@
 alter table public.profiles
   add column if not exists postal_code text,
-  add column if not exists discord_username text;
+  add column if not exists discord_username text,
+  add column if not exists discord_user_id text;
 
 alter table public.profiles
   drop constraint if exists profiles_postal_code_format_check;

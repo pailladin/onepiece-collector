@@ -32,24 +32,32 @@ async function syncDiscordUsername(user: User | null) {
   if (!user) return
 
   const discordUsername = getDiscordProfileName(user)
-  if (!discordUsername) return
+  const discordIdentity = (user.identities || []).find(
+    (identity) => String(identity.provider || '').toLowerCase() === 'discord'
+  )
+  const identityData = (discordIdentity?.identity_data || {}) as Record<string, unknown>
+  const discordUserId = String(identityData.provider_id || identityData.sub || '').trim()
+
+  if (!discordUsername && !discordUserId) return
 
   const { data, error } = await supabase
     .from('profiles')
-    .select('username, discord_username')
+    .select('username, discord_username, discord_user_id')
     .eq('id', user.id)
     .maybeSingle()
 
   if (error) return
 
   const currentDiscordUsername = String(data?.discord_username || '').trim()
-  if (currentDiscordUsername) return
+  const currentDiscordUserId = String((data as { discord_user_id?: string | null } | null)?.discord_user_id || '').trim()
+  if (currentDiscordUsername && currentDiscordUserId) return
 
   await supabase.from('profiles').upsert(
     {
       id: user.id,
       username: String(data?.username || '').trim() || null,
-      discord_username: discordUsername
+      discord_username: currentDiscordUsername || discordUsername || null,
+      discord_user_id: currentDiscordUserId || discordUserId || null
     },
     { onConflict: 'id' }
   )
