@@ -52,6 +52,22 @@ type OpportunityRow = {
   interestIndex: number
 }
 
+const collectionActionBaseStyle = {
+  minHeight: 42,
+  padding: '0 14px',
+  borderRadius: 12,
+  color: '#fff',
+  fontSize: 15,
+  fontWeight: 700,
+  lineHeight: 1.2,
+  textDecoration: 'none',
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  textAlign: 'center' as const,
+  boxSizing: 'border-box' as const
+}
+
 function chunkArray<T>(items: T[], size: number) {
   const chunks: T[][] = []
   for (let i = 0; i < items.length; i += size) {
@@ -63,6 +79,7 @@ function chunkArray<T>(items: T[], size: number) {
 export default function CollectionPage() {
   const { user } = useAuth()
   const userId = user?.id ?? null
+  const [useCompactActions, setUseCompactActions] = useState(false)
   const [sets, setSets] = useState<SetRow[]>([])
   const [stats, setStats] = useState<Record<string, SetStats>>({})
   const [loading, setLoading] = useState(true)
@@ -77,6 +94,17 @@ export default function CollectionPage() {
   const [opportunityError, setOpportunityError] = useState<string | null>(null)
   const [showOpportunityModal, setShowOpportunityModal] = useState(false)
   const [opportunityRows, setOpportunityRows] = useState<OpportunityRow[]>([])
+
+  useEffect(() => {
+    const syncCompactActions = () => {
+      if (typeof window === 'undefined') return
+      setUseCompactActions(window.innerWidth <= 720)
+    }
+
+    syncCompactActions()
+    window.addEventListener('resize', syncCompactActions)
+    return () => window.removeEventListener('resize', syncCompactActions)
+  }, [])
 
   useEffect(() => {
     const fetchData = async () => {
@@ -457,82 +485,140 @@ export default function CollectionPage() {
         stats={stats}
         getSetHref={(setCode) => `/collection/${setCode}`}
         headerActions={
-          <div className="collection-page-actions" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <Link
-              href="/collection/wishlist"
-              className="collection-page-action collection-page-action-pink"
-              style={{
-                border: '1px solid #db2777',
-                background: '#db2777',
-                color: '#fff',
-                borderRadius: 8,
-                padding: '8px 12px',
-                textDecoration: 'none'
-              }}
-            >
-              Wishlist
-            </Link>
-            <Link
-              href="/collection/history"
-              className="collection-page-action collection-page-action-blue"
-              style={{
-                border: '1px solid #1d4ed8',
-                background: '#1d4ed8',
-                color: '#fff',
-                borderRadius: 8,
-                padding: '8px 12px',
-                textDecoration: 'none'
-              }}
-            >
-              Suivi valeur
-            </Link>
-            <Link
-              href="/collection/top10"
-              className="collection-page-action collection-page-action-green"
-              style={{
-                border: '1px solid #0f766e',
-                background: '#0f766e',
-                color: '#fff',
-                borderRadius: 8,
-                padding: '8px 12px',
-                textDecoration: 'none'
-              }}
-            >
-              TOP10 cartes
-            </Link>
-            <button
-              onClick={calculateCollectionPrice}
-              disabled={priceLoading || visibleSets.length === 0}
-              className="collection-page-action collection-page-action-blue"
-              style={{
-                border: '1px solid #2563eb',
-                background: '#2563eb',
-                color: '#fff',
-                borderRadius: 8,
-                padding: '8px 12px',
-                cursor: priceLoading || visibleSets.length === 0 ? 'not-allowed' : 'pointer',
-                opacity: priceLoading || visibleSets.length === 0 ? 0.6 : 1
-              }}
-            >
-              {priceLoading ? 'Calcul en cours...' : 'Calculer prix collection'}
-            </button>
-            <button
-              onClick={calculateOpportunities}
-              disabled={opportunityLoading || visibleSets.length === 0}
-              className="collection-page-action collection-page-action-purple"
-              style={{
-                border: '1px solid #7c3aed',
-                background: '#7c3aed',
-                color: '#fff',
-                borderRadius: 8,
-                padding: '8px 12px',
-                cursor: opportunityLoading || visibleSets.length === 0 ? 'not-allowed' : 'pointer',
-                opacity: opportunityLoading || visibleSets.length === 0 ? 0.6 : 1
-              }}
-            >
-              {opportunityLoading ? 'Analyse en cours...' : "Opportunites d'achat"}
-            </button>
-          </div>
+          useCompactActions ? (
+            <div className="collection-page-actions collection-page-actions-compact">
+              <Link
+                href="/collection/wishlist"
+                className="collection-page-action collection-page-action-pink"
+                style={{
+                  ...collectionActionBaseStyle,
+                  border: '1px solid #db2777',
+                  background: '#db2777',
+                  minHeight: 40
+                }}
+              >
+                Wishlist
+              </Link>
+              <Link
+                href="/collection/history"
+                className="collection-page-action collection-page-action-blue"
+                style={{
+                  ...collectionActionBaseStyle,
+                  border: '1px solid #1d4ed8',
+                  background: '#1d4ed8',
+                  minHeight: 40
+                }}
+              >
+                Valeur
+              </Link>
+              <Link
+                href="/collection/top10"
+                className="collection-page-action collection-page-action-green"
+                style={{
+                  ...collectionActionBaseStyle,
+                  border: '1px solid #0f766e',
+                  background: '#0f766e',
+                  minHeight: 40
+                }}
+              >
+                TOP10
+              </Link>
+              <button
+                onClick={calculateCollectionPrice}
+                disabled={priceLoading || visibleSets.length === 0}
+                className="collection-page-action collection-page-action-blue"
+                style={{
+                  ...collectionActionBaseStyle,
+                  border: '1px solid #2563eb',
+                  background: '#2563eb',
+                  cursor: priceLoading || visibleSets.length === 0 ? 'not-allowed' : 'pointer',
+                  opacity: priceLoading || visibleSets.length === 0 ? 0.6 : 1,
+                  minHeight: 40
+                }}
+              >
+                {priceLoading ? 'Calcul...' : 'Prix'}
+              </button>
+              <button
+                onClick={calculateOpportunities}
+                disabled={opportunityLoading || visibleSets.length === 0}
+                className="collection-page-action collection-page-action-purple"
+                style={{
+                  ...collectionActionBaseStyle,
+                  border: '1px solid #7c3aed',
+                  background: '#7c3aed',
+                  cursor: opportunityLoading || visibleSets.length === 0 ? 'not-allowed' : 'pointer',
+                  opacity: opportunityLoading || visibleSets.length === 0 ? 0.6 : 1,
+                  minHeight: 40
+                }}
+              >
+                {opportunityLoading ? 'Analyse...' : 'Achats'}
+              </button>
+            </div>
+          ) : (
+            <div className="collection-page-actions" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <Link
+                href="/collection/wishlist"
+                className="collection-page-action collection-page-action-pink"
+                style={{
+                  ...collectionActionBaseStyle,
+                  border: '1px solid #db2777',
+                  background: '#db2777'
+                }}
+              >
+                Wishlist
+              </Link>
+              <Link
+                href="/collection/history"
+                className="collection-page-action collection-page-action-blue"
+                style={{
+                  ...collectionActionBaseStyle,
+                  border: '1px solid #1d4ed8',
+                  background: '#1d4ed8'
+                }}
+              >
+                Suivi valeur
+              </Link>
+              <Link
+                href="/collection/top10"
+                className="collection-page-action collection-page-action-green"
+                style={{
+                  ...collectionActionBaseStyle,
+                  border: '1px solid #0f766e',
+                  background: '#0f766e'
+                }}
+              >
+                TOP10 cartes
+              </Link>
+              <button
+                onClick={calculateCollectionPrice}
+                disabled={priceLoading || visibleSets.length === 0}
+                className="collection-page-action collection-page-action-blue"
+                style={{
+                  ...collectionActionBaseStyle,
+                  border: '1px solid #2563eb',
+                  background: '#2563eb',
+                  cursor: priceLoading || visibleSets.length === 0 ? 'not-allowed' : 'pointer',
+                  opacity: priceLoading || visibleSets.length === 0 ? 0.6 : 1
+                }}
+              >
+                {priceLoading ? 'Calcul en cours...' : 'Calculer prix collection'}
+              </button>
+              <button
+                onClick={calculateOpportunities}
+                disabled={opportunityLoading || visibleSets.length === 0}
+                className="collection-page-action collection-page-action-purple"
+                style={{
+                  ...collectionActionBaseStyle,
+                  border: '1px solid #7c3aed',
+                  background: '#7c3aed',
+                  cursor: opportunityLoading || visibleSets.length === 0 ? 'not-allowed' : 'pointer',
+                  opacity: opportunityLoading || visibleSets.length === 0 ? 0.6 : 1
+                }}
+              >
+                {opportunityLoading ? 'Analyse en cours...' : "Opportunites d'achat"}
+              </button>
+            </div>
+          )
         }
       />
 

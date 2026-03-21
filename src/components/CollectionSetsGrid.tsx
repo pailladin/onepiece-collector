@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { SetRow, SetStats } from '@/lib/collections/fetchUserSetStats'
 
@@ -22,6 +23,19 @@ export function CollectionSetsGrid({
   getSetHref,
   headerActions
 }: Props) {
+  const [hideTitleOnMobile, setHideTitleOnMobile] = useState(false)
+
+  useEffect(() => {
+    const syncHideTitle = () => {
+      if (typeof window === 'undefined') return
+      setHideTitleOnMobile(window.innerWidth <= 768)
+    }
+
+    syncHideTitle()
+    window.addEventListener('resize', syncHideTitle)
+    return () => window.removeEventListener('resize', syncHideTitle)
+  }, [])
+
   return (
     <div className="collection-grid-page" style={{ padding: 40 }}>
       <div
@@ -34,7 +48,11 @@ export function CollectionSetsGrid({
           marginBottom: 30
         }}
       >
-        <h1 className="collection-grid-title" style={{ fontSize: 24, fontWeight: 'bold', margin: 0 }}>{title}</h1>
+        {!hideTitleOnMobile && (
+          <h1 className="collection-grid-title" style={{ fontSize: 24, fontWeight: 'bold', margin: 0 }}>
+            {title}
+          </h1>
+        )}
         {headerActions}
       </div>
 
