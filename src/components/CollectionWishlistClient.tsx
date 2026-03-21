@@ -297,6 +297,18 @@ export function CollectionWishlistClient({ shareToken = null }: Props) {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [shareMessage, setShareMessage] = useState<string | null>(null)
+  const [isCompactView, setIsCompactView] = useState(false)
+
+  useEffect(() => {
+    const syncCompactView = () => {
+      if (typeof window === 'undefined') return
+      setIsCompactView(window.innerWidth <= 900)
+    }
+
+    syncCompactView()
+    window.addEventListener('resize', syncCompactView)
+    return () => window.removeEventListener('resize', syncCompactView)
+  }, [])
 
   useEffect(() => {
     const loadWishlist = async () => {
@@ -399,6 +411,19 @@ export function CollectionWishlistClient({ shareToken = null }: Props) {
   const pageSubtitle = isSharedView
     ? `${items.length} carte(s) partagee(s) pour aider la famille et les amis a choisir quoi acheter.`
     : `${items.length} carte(s) suivie(s) pour tes recherches et prochains achats.`
+  const wishlistActionBaseStyle = {
+    minHeight: isCompactView ? 40 : 42,
+    padding: isCompactView ? '0 14px' : '0 16px',
+    borderRadius: 10,
+    fontSize: isCompactView ? 14 : 15,
+    fontWeight: 700,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    textDecoration: 'none',
+    boxSizing: 'border-box' as const,
+    whiteSpace: 'nowrap' as const
+  }
 
   return (
     <div
@@ -426,24 +451,54 @@ export function CollectionWishlistClient({ shareToken = null }: Props) {
             <div style={{ marginTop: 8, color: '#475569' }}>{pageSubtitle}</div>
             {shareMessage && <div style={{ marginTop: 8, color: '#0f766e' }}>{shareMessage}</div>}
           </div>
-          <div style={{ display: 'flex', gap: 12, alignItems: 'start', flexWrap: 'wrap' }}>
+          <div
+            style={{
+              display: 'flex',
+              gap: 10,
+              alignItems: 'start',
+              flexWrap: 'wrap',
+              justifyContent: isCompactView ? 'stretch' : 'flex-end',
+              width: isCompactView ? '100%' : undefined
+            }}
+          >
             {!isSharedView && (
               <button
                 onClick={() => void copyShareLink()}
                 style={{
+                  ...wishlistActionBaseStyle,
                   border: '1px solid #2563eb',
                   background: '#2563eb',
                   color: '#fff',
-                  borderRadius: 8,
-                  padding: '8px 12px',
                   cursor: 'pointer'
                 }}
               >
                 Partager ma wishlist
               </button>
             )}
-            {!isSharedView && <Link href="/collection">Retour a ma collection</Link>}
-            <Link href="/catalogue">Voir le catalogue</Link>
+            {!isSharedView && (
+              <Link
+                href="/collection"
+                style={{
+                  ...wishlistActionBaseStyle,
+                  border: '1px solid #cbd5e1',
+                  background: '#ffffff',
+                  color: '#1e3a8a'
+                }}
+              >
+                Retour a ma collection
+              </Link>
+            )}
+            <Link
+              href="/catalogue"
+              style={{
+                ...wishlistActionBaseStyle,
+                border: '1px solid #cbd5e1',
+                background: '#ffffff',
+                color: '#1e3a8a'
+              }}
+            >
+              Voir le catalogue
+            </Link>
           </div>
         </div>
       </section>
