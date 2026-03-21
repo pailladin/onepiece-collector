@@ -189,6 +189,7 @@ export function CollectionSetView({
   const [setLanguages, setSetLanguages] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedImage, setSelectedImage] = useState<string | null>(null)
+  const [isMobileView, setIsMobileView] = useState(false)
 
   const [sortKey, setSortKey] = useState<SortKey>(() =>
     parseSortKey(searchParams.get('sort'))
@@ -372,6 +373,17 @@ export function CollectionSetView({
 
     void fetchData()
   }, [code, isFriendReadOnlyView, ownerUserId, resolvedOwnerId, shareToken, supportMode])
+
+  useEffect(() => {
+    const syncMobileView = () => {
+      if (typeof window === 'undefined') return
+      setIsMobileView(window.innerWidth <= 1024)
+    }
+
+    syncMobileView()
+    window.addEventListener('resize', syncMobileView)
+    return () => window.removeEventListener('resize', syncMobileView)
+  }, [])
 
 
   const filterOptions = useMemo(() => getFilterOptions(items), [items])
@@ -854,8 +866,10 @@ export function CollectionSetView({
     <div
       style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-        gap: 20
+        gridTemplateColumns: isMobileView
+          ? 'repeat(auto-fill, minmax(150px, 1fr))'
+          : 'repeat(auto-fill, minmax(200px, 1fr))',
+        gap: isMobileView ? 12 : 20
       }}
     >
       {data.map((item) => {
@@ -898,7 +912,7 @@ export function CollectionSetView({
                 isFoil ? '#f5c84c' : isAlt ? rarityTheme.border : '#d1d5db'
               }`,
               borderRadius: 12,
-              padding: 10,
+              padding: isMobileView ? 8 : 10,
               background: isAlt
                 ? rarityTheme.background
                 : 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)',
@@ -942,7 +956,7 @@ export function CollectionSetView({
               alt={translation?.name}
               style={{
                 width: '100%',
-                marginBottom: 10,
+                marginBottom: isMobileView ? 8 : 10,
                 cursor: 'pointer',
                 borderRadius: 8
               }}
@@ -954,10 +968,12 @@ export function CollectionSetView({
               }}
             />
 
-            <div style={{ fontWeight: 'bold' }}>{getDisplayPrintCode(item)}</div>
-            <div>{translation?.name}</div>
+            <div style={{ fontWeight: 'bold', fontSize: isMobileView ? 13 : 16 }}>
+              {getDisplayPrintCode(item)}
+            </div>
+            <div style={{ fontSize: isMobileView ? 12 : 14 }}>{translation?.name}</div>
 
-            <div style={{ fontSize: 12 }}>
+            <div style={{ fontSize: isMobileView ? 11 : 12 }}>
               <strong>{item.card?.rarity}</strong> - {item.card?.type}
             </div>
 
@@ -1019,7 +1035,7 @@ export function CollectionSetView({
   return (
     <div
       style={{
-        padding: '18px 28px 28px',
+        padding: isMobileView ? '10px 10px 20px' : '18px 28px 28px',
         background:
           'radial-gradient(circle at 10% 20%, #f0f9ff 0%, #eef2ff 35%, #fff7ed 100%)',
         minHeight: '100vh'
@@ -1027,9 +1043,9 @@ export function CollectionSetView({
     >
       <h1
         style={{
-          fontSize: 30,
+          fontSize: isMobileView ? 24 : 30,
           fontWeight: 'bold',
-          marginBottom: 14,
+          marginBottom: isMobileView ? 10 : 14,
           color: '#111827'
         }}
       >
@@ -1041,33 +1057,41 @@ export function CollectionSetView({
           border: '1px solid #cfe4ff',
           borderRadius: 14,
           background: 'linear-gradient(145deg, #ffffff 0%, #eff6ff 100%)',
-          padding: 16,
-          marginBottom: 16
+          padding: isMobileView ? 12 : 16,
+          marginBottom: isMobileView ? 12 : 16
         }}
       >
         <div
           style={{
             display: 'flex',
             justifyContent: 'space-between',
-            gap: 16,
+            gap: isMobileView ? 10 : 16,
             flexWrap: 'wrap',
-            marginBottom: 10
+            marginBottom: isMobileView ? 8 : 10
           }}
         >
-          <div style={{ minWidth: 220 }}>
+          <div style={{ minWidth: isMobileView ? 0 : 220, width: isMobileView ? '100%' : undefined }}>
             <div style={{ fontSize: 12, color: '#475569', marginBottom: 4 }}>Ligne de vie</div>
             <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a' }}>
               {ownedCount} possedees / {totalCount} ({lifePercent}%)
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: isMobileView ? 'repeat(2, minmax(0, 1fr))' : 'repeat(3, auto)',
+              gap: 8,
+              width: isMobileView ? '100%' : undefined
+            }}
+          >
             <div
               style={{
                 fontSize: 12,
                 background: '#ffffff',
                 border: '1px solid #cbd5e1',
                 borderRadius: 999,
-                padding: '4px 10px'
+                padding: '4px 10px',
+                textAlign: 'center'
               }}
             >
               Normales possedees: <strong>{ownedNormalCount}</strong>
@@ -1078,7 +1102,8 @@ export function CollectionSetView({
                 background: '#ffffff',
                 border: '1px solid #cbd5e1',
                 borderRadius: 999,
-                padding: '4px 10px'
+                padding: '4px 10px',
+                textAlign: 'center'
               }}
             >
               Alternatives possedees: <strong>{ownedAltCount}</strong>
@@ -1089,7 +1114,9 @@ export function CollectionSetView({
                 background: '#ffffff',
                 border: '1px solid #cbd5e1',
                 borderRadius: 999,
-                padding: '4px 10px'
+                padding: '4px 10px',
+                textAlign: 'center',
+                gridColumn: isMobileView ? '1 / -1' : undefined
               }}
             >
               Manquantes: <strong>{missingCount}</strong>
@@ -1117,17 +1144,19 @@ export function CollectionSetView({
 
       <div
         style={{
-          marginBottom: 20,
+          marginBottom: isMobileView ? 14 : 20,
           display: 'grid',
-          gridTemplateColumns: 'minmax(300px, 1.6fr) minmax(180px, 0.65fr) minmax(280px, 1fr)',
-          gap: 12
+          gridTemplateColumns: isMobileView
+            ? '1fr'
+            : 'minmax(300px, 1.6fr) minmax(180px, 0.65fr) minmax(280px, 1fr)',
+          gap: isMobileView ? 10 : 12
         }}
       >
         <div
           style={{
             border: '1px solid #d1d5db',
             borderRadius: 12,
-            padding: 12,
+            padding: isMobileView ? 10 : 12,
             background: '#ffffffd1'
           }}
         >
@@ -1149,10 +1178,17 @@ export function CollectionSetView({
               }}
             />
 
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: isMobileView ? 'repeat(2, minmax(0, 1fr))' : 'repeat(2, minmax(140px, 1fr))',
+                gap: 8
+              }}
+            >
               <select
                 value={rarityFilter}
                 onChange={(e) => setRarityFilter(e.target.value)}
+                style={{ minWidth: 0 }}
               >
                 <option value="all">Toutes raretes</option>
                 {filterOptions.rarities.map((rarity) => (
@@ -1162,7 +1198,7 @@ export function CollectionSetView({
                 ))}
               </select>
 
-              <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+              <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} style={{ minWidth: 0 }}>
                 <option value="all">Tous types</option>
                 {filterOptions.types.map((cardType) => (
                   <option key={cardType} value={cardType}>
@@ -1178,6 +1214,7 @@ export function CollectionSetView({
                   setAltFilter(value)
                   if (value === 'normal') setAltTypeFilter('all')
                 }}
+                style={{ minWidth: 0 }}
               >
                 <option value="all">Toutes versions</option>
                 <option value="normal">Normales</option>
@@ -1188,6 +1225,7 @@ export function CollectionSetView({
                 value={altTypeFilter}
                 onChange={(e) => setAltTypeFilter(e.target.value)}
                 disabled={altFilter === 'normal'}
+                style={{ minWidth: 0 }}
               >
                 <option value="all">Tous types alternatives</option>
                 {filterOptions.altTypes.map((altType) => (
@@ -1204,16 +1242,23 @@ export function CollectionSetView({
           style={{
             border: '1px solid #d1d5db',
             borderRadius: 12,
-            padding: 12,
+            padding: isMobileView ? 10 : 12,
             background: '#ffffffd1'
           }}
         >
           <div style={{ fontSize: 12, color: '#475569', marginBottom: 8 }}>Tri</div>
           <div style={{ display: 'grid', gap: 8 }}>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: isMobileView ? 'repeat(2, minmax(0, 1fr))' : 'repeat(2, minmax(120px, 1fr))',
+                gap: 8
+              }}
+            >
               <select
                 value={sortKey}
                 onChange={(e) => setSortKey(e.target.value as SortKey)}
+                style={{ minWidth: 0 }}
               >
                 <option value="number">Numero</option>
                 <option value="name">Nom</option>
@@ -1224,6 +1269,7 @@ export function CollectionSetView({
               <select
                 value={sortDirection}
                 onChange={(e) => setSortDirection(e.target.value as SortDirection)}
+                style={{ minWidth: 0 }}
               >
                 <option value="asc">Ascendant</option>
                 <option value="desc">Descendant</option>
@@ -1239,12 +1285,19 @@ export function CollectionSetView({
           style={{
             border: '1px solid #d1d5db',
             borderRadius: 12,
-            padding: 12,
+            padding: isMobileView ? 10 : 12,
             background: '#ffffffd1'
           }}
         >
           <div style={{ fontSize: 12, color: '#475569', marginBottom: 8 }}>Actions</div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: isMobileView ? 'repeat(2, minmax(0, 1fr))' : 'repeat(2, minmax(150px, max-content))',
+              gap: 8,
+              alignItems: 'stretch'
+            }}
+          >
             <button
               onClick={resetFilters}
               style={{
@@ -1252,7 +1305,8 @@ export function CollectionSetView({
                 borderRadius: 8,
                 border: '1px solid #cbd5e1',
                 background: '#ffffff',
-                cursor: 'pointer'
+                cursor: 'pointer',
+                minWidth: 0
               }}
             >
               Reinitialiser filtres
@@ -1266,7 +1320,8 @@ export function CollectionSetView({
                   borderRadius: 8,
                   border: '1px solid #cbd5e1',
                   background: '#ffffff',
-                  cursor: 'pointer'
+                  cursor: 'pointer',
+                  minWidth: 0
                 }}
               >
                 Copier lien de partage
@@ -1282,7 +1337,8 @@ export function CollectionSetView({
                 border: '1px solid #cbd5e1',
                 background: '#ffffff',
                 cursor:
-                  priceLoading || ownedItemsAll.length === 0 ? 'not-allowed' : 'pointer'
+                  priceLoading || ownedItemsAll.length === 0 ? 'not-allowed' : 'pointer',
+                minWidth: 0
               }}
             >
               {priceLoading ? 'Calcul en cours...' : 'Valeur Collection'}
@@ -1299,7 +1355,8 @@ export function CollectionSetView({
                 cursor:
                   priceLoading || missingItemsAll.length === 0
                     ? 'not-allowed'
-                    : 'pointer'
+                    : 'pointer',
+                minWidth: 0
               }}
             >
               {priceLoading ? 'Calcul en cours...' : 'Completer collection'}
@@ -1314,7 +1371,8 @@ export function CollectionSetView({
                 border: '1px solid #cbd5e1',
                 background: '#ffffff',
                 cursor:
-                  !canEdit || doublesDetails.length === 0 ? 'not-allowed' : 'pointer'
+                  !canEdit || doublesDetails.length === 0 ? 'not-allowed' : 'pointer',
+                minWidth: 0
               }}
             >
               {doublesPriceLoading ? 'Chargement...' : 'Doubles'}

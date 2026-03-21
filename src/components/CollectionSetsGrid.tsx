@@ -24,28 +24,35 @@ export function CollectionSetsGrid({
   headerActions
 }: Props) {
   const [hideTitleOnMobile, setHideTitleOnMobile] = useState(false)
+  const [useCompactLayout, setUseCompactLayout] = useState(false)
 
   useEffect(() => {
-    const syncHideTitle = () => {
+    const syncResponsiveState = () => {
       if (typeof window === 'undefined') return
-      setHideTitleOnMobile(window.innerWidth <= 768)
+      const isMobile = window.innerWidth <= 768
+      setHideTitleOnMobile(isMobile)
+      setUseCompactLayout(isMobile)
     }
 
-    syncHideTitle()
-    window.addEventListener('resize', syncHideTitle)
-    return () => window.removeEventListener('resize', syncHideTitle)
+    syncResponsiveState()
+    window.addEventListener('resize', syncResponsiveState)
+    return () => window.removeEventListener('resize', syncResponsiveState)
   }, [])
 
   return (
-    <div className="collection-grid-page" style={{ padding: 40 }}>
+    <div
+      className="collection-grid-page"
+      style={{ padding: useCompactLayout ? '0 0 12px' : 40 }}
+    >
       <div
         className="collection-grid-header"
         style={{
           display: 'flex',
           justifyContent: 'space-between',
-          alignItems: 'center',
-          gap: 12,
-          marginBottom: 30
+          alignItems: useCompactLayout ? 'stretch' : 'center',
+          flexDirection: useCompactLayout ? 'column' : 'row',
+          gap: useCompactLayout ? 0 : 12,
+          marginBottom: useCompactLayout ? 0 : 30
         }}
       >
         {!hideTitleOnMobile && (
@@ -53,16 +60,21 @@ export function CollectionSetsGrid({
             {title}
           </h1>
         )}
-        {headerActions}
+        <div
+          className="collection-grid-header-actions"
+          style={{ marginTop: useCompactLayout ? 2 : 0 }}
+        >
+          {headerActions}
+        </div>
       </div>
 
       <div
         className="collection-grid-cards"
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
-          columnGap: 32,
-          rowGap: 48,
+          gridTemplateColumns: useCompactLayout ? '1fr' : 'repeat(auto-fill, minmax(220px, 1fr))',
+          columnGap: useCompactLayout ? 0 : 32,
+          rowGap: useCompactLayout ? 14 : 48,
         }}
       >
         {sets.map((set) => {

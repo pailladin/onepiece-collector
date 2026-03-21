@@ -486,15 +486,27 @@ export default function CollectionPage() {
         getSetHref={(setCode) => `/collection/${setCode}`}
         headerActions={
           useCompactActions ? (
-            <div className="collection-page-actions collection-page-actions-compact">
+            <div
+              className="collection-page-actions collection-page-actions-compact"
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(5, minmax(0, 1fr))',
+                gap: 4,
+                width: '100%',
+                margin: '0 auto'
+              }}
+            >
               <Link
                 href="/collection/wishlist"
                 className="collection-page-action collection-page-action-pink"
                 style={{
                   ...collectionActionBaseStyle,
-                  border: '1px solid #db2777',
+                  border: 'none',
                   background: '#db2777',
-                  minHeight: 40
+                  minHeight: 32,
+                  minWidth: 0,
+                  padding: '4px 2px',
+                  fontSize: 10
                 }}
               >
                 Wishlist
@@ -504,9 +516,12 @@ export default function CollectionPage() {
                 className="collection-page-action collection-page-action-blue"
                 style={{
                   ...collectionActionBaseStyle,
-                  border: '1px solid #1d4ed8',
+                  border: 'none',
                   background: '#1d4ed8',
-                  minHeight: 40
+                  minHeight: 32,
+                  minWidth: 0,
+                  padding: '4px 2px',
+                  fontSize: 10
                 }}
               >
                 Valeur
@@ -516,9 +531,12 @@ export default function CollectionPage() {
                 className="collection-page-action collection-page-action-green"
                 style={{
                   ...collectionActionBaseStyle,
-                  border: '1px solid #0f766e',
+                  border: 'none',
                   background: '#0f766e',
-                  minHeight: 40
+                  minHeight: 32,
+                  minWidth: 0,
+                  padding: '4px 2px',
+                  fontSize: 10
                 }}
               >
                 TOP10
@@ -529,11 +547,14 @@ export default function CollectionPage() {
                 className="collection-page-action collection-page-action-blue"
                 style={{
                   ...collectionActionBaseStyle,
-                  border: '1px solid #2563eb',
+                  border: 'none',
                   background: '#2563eb',
                   cursor: priceLoading || visibleSets.length === 0 ? 'not-allowed' : 'pointer',
                   opacity: priceLoading || visibleSets.length === 0 ? 0.6 : 1,
-                  minHeight: 40
+                  minHeight: 32,
+                  minWidth: 0,
+                  padding: '4px 2px',
+                  fontSize: 10
                 }}
               >
                 {priceLoading ? 'Calcul...' : 'Prix'}
@@ -544,11 +565,14 @@ export default function CollectionPage() {
                 className="collection-page-action collection-page-action-purple"
                 style={{
                   ...collectionActionBaseStyle,
-                  border: '1px solid #7c3aed',
+                  border: 'none',
                   background: '#7c3aed',
                   cursor: opportunityLoading || visibleSets.length === 0 ? 'not-allowed' : 'pointer',
                   opacity: opportunityLoading || visibleSets.length === 0 ? 0.6 : 1,
-                  minHeight: 40
+                  minHeight: 32,
+                  minWidth: 0,
+                  padding: '4px 2px',
+                  fontSize: 10
                 }}
               >
                 {opportunityLoading ? 'Analyse...' : 'Achats'}
