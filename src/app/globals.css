@@ -220,66 +220,91 @@ body {
 
 @media (max-width: 768px) {
   .root-shell-header {
-    padding: 8px 10px !important;
+    padding: 6px 8px !important;
   }
 
   .root-shell-header-inner {
-    align-items: flex-start !important;
-    gap: 10px !important;
+    align-items: center !important;
+    gap: 8px !important;
+    flex-wrap: nowrap !important;
   }
 
   .root-shell-brand-nav {
-    width: 100%;
+    width: auto;
+    min-width: 0;
     gap: 8px !important;
+    flex-wrap: nowrap !important;
+    flex: 1 1 auto;
   }
 
   .root-shell-home-link {
     margin-right: 0 !important;
+    flex: 0 0 auto;
   }
 
   .root-shell-nav {
+    flex-wrap: nowrap !important;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    min-width: 0;
+    flex: 1 1 auto;
     gap: 6px !important;
+  }
+
+  .root-shell-nav::-webkit-scrollbar {
+    display: none;
   }
 
   .root-shell-nav-link,
   .root-shell-community-link {
-    width: 84px !important;
-    height: 56px !important;
+    width: 70px !important;
+    height: 46px !important;
+    flex: 0 0 auto;
   }
 
   .root-shell-nav-image {
-    width: 84px !important;
-    height: 56px !important;
+    width: 70px !important;
+    height: 46px !important;
   }
 
   .root-shell-home-image {
-    width: 72px !important;
-    height: 48px !important;
+    width: 54px !important;
+    height: 36px !important;
   }
 
   .root-shell-admin-link {
-    min-height: 56px !important;
-    padding: 0 12px !important;
-    font-size: 14px !important;
+    min-height: 46px !important;
+    padding: 0 10px !important;
+    font-size: 12px !important;
+    flex: 0 0 auto;
+    gap: 5px !important;
   }
 
   .root-shell-account {
-    width: 100%;
-    justify-content: space-between;
-    padding: 6px 8px !important;
+    width: auto;
+    max-width: 42%;
+    justify-content: flex-end;
+    padding: 4px 6px !important;
+    gap: 6px !important;
+    flex: 0 0 auto;
   }
 
   .root-shell-account-link {
     min-width: 0;
-    flex: 1 1 auto;
+    max-width: 120px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    font-size: 12px !important;
+    gap: 6px !important;
   }
 
   .root-shell-logout {
-    padding: 6px 10px !important;
+    padding: 5px 8px !important;
     white-space: nowrap;
+    font-size: 12px !important;
   }
 
   .collection-grid-page {
@@ -331,24 +356,40 @@ body {
 }
 
 @media (max-width: 420px) {
-  .root-shell-nav {
-    width: 100%;
-  }
-
   .root-shell-nav-link,
   .root-shell-community-link {
-    width: 78px !important;
-    height: 52px !important;
+    width: 62px !important;
+    height: 42px !important;
   }
 
   .root-shell-nav-image {
-    width: 78px !important;
-    height: 52px !important;
+    width: 62px !important;
+    height: 42px !important;
   }
 
   .root-shell-admin-link {
-    min-height: 52px !important;
-    font-size: 13px !important;
+    min-height: 42px !important;
+    font-size: 11px !important;
+    padding: 0 8px !important;
+  }
+
+  .root-shell-home-image {
+    width: 48px !important;
+    height: 32px !important;
+  }
+
+  .root-shell-account {
+    max-width: 38%;
+  }
+
+  .root-shell-account-link {
+    max-width: 88px;
+  }
+
+  .root-shell-account-link span[aria-hidden='true'] {
+    width: 20px !important;
+    height: 20px !important;
+    font-size: 11px !important;
   }
 
   .collection-page-actions {
