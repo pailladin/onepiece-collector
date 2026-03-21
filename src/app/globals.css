@@ -218,7 +218,27 @@ body {
   text-align: center;
 }
 
-@media (max-width: 768px) {
+.root-shell-mobile-link {
+  display: none;
+}
+
+.root-shell-mobile-link:link,
+.root-shell-mobile-link:visited,
+.root-shell-mobile-link:hover,
+.root-shell-mobile-link:active {
+  color: #fff !important;
+  text-decoration: none;
+}
+
+.root-shell-desktop-nav {
+  display: flex !important;
+}
+
+.root-shell-mobile-nav {
+  display: flex !important;
+}
+
+@media (max-width: 1100px) {
   .root-shell-header {
     padding: 6px 8px !important;
   }
@@ -230,10 +250,10 @@ body {
   }
 
   .root-shell-brand-nav {
-    width: auto;
+    width: 100%;
     min-width: 0;
     gap: 8px !important;
-    flex-wrap: nowrap !important;
+    flex-wrap: wrap !important;
     flex: 1 1 auto;
   }
 
@@ -257,11 +277,46 @@ body {
     display: none;
   }
 
-  .root-shell-nav-link,
-  .root-shell-community-link {
-    width: 70px !important;
-    height: 46px !important;
+  .root-shell-nav {
+    gap: 5px !important;
+  }
+
+  .root-shell-mobile-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 32px;
+    padding: 0 10px;
+    border-radius: 999px;
+    text-decoration: none;
+    color: #fff;
+    background: rgba(15, 23, 42, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
     flex: 0 0 auto;
+    box-shadow: 0 8px 18px -14px rgba(15, 23, 42, 0.95);
+  }
+
+  .root-shell-mobile-link-admin {
+    background: rgba(185, 28, 28, 0.82);
+    color: #fff7ed;
+  }
+
+  .root-shell-account-mobile {
+    margin-left: auto;
+    flex: 0 0 auto;
+  }
+
+  .root-shell-mobile-nav {
+    width: 100%;
+    order: 3;
+  }
+
+  .root-shell-account {
+    background: rgba(15, 23, 42, 0.58) !important;
+    border: 1px solid rgba(255, 255, 255, 0.26) !important;
   }
 
   .root-shell-nav-image {
