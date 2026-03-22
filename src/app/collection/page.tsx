@@ -681,17 +681,19 @@ export default function CollectionPage() {
             style={{
               background: '#fff',
               borderRadius: 12,
-              width: 'min(760px, 100%)',
-              maxHeight: '85vh',
+              width: useCompactActions ? '100%' : 'min(760px, 100%)',
+              maxHeight: useCompactActions ? '92vh' : '85vh',
               overflow: 'auto',
-              padding: 18
+              padding: useCompactActions ? 12 : 18
             }}
           >
             <div
               style={{
                 display: 'flex',
                 justifyContent: 'space-between',
-                alignItems: 'center',
+                alignItems: useCompactActions ? 'flex-start' : 'center',
+                flexDirection: useCompactActions ? 'column' : 'row',
+                gap: useCompactActions ? 10 : 0,
                 marginBottom: 12
               }}
             >
@@ -710,68 +712,140 @@ export default function CollectionPage() {
               <button onClick={() => setShowPriceModal(false)}>Fermer</button>
             </div>
 
-            <div
-              style={{
-                border: '1px solid #e2e8f0',
-                borderRadius: 8,
-                overflow: 'hidden'
-              }}
-            >
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: '120px 1fr 140px 130px',
-                  gap: 10,
-                  padding: '10px 12px',
-                  background: '#f8fafc',
-                  fontWeight: 700,
-                  fontSize: 13
-                }}
-              >
-                <div>Set</div>
-                <div>Nom</div>
-                <div>Couverture</div>
-                <div style={{ textAlign: 'right' }}>Total</div>
-              </div>
-
-              {priceSetRows.length === 0 ? (
-                <div style={{ padding: 12 }}>Aucun detail disponible.</div>
-              ) : (
-                priceSetRows.map((row) => (
+            {useCompactActions ? (
+              <div style={{ display: 'grid', gap: 10 }}>
+                {priceSetRows.length === 0 ? (
                   <div
-                    key={row.setCode}
                     style={{
-                      display: 'grid',
-                      gridTemplateColumns: '120px 1fr 140px 130px',
-                      gap: 10,
-                      padding: '10px 12px',
-                      borderTop: '1px solid #e2e8f0',
-                      alignItems: 'center'
+                      border: '1px solid #e2e8f0',
+                      borderRadius: 10,
+                      padding: 12,
+                      color: '#475569'
                     }}
                   >
-                    <div>
-                      <strong>{row.setCode}</strong>
-                    </div>
-                    <div>{row.setName}</div>
-                    <div style={{ fontSize: 13, color: '#475569' }}>
-                      {row.pricedCount}/{row.expectedCount}
-                    </div>
-                    <div style={{ textAlign: 'right', fontWeight: 700 }}>
-                      <span
-                        title={
-                          row.usFallbackCount > 0
-                            ? 'Inclut des prix US (source externe), un ecart peut exister'
-                            : 'Prix Cardmarket (avg_price)'
-                        }
-                      >
-                        {formatCurrency(row.total)}
-                        {row.usFallbackCount > 0 ? '*' : ''}
-                      </span>
-                    </div>
+                    Aucun detail disponible.
                   </div>
-                ))
-              )}
-            </div>
+                ) : (
+                  priceSetRows.map((row) => (
+                    <div
+                      key={row.setCode}
+                      style={{
+                        border: '1px solid #e2e8f0',
+                        borderRadius: 12,
+                        padding: 12,
+                        display: 'grid',
+                        gap: 8,
+                        background: '#fff'
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'flex-start' }}>
+                        <div>
+                          <div style={{ fontWeight: 800, color: '#1d4ed8' }}>{row.setCode}</div>
+                          <div style={{ color: '#334155' }}>{row.setName}</div>
+                        </div>
+                        <div style={{ textAlign: 'right', fontWeight: 800, color: '#0f172a' }}>
+                          <span
+                            title={
+                              row.usFallbackCount > 0
+                                ? 'Inclut des prix US (source externe), un ecart peut exister'
+                                : 'Prix Cardmarket (avg_price)'
+                            }
+                          >
+                            {formatCurrency(row.total)}
+                            {row.usFallbackCount > 0 ? '*' : ''}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+                          gap: 8,
+                          fontSize: 13
+                        }}
+                      >
+                        <div style={{ color: '#64748b' }}>
+                          Couverture{' '}
+                          <span style={{ fontWeight: 700, color: '#0f172a' }}>
+                            {row.pricedCount}/{row.expectedCount}
+                          </span>
+                        </div>
+                        <div style={{ color: '#64748b', textAlign: 'right' }}>
+                          Source{' '}
+                          <span style={{ fontWeight: 700, color: '#0f172a' }}>
+                            {row.usFallbackCount > 0 ? 'Mixte' : 'Cardmarket'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            ) : (
+              <div
+                style={{
+                  border: '1px solid #e2e8f0',
+                  borderRadius: 8,
+                  overflow: 'hidden'
+                }}
+              >
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '120px 1fr 140px 130px',
+                    gap: 10,
+                    padding: '10px 12px',
+                    background: '#f8fafc',
+                    fontWeight: 700,
+                    fontSize: 13
+                  }}
+                >
+                  <div>Set</div>
+                  <div>Nom</div>
+                  <div>Couverture</div>
+                  <div style={{ textAlign: 'right' }}>Total</div>
+                </div>
+
+                {priceSetRows.length === 0 ? (
+                  <div style={{ padding: 12 }}>Aucun detail disponible.</div>
+                ) : (
+                  priceSetRows.map((row) => (
+                    <div
+                      key={row.setCode}
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: '120px 1fr 140px 130px',
+                        gap: 10,
+                        padding: '10px 12px',
+                        borderTop: '1px solid #e2e8f0',
+                        alignItems: 'center'
+                      }}
+                    >
+                      <div>
+                        <strong>{row.setCode}</strong>
+                      </div>
+                      <div>{row.setName}</div>
+                      <div style={{ fontSize: 13, color: '#475569' }}>
+                        {row.pricedCount}/{row.expectedCount}
+                      </div>
+                      <div style={{ textAlign: 'right', fontWeight: 700 }}>
+                        <span
+                          title={
+                            row.usFallbackCount > 0
+                              ? 'Inclut des prix US (source externe), un ecart peut exister'
+                              : 'Prix Cardmarket (avg_price)'
+                          }
+                        >
+                          {formatCurrency(row.total)}
+                          {row.usFallbackCount > 0 ? '*' : ''}
+                        </span>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}

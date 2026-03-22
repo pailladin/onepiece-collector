@@ -38,7 +38,9 @@ function formatCurrency(value: number, currency = 'EUR') {
 }
 
 function shortDate(value: string) {
-  return value
+  const parsed = new Date(`${value}T00:00:00`)
+  if (Number.isNaN(parsed.getTime())) return value
+  return new Intl.DateTimeFormat('fr-FR').format(parsed)
 }
 
 export default function CollectionHistoryPage() {
@@ -75,8 +77,7 @@ export default function CollectionHistoryPage() {
               ? week.total?.value || 0
               : week.sets.find((row) => row.setCode === selectedSetCode)?.value || 0,
           currency: week.total?.currency || 'EUR'
-        }))
-        .reverse(),
+        })),
     [weeks, selectedSetCode]
   )
 
@@ -198,7 +199,7 @@ export default function CollectionHistoryPage() {
                       <g key={p.row.x}>
                         <circle cx={p.x} cy={p.y} r="4" fill="#0ea5e9" />
                         <text x={p.x} y={238} textAnchor="middle" fontSize="10" fill="#475569">
-                          {p.row.x.slice(5)}
+                          {shortDate(p.row.x)}
                         </text>
                       </g>
                     ))}
