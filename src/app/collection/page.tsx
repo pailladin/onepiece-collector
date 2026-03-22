@@ -76,6 +76,11 @@ function chunkArray<T>(items: T[], size: number) {
   return chunks
 }
 
+function truncateLabel(value: string, maxLength: number) {
+  if (value.length <= maxLength) return value
+  return `${value.slice(0, Math.max(0, maxLength - 3))}...`
+}
+
 export default function CollectionPage() {
   const { user } = useAuth()
   const userId = user?.id ?? null
@@ -789,17 +794,19 @@ export default function CollectionPage() {
             style={{
               background: '#fff',
               borderRadius: 12,
-              width: 'min(1080px, 100%)',
-              maxHeight: '85vh',
+              width: useCompactActions ? '100%' : 'min(1080px, 100%)',
+              maxHeight: useCompactActions ? '92vh' : '85vh',
               overflow: 'auto',
-              padding: 18
+              padding: useCompactActions ? 12 : 18
             }}
           >
             <div
               style={{
                 display: 'flex',
                 justifyContent: 'space-between',
-                alignItems: 'center',
+                alignItems: useCompactActions ? 'flex-start' : 'center',
+                flexDirection: useCompactActions ? 'column' : 'row',
+                gap: useCompactActions ? 10 : 0,
                 marginBottom: 12
               }}
             >
@@ -812,110 +819,214 @@ export default function CollectionPage() {
               <button onClick={() => setShowOpportunityModal(false)}>Fermer</button>
             </div>
 
-            <div
-              style={{
-                border: '1px solid #e2e8f0',
-                borderRadius: 8,
-                overflow: 'hidden'
-              }}
-            >
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: '90px 130px 1.4fr 110px 140px 110px 130px',
-                  gap: 10,
-                  padding: '10px 12px',
-                  background: '#f8fafc',
-                  fontWeight: 700,
-                  fontSize: 13
-                }}
-              >
-                <div>Indice</div>
-                <div>Set</div>
-                <div>Carte</div>
-                <div>Prix</div>
-                <div>Baisse</div>
-                <div>Lien</div>
-                <div>Signal</div>
-              </div>
-
-              {opportunityRows.length === 0 ? (
-                <div style={{ padding: 12 }}>
-                  Aucune opportunite detectee pour l'instant sur les cartes manquantes.
-                </div>
-              ) : (
-                opportunityRows.map((row) => (
+            {useCompactActions ? (
+              <div style={{ display: 'grid', gap: 10 }}>
+                {opportunityRows.length === 0 ? (
                   <div
-                    key={row.id}
                     style={{
-                      display: 'grid',
-                      gridTemplateColumns: '90px 130px 1.4fr 110px 140px 110px 130px',
-                      gap: 10,
-                      padding: '10px 12px',
-                      borderTop: '1px solid #e2e8f0',
-                      alignItems: 'center'
+                      border: '1px solid #e2e8f0',
+                      borderRadius: 10,
+                      padding: 12,
+                      color: '#475569'
                     }}
                   >
-                    <div style={{ fontWeight: 800, color: '#7c3aed' }}>
-                      {new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 1 }).format(
-                        row.interestIndex
-                      )}
-                    </div>
-                    <div>
-                      <strong>{row.setCode}</strong>
-                    </div>
-                    <div>
-                      <div style={{ fontWeight: 700 }}>{row.printCode}</div>
-                      <div>{row.cardName}</div>
-                    </div>
-                    <div>{formatCurrency(row.unitPrice)}</div>
+                    Aucune opportunite detectee pour l'instant sur les cartes manquantes.
+                  </div>
+                ) : (
+                  opportunityRows.map((row) => (
                     <div
-                      title={`1j: ${
-                        row.trend.pct1d != null ? formatPercent(row.trend.pct1d) : '-'
-                      } | 7j: ${row.trend.pct7d != null ? formatPercent(row.trend.pct7d) : '-'} | 30j: ${
-                        row.trend.pct30d != null ? formatPercent(row.trend.pct30d) : '-'
-                      }`}
-                      style={{ color: '#dc2626', fontWeight: 700 }}
-                    >
-                      {row.trend.score != null ? formatPercent(row.trend.score) : '-'}
-                    </div>
-                    <a
-                      href={buildCardmarketProductOrSearchUrl({
-                        productId: row.cardmarketProductId,
-                        search: row.printCode.split('_')[0] || row.printCode
-                      })}
-                      target="_blank"
-                      rel="noreferrer"
-                      style={{ color: '#0369a1', fontWeight: 700 }}
-                    >
-                      Cardmarket
-                    </a>
-                    <div
-                      title={`Low: ${
-                        row.low != null ? formatCurrency(row.low) : '-'
-                      } | Avg: ${row.avg != null ? formatCurrency(row.avg) : '-'}`}
+                      key={row.id}
                       style={{
-                        fontWeight: 700,
-                        color:
-                          row.trend.direction === 'down'
-                            ? '#dc2626'
-                            : row.trend.direction === 'up'
-                              ? '#15803d'
-                              : '#64748b'
+                        border: '1px solid #e2e8f0',
+                        borderRadius: 12,
+                        padding: 12,
+                        display: 'grid',
+                        gap: 10,
+                        background: '#fff'
                       }}
                     >
-                      {row.trend.direction === 'down'
-                        ? 'baisse'
-                        : row.trend.direction === 'up'
-                          ? 'hausse'
-                          : row.trend.direction === 'flat'
-                            ? 'stable'
-                            : '-'}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'flex-start' }}>
+                        <div>
+                          <div style={{ fontWeight: 800, color: '#7c3aed', fontSize: 14 }}>
+                            Indice {new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 1 }).format(row.interestIndex)}
+                          </div>
+                          <div
+                            title={`${row.printCode} - ${row.cardName}`}
+                            style={{
+                              marginTop: 4,
+                              display: 'flex',
+                              flexWrap: 'wrap',
+                              gap: 6,
+                              alignItems: 'baseline'
+                            }}
+                          >
+                            <span style={{ fontWeight: 700 }}>
+                              {truncateLabel(row.printCode, 30)}
+                            </span>
+                            <span style={{ color: '#334155' }}>
+                              {truncateLabel(row.cardName, 70)}
+                            </span>
+                          </div>
+                          <div style={{ marginTop: 4, color: '#64748b', fontSize: 12 }}>
+                            Set <span style={{ fontWeight: 700, color: '#0f172a' }}>{row.setCode}</span>
+                          </div>
+                        </div>
+                        <div style={{ display: 'grid', gap: 4, textAlign: 'right' }}>
+                          <div style={{ color: '#64748b', fontSize: 12 }}>
+                            Prix <span style={{ fontWeight: 700, color: '#0f172a' }}>{formatCurrency(row.unitPrice)}</span>
+                          </div>
+                          <div style={{ color: '#64748b', fontSize: 12 }}>
+                            Low / Avg{' '}
+                            <span style={{ fontWeight: 700, color: '#0f172a' }}>
+                              {(row.low != null ? formatCurrency(row.low) : '-') + ' / ' + (row.avg != null ? formatCurrency(row.avg) : '-')}
+                            </span>
+                          </div>
+                          <div
+                            style={{
+                              fontWeight: 700,
+                              color:
+                                row.trend.score != null && row.trend.score < 0
+                                  ? '#15803d'
+                                  : row.trend.score != null && row.trend.score > 0
+                                    ? '#dc2626'
+                                    : '#64748b'
+                            }}
+                            title={`1j: ${
+                              row.trend.pct1d != null ? formatPercent(row.trend.pct1d) : '-'
+                            } | 7j: ${row.trend.pct7d != null ? formatPercent(row.trend.pct7d) : '-'} | 30j: ${
+                              row.trend.pct30d != null ? formatPercent(row.trend.pct30d) : '-'
+                            }`}
+                          >
+                            {row.trend.score != null ? formatPercent(row.trend.score) : '-'}
+                          </div>
+                        </div>
+                      </div>
+
+                      <a
+                        href={buildCardmarketProductOrSearchUrl({
+                          productId: row.cardmarketProductId,
+                          search: row.printCode.split('_')[0] || row.printCode
+                        })}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{
+                          color: '#0369a1',
+                          fontWeight: 700,
+                          textDecoration: 'none',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          minHeight: 38,
+                          width: '100%',
+                          boxSizing: 'border-box',
+                          borderRadius: 10,
+                          border: '1px solid #bae6fd',
+                          background: '#f0f9ff',
+                          padding: '0 10px',
+                          textAlign: 'center',
+                          whiteSpace: 'normal',
+                          lineHeight: 1.2
+                        }}
+                      >
+                        Ouvrir Cardmarket
+                      </a>
                     </div>
+                  ))
+                )}
+              </div>
+            ) : (
+              <div
+                style={{
+                  border: '1px solid #e2e8f0',
+                  borderRadius: 8,
+                  overflow: 'hidden'
+                }}
+              >
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '90px 130px 1.4fr 110px 140px 110px',
+                    gap: 10,
+                    padding: '10px 12px',
+                    background: '#f8fafc',
+                    fontWeight: 700,
+                    fontSize: 13
+                  }}
+                >
+                  <div>Indice</div>
+                  <div>Set</div>
+                  <div>Carte</div>
+                  <div>Prix</div>
+                  <div>Evolution</div>
+                  <div>Lien</div>
+                </div>
+
+                {opportunityRows.length === 0 ? (
+                  <div style={{ padding: 12 }}>
+                    Aucune opportunite detectee pour l'instant sur les cartes manquantes.
                   </div>
-                ))
-              )}
-            </div>
+                ) : (
+                  opportunityRows.map((row) => (
+                    <div
+                      key={row.id}
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: '90px 130px 1.4fr 110px 140px 110px',
+                        gap: 10,
+                        padding: '10px 12px',
+                        borderTop: '1px solid #e2e8f0',
+                        alignItems: 'center'
+                      }}
+                    >
+                      <div style={{ fontWeight: 800, color: '#7c3aed' }}>
+                        {new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 1 }).format(
+                          row.interestIndex
+                        )}
+                      </div>
+                      <div>
+                        <strong>{row.setCode}</strong>
+                      </div>
+                      <div>
+                        <div title={row.printCode} style={{ fontWeight: 700 }}>
+                          {truncateLabel(row.printCode, 30)}
+                        </div>
+                        <div>{row.cardName}</div>
+                      </div>
+                      <div>{formatCurrency(row.unitPrice)}</div>
+                      <div
+                        title={`1j: ${
+                          row.trend.pct1d != null ? formatPercent(row.trend.pct1d) : '-'
+                        } | 7j: ${row.trend.pct7d != null ? formatPercent(row.trend.pct7d) : '-'} | 30j: ${
+                          row.trend.pct30d != null ? formatPercent(row.trend.pct30d) : '-'
+                        }`}
+                        style={{
+                          color:
+                            row.trend.score != null && row.trend.score > 0
+                              ? '#dc2626'
+                              : row.trend.score != null && row.trend.score < 0
+                                ? '#15803d'
+                                : '#64748b',
+                          fontWeight: 700
+                        }}
+                      >
+                        {row.trend.score != null ? formatPercent(row.trend.score) : '-'}
+                      </div>
+                      <a
+                        href={buildCardmarketProductOrSearchUrl({
+                          productId: row.cardmarketProductId,
+                          search: row.printCode.split('_')[0] || row.printCode
+                        })}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{ color: '#0369a1', fontWeight: 700 }}
+                      >
+                        Cardmarket
+                      </a>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
