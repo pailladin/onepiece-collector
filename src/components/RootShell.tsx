@@ -318,6 +318,15 @@ export function RootShell({
                   )}
                   {user && (
                     <Link
+                      href="/community-chat"
+                      className="root-shell-mobile-link"
+                      style={{ color: '#fff', textDecoration: 'none' }}
+                    >
+                      Communaute
+                    </Link>
+                  )}
+                  {user && (
+                    <Link
                       href="/community"
                       className="root-shell-mobile-link"
                       style={{ color: '#fff', textDecoration: 'none' }}
@@ -405,6 +414,28 @@ export function RootShell({
                         height={64}
                         unoptimized
                       />
+                    </Link>
+                  )}
+
+                  {user && (
+                    <Link
+                      href="/community-chat"
+                      className="root-shell-admin-link"
+                      style={{
+                        color: '#ecfeff',
+                        textDecoration: 'none',
+                        padding: '18px 14px',
+                        borderRadius: 999,
+                        background: 'rgba(13, 148, 136, 0.78)',
+                        border: '1px solid rgba(255,255,255,0.28)',
+                        fontWeight: 700,
+                        fontSize: 16,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 7
+                      }}
+                    >
+                      Communaute
                     </Link>
                   )}
 

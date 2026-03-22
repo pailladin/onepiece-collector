@@ -169,6 +169,13 @@ export function HomePageClient() {
           )}
           {user && (
             <LinkCard
+              href="/community-chat"
+              title="Communaute"
+              text="Discuter en direct des cartes a ajouter, des erreurs a corriger et des idees pour le site."
+            />
+          )}
+          {user && (
+            <LinkCard
               href="/community"
               title="Contributions"
               text="Proposer des corrections, ajouter des cartes et monter dans le classement des contributeurs."
