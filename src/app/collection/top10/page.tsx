@@ -79,6 +79,18 @@ export default function CollectionTop10Page() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [rows, setRows] = useState<TopRow[]>([])
+  const [isCompactView, setIsCompactView] = useState(false)
+
+  useEffect(() => {
+    const syncCompactView = () => {
+      if (typeof window === 'undefined') return
+      setIsCompactView(window.innerWidth <= 900)
+    }
+
+    syncCompactView()
+    window.addEventListener('resize', syncCompactView)
+    return () => window.removeEventListener('resize', syncCompactView)
+  }, [])
 
   useEffect(() => {
     const run = async () => {
@@ -246,8 +258,16 @@ export default function CollectionTop10Page() {
   }
 
   return (
-    <div style={{ padding: 40 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+    <div style={{ padding: isCompactView ? 12 : 40 }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: isCompactView ? 'flex-start' : 'center',
+          flexDirection: isCompactView ? 'column' : 'row',
+          gap: isCompactView ? 8 : 0
+        }}
+      >
         <h1 style={{ margin: 0 }}>TOP 10 - Plus grosses valeurs (prix x quantite)</h1>
         <Link href="/collection" style={{ color: '#1d4ed8', textDecoration: 'none' }}>
           Retour collection
@@ -275,42 +295,103 @@ export default function CollectionTop10Page() {
                 style={{
                   border: '1px solid #d1d5db',
                   borderRadius: 10,
-                  padding: 10,
+                  padding: isCompactView ? 12 : 10,
                   display: 'grid',
-                  gridTemplateColumns: '34px 64px 1.7fr 0.8fr 0.7fr 0.9fr 0.9fr 0.9fr',
+                  gridTemplateColumns: isCompactView
+                    ? '1fr'
+                    : '34px 64px 1.7fr 0.8fr 0.7fr 0.9fr 0.9fr 0.9fr',
                   gap: 10,
                   alignItems: 'center',
                   background: '#fff'
                 }}
               >
-                <div style={{ fontWeight: 700, color: '#334155' }}>#{index + 1}</div>
-                <img
-                  src={row.imageUrl}
-                  alt={row.name}
-                  style={{ width: 56, height: 78, objectFit: 'cover', borderRadius: 6 }}
-                  onError={(e) => {
-                    e.currentTarget.src = CARD_PLACEHOLDER_IMAGE
-                  }}
-                />
-                <div>
-                  <div style={{ fontWeight: 700 }}>{row.displayCode}</div>
-                  <div>{row.name}</div>
-                  <div style={{ fontSize: 12, color: '#64748b' }}>{row.setCode}</div>
-                </div>
-                <div style={{ fontWeight: 700 }}>{formatCurrency(row.unitPrice)}</div>
-                <div>x{row.quantity}</div>
-                <div style={{ fontWeight: 700 }}>{formatCurrency(row.totalPrice)}</div>
-                <div
-                  style={{
-                    fontSize: 12,
-                    color: row.source === 'cardmarket' ? '#047857' : '#92400e'
-                  }}
-                >
-                  {row.source === 'cardmarket' ? 'Cardmarket' : 'US*'}
-                </div>
-                <a href={link} target="_blank" rel="noreferrer" style={{ color: '#0369a1' }}>
-                  Lien
-                </a>
+                {isCompactView ? (
+                  <>
+                    <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                      <div style={{ fontWeight: 800, color: '#334155', minWidth: 28 }}>#{index + 1}</div>
+                      <img
+                        src={row.imageUrl}
+                        alt={row.name}
+                        style={{ width: 56, height: 78, objectFit: 'cover', borderRadius: 6, flex: '0 0 auto' }}
+                        onError={(e) => {
+                          e.currentTarget.src = CARD_PLACEHOLDER_IMAGE
+                        }}
+                      />
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontWeight: 700 }}>{row.displayCode}</div>
+                        <div>{row.name}</div>
+                        <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>{row.setCode}</div>
+                      </div>
+                    </div>
+
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+                        gap: 8,
+                        fontSize: 13
+                      }}
+                    >
+                      <div style={{ color: '#64748b' }}>
+                        Prix <span style={{ fontWeight: 700, color: '#0f172a' }}>{formatCurrency(row.unitPrice)}</span>
+                      </div>
+                      <div style={{ color: '#64748b', textAlign: 'right' }}>
+                        Qte <span style={{ fontWeight: 700, color: '#0f172a' }}>x{row.quantity}</span>
+                      </div>
+                      <div style={{ color: '#64748b' }}>
+                        Total <span style={{ fontWeight: 700, color: '#0f172a' }}>{formatCurrency(row.totalPrice)}</span>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <a
+                          href={link}
+                          target="_blank"
+                          rel="noreferrer"
+                          style={{
+                            color: row.source === 'cardmarket' ? '#047857' : '#92400e',
+                            fontWeight: 700,
+                            textDecoration: 'none'
+                          }}
+                        >
+                          {row.source === 'cardmarket' ? 'Cardmarket' : 'US*'}
+                        </a>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div style={{ fontWeight: 700, color: '#334155' }}>#{index + 1}</div>
+                    <img
+                      src={row.imageUrl}
+                      alt={row.name}
+                      style={{ width: 56, height: 78, objectFit: 'cover', borderRadius: 6 }}
+                      onError={(e) => {
+                        e.currentTarget.src = CARD_PLACEHOLDER_IMAGE
+                      }}
+                    />
+                    <div>
+                      <div style={{ fontWeight: 700 }}>{row.displayCode}</div>
+                      <div>{row.name}</div>
+                      <div style={{ fontSize: 12, color: '#64748b' }}>{row.setCode}</div>
+                    </div>
+                    <div style={{ fontWeight: 700 }}>{formatCurrency(row.unitPrice)}</div>
+                    <div>x{row.quantity}</div>
+                    <div style={{ fontWeight: 700 }}>{formatCurrency(row.totalPrice)}</div>
+                    <a
+                      href={link}
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{
+                        fontSize: 12,
+                        color: row.source === 'cardmarket' ? '#047857' : '#92400e',
+                        fontWeight: 700,
+                        textDecoration: 'none'
+                      }}
+                    >
+                      {row.source === 'cardmarket' ? 'Cardmarket' : 'US*'}
+                    </a>
+                    <div />
+                  </>
+                )}
               </div>
             )
           })}
