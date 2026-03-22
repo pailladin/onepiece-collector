@@ -322,7 +322,7 @@ export function RootShell({
                       className="root-shell-mobile-link"
                       style={{ color: '#fff', textDecoration: 'none' }}
                     >
-                      Communaute
+                      Commu
                     </Link>
                   )}
                   {user && (
@@ -331,7 +331,7 @@ export function RootShell({
                       className="root-shell-mobile-link"
                       style={{ color: '#fff', textDecoration: 'none' }}
                     >
-                      Contributions
+                      Contrib
                     </Link>
                   )}
                   {user && canAccessAdmin && (

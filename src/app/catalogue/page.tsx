@@ -46,7 +46,7 @@ export default async function CataloguePage() {
   return (
     <div
       style={{
-        padding: '18px 28px 28px',
+        padding: '14px 8px 20px',
         background:
           'radial-gradient(circle at 10% 20%, #f0f9ff 0%, #eef2ff 35%, #fff7ed 100%)',
         minHeight: '100vh'

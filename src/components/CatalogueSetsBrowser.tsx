@@ -107,6 +107,7 @@ export default function CatalogueSetsBrowser({ sets }: { sets: CatalogueSetRow[]
   const { user } = useAuth()
   const userId = user?.id ?? null
   const { isWishlisted, toggleWishlist, busyPrintId } = useWishlist(userId)
+  const [isMobileView, setIsMobileView] = useState(false)
   const [mode, setMode] = useState<CatalogueMode>('sets')
   const [typeFilter, setTypeFilter] = useState<CatalogueType>('all')
   const [query, setQuery] = useState('')
@@ -130,6 +131,17 @@ export default function CatalogueSetsBrowser({ sets }: { sets: CatalogueSetRow[]
   const [hasNextPage, setHasNextPage] = useState(false)
   const [totalItems, setTotalItems] = useState(0)
   const [totalPages, setTotalPages] = useState(1)
+
+  useEffect(() => {
+    const syncMobileView = () => {
+      if (typeof window === 'undefined') return
+      setIsMobileView(window.innerWidth <= 1024)
+    }
+
+    syncMobileView()
+    window.addEventListener('resize', syncMobileView)
+    return () => window.removeEventListener('resize', syncMobileView)
+  }, [])
 
   useEffect(() => {
     if (mode !== 'cards') return
@@ -365,22 +377,30 @@ export default function CatalogueSetsBrowser({ sets }: { sets: CatalogueSetRow[]
       <div
         style={{
           ...getPanelStyle(),
-          marginBottom: 20
+          marginBottom: isMobileView ? 14 : 20,
+          padding: isMobileView ? 10 : 12
         }}
       >
         <div style={{ fontSize: 12, color: '#475569', marginBottom: 8 }}>Mode de navigation</div>
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: isMobileView ? 'repeat(2, minmax(0, 1fr))' : 'repeat(2, max-content)',
+            gap: 10
+          }}
+        >
           <button
             type="button"
             onClick={() => setMode('sets')}
             style={{
-              padding: '10px 14px',
+              padding: isMobileView ? '10px 12px' : '10px 14px',
               borderRadius: 999,
               border: mode === 'sets' ? '1px solid #1d4ed8' : '1px solid #cbd5e1',
               background: mode === 'sets' ? '#dbeafe' : '#fff',
               color: mode === 'sets' ? '#1d4ed8' : '#334155',
               fontWeight: 700,
-              cursor: 'pointer'
+              cursor: 'pointer',
+              minWidth: 0
             }}
           >
             Vue par set
@@ -390,13 +410,14 @@ export default function CatalogueSetsBrowser({ sets }: { sets: CatalogueSetRow[]
             type="button"
             onClick={() => setMode('cards')}
             style={{
-              padding: '10px 14px',
+              padding: isMobileView ? '10px 12px' : '10px 14px',
               borderRadius: 999,
               border: mode === 'cards' ? '1px solid #1d4ed8' : '1px solid #cbd5e1',
               background: mode === 'cards' ? '#dbeafe' : '#fff',
               color: mode === 'cards' ? '#1d4ed8' : '#334155',
               fontWeight: 700,
-              cursor: 'pointer'
+              cursor: 'pointer',
+              minWidth: 0
             }}
           >
             Recherche globale cartes
@@ -409,12 +430,14 @@ export default function CatalogueSetsBrowser({ sets }: { sets: CatalogueSetRow[]
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: 'minmax(260px, 1.3fr) minmax(220px, 0.7fr)',
+              gridTemplateColumns: isMobileView
+                ? '1fr'
+                : 'minmax(260px, 1.3fr) minmax(220px, 0.7fr)',
               gap: 12,
-              marginBottom: 24
+              marginBottom: isMobileView ? 16 : 24
             }}
           >
-            <div style={getPanelStyle()}>
+            <div style={{ ...getPanelStyle(), padding: isMobileView ? 10 : 12 }}>
               <div style={{ fontSize: 12, color: '#475569', marginBottom: 8 }}>
                 Recherche et filtres
               </div>
@@ -427,16 +450,24 @@ export default function CatalogueSetsBrowser({ sets }: { sets: CatalogueSetRow[]
                     width: '100%',
                     maxWidth: '100%',
                     boxSizing: 'border-box',
-                    padding: '9px 10px',
+                    padding: isMobileView ? '10px 10px' : '9px 10px',
                     borderRadius: 8,
-                    border: '1px solid #cbd5e1'
+                    border: '1px solid #cbd5e1',
+                    fontSize: isMobileView ? 15 : 14
                   }}
                 />
 
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1fr',
+                    gap: 8
+                  }}
+                >
                   <select
                     value={typeFilter}
                     onChange={(e) => setTypeFilter(e.target.value as CatalogueType)}
+                    style={{ minWidth: 0, minHeight: isMobileView ? 38 : undefined }}
                   >
                     <option value="all">Tous les types</option>
                     <option value="booster">Booster</option>
@@ -447,7 +478,7 @@ export default function CatalogueSetsBrowser({ sets }: { sets: CatalogueSetRow[]
               </div>
             </div>
 
-            <div style={getPanelStyle()}>
+            <div style={{ ...getPanelStyle(), padding: isMobileView ? 10 : 12 }}>
               <div style={{ fontSize: 12, color: '#475569', marginBottom: 8 }}>Resume</div>
               <div style={{ display: 'grid', gap: 8 }}>
                 <div style={{ fontSize: 12, color: '#334155' }}>
@@ -457,14 +488,19 @@ export default function CatalogueSetsBrowser({ sets }: { sets: CatalogueSetRow[]
             </div>
           </div>
 
-          <div style={{ color: '#475569', marginBottom: 20 }}>{filteredSets.length} resultat(s)</div>
+          <div style={{ color: '#475569', marginBottom: isMobileView ? 14 : 20 }}>
+            {filteredSets.length} resultat(s)
+          </div>
 
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
-              columnGap: 32,
-              rowGap: 48
+              gridTemplateColumns: isMobileView
+                ? 'repeat(2, minmax(0, 1fr))'
+                : 'repeat(auto-fill, minmax(220px, 1fr))',
+              columnGap: isMobileView ? 14 : 32,
+              rowGap: isMobileView ? 18 : 48,
+              marginTop: isMobileView ? 6 : 0
             }}
           >
             {filteredSets.map((set) => {
@@ -476,27 +512,33 @@ export default function CatalogueSetsBrowser({ sets }: { sets: CatalogueSetRow[]
                 <Link
                   key={set.id || set.code}
                   href={`/catalogue/${set.code}`}
-                  style={{ textDecoration: 'none', color: 'inherit' }}
+                  style={{
+                    textDecoration: 'none',
+                    color: 'inherit',
+                    display: 'block',
+                    height: '100%'
+                  }}
                 >
                   <div
                     style={{
                       border: '1px solid #ddd',
                       borderRadius: 10,
-                      padding: 15,
+                      padding: isMobileView ? 10 : 15,
                       background: '#fff',
                       transition: 'transform 0.2s',
                       cursor: 'pointer',
-                      height: '100%'
+                      height: '100%',
+                      boxSizing: 'border-box'
                     }}
                   >
                     <div
                       style={{
-                        height: 300,
+                        height: isMobileView ? 165 : 300,
                         width: '100%',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        marginBottom: 15,
+                        marginBottom: isMobileView ? 10 : 15,
                         overflow: 'hidden'
                       }}
                     >
@@ -513,7 +555,7 @@ export default function CatalogueSetsBrowser({ sets }: { sets: CatalogueSetRow[]
 
                     <div
                       style={{
-                        marginBottom: 10,
+                        marginBottom: isMobileView ? 8 : 10,
                         display: 'flex',
                         gap: 6,
                         justifyContent: 'center',
@@ -527,11 +569,11 @@ export default function CatalogueSetsBrowser({ sets }: { sets: CatalogueSetRow[]
                             display: 'inline-flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            padding: '4px 8px',
+                            padding: isMobileView ? '3px 7px' : '4px 8px',
                             borderRadius: 999,
                             background: '#eff6ff',
                             color: '#1d4ed8',
-                            fontSize: 12,
+                            fontSize: isMobileView ? 11 : 12,
                             fontWeight: 700
                           }}
                         >
@@ -543,13 +585,34 @@ export default function CatalogueSetsBrowser({ sets }: { sets: CatalogueSetRow[]
                     <div style={{ textAlign: 'center' }}>
                       {showCodeAndName ? (
                         <>
-                          <div style={{ fontWeight: 'bold', fontSize: 18 }}>{set.code}</div>
-                          <div style={{ marginTop: 4, color: '#334155' }}>{set.name || set.code}</div>
+                          <div style={{ fontWeight: 'bold', fontSize: isMobileView ? 15 : 18 }}>
+                            {set.code}
+                          </div>
+                          <div
+                            style={{
+                              marginTop: 4,
+                              color: '#334155',
+                              fontSize: isMobileView ? 12 : 16,
+                              lineHeight: 1.25
+                            }}
+                          >
+                            {set.name || set.code}
+                          </div>
                         </>
                       ) : (
                         <>
-                          <div style={{ fontWeight: 'bold', fontSize: 18 }}>{set.name || set.code}</div>
-                          <div style={{ marginTop: 4, color: '#64748b' }}>{set.code}</div>
+                          <div style={{ fontWeight: 'bold', fontSize: isMobileView ? 15 : 18 }}>
+                            {set.name || set.code}
+                          </div>
+                          <div
+                            style={{
+                              marginTop: 4,
+                              color: '#64748b',
+                              fontSize: isMobileView ? 12 : 16
+                            }}
+                          >
+                            {set.code}
+                          </div>
                         </>
                       )}
                     </div>
@@ -564,13 +627,15 @@ export default function CatalogueSetsBrowser({ sets }: { sets: CatalogueSetRow[]
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: 'minmax(300px, 1.6fr) minmax(220px, 0.8fr) minmax(220px, 0.9fr)',
+              gridTemplateColumns: isMobileView
+                ? '1fr'
+                : 'minmax(300px, 1.6fr) minmax(220px, 0.8fr) minmax(220px, 0.9fr)',
               gap: 12,
-              marginBottom: 20,
+              marginBottom: isMobileView ? 16 : 20,
               alignItems: 'stretch'
             }}
           >
-            <div style={getPanelStyle()}>
+            <div style={{ ...getPanelStyle(), padding: isMobileView ? 10 : 12 }}>
               <div style={{ fontSize: 12, color: '#475569', marginBottom: 8 }}>
                 Recherche et filtres
               </div>
@@ -586,19 +651,29 @@ export default function CatalogueSetsBrowser({ sets }: { sets: CatalogueSetRow[]
                     width: '100%',
                     maxWidth: '100%',
                     boxSizing: 'border-box',
-                    padding: '9px 10px',
+                    padding: isMobileView ? '10px 10px' : '9px 10px',
                     borderRadius: 8,
-                    border: '1px solid #cbd5e1'
+                    border: '1px solid #cbd5e1',
+                    fontSize: isMobileView ? 15 : 14
                   }}
                 />
 
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: isMobileView
+                      ? 'repeat(2, minmax(0, 1fr))'
+                      : 'repeat(2, minmax(140px, 1fr))',
+                    gap: 8
+                  }}
+                >
                   <select
                     value={rarityFilter}
                     onChange={(e) => {
                       setRarityFilter(e.target.value)
                       setPage(1)
                     }}
+                    style={{ minWidth: 0, minHeight: isMobileView ? 38 : undefined }}
                   >
                     <option value="all">Toutes raretes</option>
                     {globalFilterOptions.rarities.map((rarity) => (
@@ -614,6 +689,7 @@ export default function CatalogueSetsBrowser({ sets }: { sets: CatalogueSetRow[]
                       setCardTypeFilter(e.target.value)
                       setPage(1)
                     }}
+                    style={{ minWidth: 0, minHeight: isMobileView ? 38 : undefined }}
                   >
                     <option value="all">Tous types</option>
                     {globalFilterOptions.types.map((cardType) => (
@@ -631,6 +707,7 @@ export default function CatalogueSetsBrowser({ sets }: { sets: CatalogueSetRow[]
                       if (value === 'normal') setAltTypeFilter('all')
                       setPage(1)
                     }}
+                    style={{ minWidth: 0, minHeight: isMobileView ? 38 : undefined }}
                   >
                     <option value="all">Toutes versions</option>
                     <option value="normal">Normales</option>
@@ -644,6 +721,7 @@ export default function CatalogueSetsBrowser({ sets }: { sets: CatalogueSetRow[]
                       setPage(1)
                     }}
                     disabled={altFilter === 'normal'}
+                    style={{ minWidth: 0, minHeight: isMobileView ? 38 : undefined }}
                   >
                     <option value="all">Tous types alternatives</option>
                     {globalFilterOptions.altTypes.map((altType) => (
@@ -656,7 +734,7 @@ export default function CatalogueSetsBrowser({ sets }: { sets: CatalogueSetRow[]
               </div>
             </div>
 
-            <div style={getPanelStyle()}>
+            <div style={{ ...getPanelStyle(), padding: isMobileView ? 10 : 12 }}>
               <div style={{ fontSize: 12, color: '#475569', marginBottom: 8 }}>Navigation</div>
               <div style={{ display: 'grid', gap: 10 }}>
                 <div
@@ -707,7 +785,14 @@ export default function CatalogueSetsBrowser({ sets }: { sets: CatalogueSetRow[]
                     flexWrap: 'wrap'
                   }}
                 >
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      gap: 8,
+                      flexWrap: 'wrap',
+                      alignItems: 'center'
+                    }}
+                  >
                     <div style={{ fontSize: 12, color: '#64748b' }}>Page</div>
                     <button
                       type="button"
@@ -772,18 +857,26 @@ export default function CatalogueSetsBrowser({ sets }: { sets: CatalogueSetRow[]
               </div>
             </div>
 
-            <div style={getPanelStyle()}>
+            <div style={{ ...getPanelStyle(), padding: isMobileView ? 10 : 12 }}>
               <div style={{ fontSize: 12, color: '#475569', marginBottom: 8 }}>Actions</div>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr',
+                  gap: 8,
+                  alignItems: 'center'
+                }}
+              >
                 <button
                   type="button"
                   onClick={resetCardFilters}
                   style={{
-                    padding: '8px 12px',
+                    padding: isMobileView ? '10px 12px' : '8px 12px',
                     borderRadius: 8,
                     border: '1px solid #cbd5e1',
                     background: '#ffffff',
-                    cursor: 'pointer'
+                    cursor: 'pointer',
+                    minHeight: isMobileView ? 40 : undefined
                   }}
                 >
                   Reinitialiser filtres
@@ -807,8 +900,10 @@ export default function CatalogueSetsBrowser({ sets }: { sets: CatalogueSetRow[]
               <div
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
-                  gap: 20
+                  gridTemplateColumns: isMobileView
+                    ? 'repeat(2, minmax(0, 1fr))'
+                    : 'repeat(auto-fill, minmax(220px, 1fr))',
+                  gap: isMobileView ? 10 : 20
                 }}
               >
                 {globalItems.map((item) => {
@@ -848,7 +943,7 @@ export default function CatalogueSetsBrowser({ sets }: { sets: CatalogueSetRow[]
                           isFoil ? '#f5c84c' : isAlt ? rarityTheme.border : '#d1d5db'
                         }`,
                         borderRadius: 12,
-                        padding: 10,
+                        padding: isMobileView ? 7 : 10,
                         background: isAlt
                           ? rarityTheme.background
                           : 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)',
@@ -891,7 +986,7 @@ export default function CatalogueSetsBrowser({ sets }: { sets: CatalogueSetRow[]
                         alt={translation || getDisplayPrintCode(item)}
                         style={{
                           width: '100%',
-                          marginBottom: 10,
+                          marginBottom: isMobileView ? 6 : 10,
                           cursor: hasImagePath ? 'pointer' : 'default',
                           borderRadius: 8
                         }}
@@ -903,13 +998,30 @@ export default function CatalogueSetsBrowser({ sets }: { sets: CatalogueSetRow[]
                         }}
                       />
 
-                      <div style={{ fontWeight: 'bold' }}>{getDisplayPrintCode(item)}</div>
-                      <div>{translation || 'Carte sans nom'}</div>
+                      <div style={{ fontWeight: 'bold', fontSize: isMobileView ? 12 : 16 }}>
+                        {getDisplayPrintCode(item)}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: isMobileView ? 11 : 14,
+                          lineHeight: 1.25,
+                          minHeight: isMobileView ? 28 : undefined
+                        }}
+                      >
+                        {translation || 'Carte sans nom'}
+                      </div>
 
-                      <div style={{ fontSize: 12 }}>
+                      <div style={{ fontSize: isMobileView ? 10 : 12, lineHeight: 1.25 }}>
                         <strong>{item.card?.rarity}</strong> - {item.card?.type}
                       </div>
-                      <div style={{ marginTop: 4, fontSize: 12, color: '#64748b' }}>
+                      <div
+                        style={{
+                          marginTop: 4,
+                          fontSize: isMobileView ? 10 : 12,
+                          color: '#64748b',
+                          lineHeight: 1.25
+                        }}
+                      >
                         <Link
                           href={`/catalogue/${item.set.code}?q=${encodeURIComponent(
                             translation || getDisplayPrintCode(item)
@@ -944,7 +1056,7 @@ export default function CatalogueSetsBrowser({ sets }: { sets: CatalogueSetRow[]
                       {user && (
                         <div
                           style={{
-                            marginTop: 10,
+                            marginTop: isMobileView ? 8 : 10,
                             display: 'grid',
                             gap: 6,
                             justifyItems: 'center'
@@ -957,7 +1069,7 @@ export default function CatalogueSetsBrowser({ sets }: { sets: CatalogueSetRow[]
                                 display: 'inline-flex',
                                 alignItems: 'center',
                                 gap: 6,
-                                fontSize: 12
+                                fontSize: isMobileView ? 11 : 12
                               }}
                             >
                               <span style={{ minWidth: 20, textAlign: 'left' }}>{entry.shortLabel}</span>

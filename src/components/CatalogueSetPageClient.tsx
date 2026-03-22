@@ -119,6 +119,7 @@ export function CatalogueSetPageClient() {
   const [error, setError] = useState<string | null>(null)
   const [collectionMutationError, setCollectionMutationError] = useState<string | null>(null)
   const [selectedImage, setSelectedImage] = useState<string | null>(null)
+  const [isCompactView, setIsCompactView] = useState(false)
 
   const [sortKey, setSortKey] = useState<SortKey>('number')
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
@@ -132,6 +133,17 @@ export function CatalogueSetPageClient() {
   useEffect(() => {
     setSearchQuery(initialQuery)
   }, [initialQuery])
+
+  useEffect(() => {
+    const syncCompactView = () => {
+      if (typeof window === 'undefined') return
+      setIsCompactView(window.innerWidth <= 1024)
+    }
+
+    syncCompactView()
+    window.addEventListener('resize', syncCompactView)
+    return () => window.removeEventListener('resize', syncCompactView)
+  }, [])
 
   useEffect(() => {
     const fetchData = async () => {
@@ -384,7 +396,7 @@ export function CatalogueSetPageClient() {
   return (
     <div
       style={{
-        padding: '18px 28px 28px',
+        padding: isCompactView ? '10px 8px 20px' : '18px 28px 28px',
         background:
           'radial-gradient(circle at 10% 20%, #f0f9ff 0%, #eef2ff 35%, #fff7ed 100%)',
         minHeight: '100vh'
@@ -392,9 +404,9 @@ export function CatalogueSetPageClient() {
     >
       <h1
         style={{
-          fontSize: 30,
+          fontSize: isCompactView ? 24 : 30,
           fontWeight: 'bold',
-          marginBottom: 14,
+          marginBottom: isCompactView ? 10 : 14,
           color: '#111827'
         }}
       >
@@ -403,17 +415,19 @@ export function CatalogueSetPageClient() {
 
       <div
         style={{
-          marginBottom: 20,
+          marginBottom: isCompactView ? 14 : 20,
           display: 'grid',
-          gridTemplateColumns: 'minmax(300px, 1.6fr) minmax(180px, 0.65fr) minmax(220px, 0.9fr)',
-          gap: 12
+          gridTemplateColumns: isCompactView
+            ? '1fr'
+            : 'minmax(300px, 1.6fr) minmax(180px, 0.65fr) minmax(220px, 0.9fr)',
+          gap: isCompactView ? 10 : 12
         }}
       >
         <div
           style={{
             border: '1px solid #d1d5db',
             borderRadius: 12,
-            padding: 12,
+            padding: isCompactView ? 10 : 12,
             background: '#ffffffd1'
           }}
         >
@@ -429,14 +443,27 @@ export function CatalogueSetPageClient() {
                 width: '100%',
                 maxWidth: '100%',
                 boxSizing: 'border-box',
-                padding: '9px 10px',
+                padding: isCompactView ? '10px 10px' : '9px 10px',
                 borderRadius: 8,
-                border: '1px solid #cbd5e1'
+                border: '1px solid #cbd5e1',
+                fontSize: isCompactView ? 15 : 14
               }}
             />
 
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <select value={rarityFilter} onChange={(e) => setRarityFilter(e.target.value)}>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: isCompactView
+                  ? 'repeat(2, minmax(0, 1fr))'
+                  : 'repeat(2, minmax(140px, 1fr))',
+                gap: 8
+              }}
+            >
+              <select
+                value={rarityFilter}
+                onChange={(e) => setRarityFilter(e.target.value)}
+                style={{ minWidth: 0, minHeight: isCompactView ? 38 : undefined }}
+              >
                 <option value="all">Toutes raretes</option>
                 {filterOptions.rarities.map((rarity) => (
                   <option key={rarity} value={rarity}>
@@ -445,7 +472,11 @@ export function CatalogueSetPageClient() {
                 ))}
               </select>
 
-              <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+              <select
+                value={typeFilter}
+                onChange={(e) => setTypeFilter(e.target.value)}
+                style={{ minWidth: 0, minHeight: isCompactView ? 38 : undefined }}
+              >
                 <option value="all">Tous types</option>
                 {filterOptions.types.map((cardType) => (
                   <option key={cardType} value={cardType}>
@@ -461,6 +492,7 @@ export function CatalogueSetPageClient() {
                   setAltFilter(value)
                   if (value === 'normal') setAltTypeFilter('all')
                 }}
+                style={{ minWidth: 0, minHeight: isCompactView ? 38 : undefined }}
               >
                 <option value="all">Toutes versions</option>
                 <option value="normal">Normales</option>
@@ -471,6 +503,7 @@ export function CatalogueSetPageClient() {
                 value={altTypeFilter}
                 onChange={(e) => setAltTypeFilter(e.target.value)}
                 disabled={altFilter === 'normal'}
+                style={{ minWidth: 0, minHeight: isCompactView ? 38 : undefined }}
               >
                 <option value="all">Tous types alternatives</option>
                 {filterOptions.altTypes.map((altType) => (
@@ -487,14 +520,26 @@ export function CatalogueSetPageClient() {
           style={{
             border: '1px solid #d1d5db',
             borderRadius: 12,
-            padding: 12,
+            padding: isCompactView ? 10 : 12,
             background: '#ffffffd1'
           }}
         >
           <div style={{ fontSize: 12, color: '#475569', marginBottom: 8 }}>Tri</div>
           <div style={{ display: 'grid', gap: 8 }}>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <select value={sortKey} onChange={(e) => setSortKey(e.target.value as SortKey)}>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: isCompactView
+                  ? 'repeat(2, minmax(0, 1fr))'
+                  : 'repeat(2, minmax(120px, 1fr))',
+                gap: 8
+              }}
+            >
+              <select
+                value={sortKey}
+                onChange={(e) => setSortKey(e.target.value as SortKey)}
+                style={{ minWidth: 0, minHeight: isCompactView ? 38 : undefined }}
+              >
                 <option value="number">Numero</option>
                 <option value="name">Nom</option>
                 <option value="rarity">Rarete</option>
@@ -504,6 +549,7 @@ export function CatalogueSetPageClient() {
               <select
                 value={sortDirection}
                 onChange={(e) => setSortDirection(e.target.value as SortDirection)}
+                style={{ minWidth: 0, minHeight: isCompactView ? 38 : undefined }}
               >
                 <option value="asc">Ascendant</option>
                 <option value="desc">Descendant</option>
@@ -519,20 +565,28 @@ export function CatalogueSetPageClient() {
           style={{
             border: '1px solid #d1d5db',
             borderRadius: 12,
-            padding: 12,
+            padding: isCompactView ? 10 : 12,
             background: '#ffffffd1'
           }}
         >
           <div style={{ fontSize: 12, color: '#475569', marginBottom: 8 }}>Actions</div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr',
+              gap: 8,
+              alignItems: 'center'
+            }}
+          >
             <button
               onClick={resetFilters}
               style={{
-                padding: '8px 12px',
+                padding: isCompactView ? '10px 12px' : '8px 12px',
                 borderRadius: 8,
                 border: '1px solid #cbd5e1',
                 background: '#ffffff',
-                cursor: 'pointer'
+                cursor: 'pointer',
+                minHeight: isCompactView ? 40 : undefined
               }}
             >
               Reinitialiser filtres
@@ -549,8 +603,10 @@ export function CatalogueSetPageClient() {
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-          gap: 20
+          gridTemplateColumns: isCompactView
+            ? 'repeat(2, minmax(0, 1fr))'
+            : 'repeat(auto-fill, minmax(200px, 1fr))',
+          gap: isCompactView ? 10 : 20
         }}
       >
         {sortedItems.map((item) => {
@@ -592,7 +648,7 @@ export function CatalogueSetPageClient() {
                   isFoil ? '#f5c84c' : isAlt ? rarityTheme.border : '#d1d5db'
                 }`,
                 borderRadius: 12,
-                padding: 10,
+                padding: isCompactView ? 7 : 10,
                 background: isAlt
                   ? rarityTheme.background
                   : 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)',
@@ -635,7 +691,7 @@ export function CatalogueSetPageClient() {
                 alt={translation?.name}
                 style={{
                   width: '100%',
-                  marginBottom: 10,
+                  marginBottom: isCompactView ? 6 : 10,
                   cursor: 'pointer',
                   borderRadius: 8
                 }}
@@ -647,10 +703,20 @@ export function CatalogueSetPageClient() {
                 }}
               />
 
-              <div style={{ fontWeight: 'bold' }}>{getDisplayPrintCode(item)}</div>
-              <div>{translation?.name}</div>
+              <div style={{ fontWeight: 'bold', fontSize: isCompactView ? 12 : 16 }}>
+                {getDisplayPrintCode(item)}
+              </div>
+              <div
+                style={{
+                  fontSize: isCompactView ? 11 : 14,
+                  lineHeight: 1.25,
+                  minHeight: isCompactView ? 28 : undefined
+                }}
+              >
+                {translation?.name}
+              </div>
 
-              <div style={{ fontSize: 12 }}>
+              <div style={{ fontSize: isCompactView ? 10 : 12, lineHeight: 1.25 }}>
                 <strong>{item.card?.rarity}</strong> - {item.card?.type}
               </div>
 
@@ -678,7 +744,7 @@ export function CatalogueSetPageClient() {
               {user && (
                 <div
                   style={{
-                    marginTop: 10,
+                    marginTop: isCompactView ? 8 : 10,
                     display: 'grid',
                     gap: 6,
                     justifyItems: 'center'
@@ -691,7 +757,7 @@ export function CatalogueSetPageClient() {
                         display: 'inline-flex',
                         alignItems: 'center',
                         gap: 6,
-                        fontSize: 12
+                        fontSize: isCompactView ? 11 : 12
                       }}
                     >
                       <span style={{ minWidth: 20, textAlign: 'left' }}>{entry.shortLabel}</span>
