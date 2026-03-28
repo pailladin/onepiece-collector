@@ -27,6 +27,13 @@ type CardRow = {
   }> | null
 }
 
+type SetRow = {
+  id: string
+  code: string
+  name: string | null
+  available_languages?: string[] | null
+}
+
 async function assertFriendAccess(viewerUserId: string, friendId: string) {
   if (viewerUserId === friendId) return null
 
@@ -64,22 +71,31 @@ export async function GET(
 
   const { friendId, code } = await context.params
   const normalizedFriendId = String(friendId || '').trim()
+  const rawCode = String(code || '').trim()
   const normalizedCode = normalizeSetCode(String(code || ''))
 
-  if (!normalizedFriendId || !normalizedCode) {
+  if (!normalizedFriendId || !rawCode || !normalizedCode) {
     return NextResponse.json({ error: 'Set introuvable' }, { status: 400 })
   }
 
   const accessError = await assertFriendAccess(userResult.user.id, normalizedFriendId)
   if (accessError) return accessError
 
-  const { data: setData, error: setError } = await supabaseServiceServer
+  const { data: setsData, error: setError } = await supabaseServiceServer
     .from('sets')
     .select('id, code, name, available_languages')
-    .eq('code', normalizedCode)
-    .single()
 
-  if (setError || !setData) {
+  if (setError) {
+    return NextResponse.json({ error: 'Set introuvable' }, { status: 404 })
+  }
+
+  const availableSets = ((setsData as SetRow[] | null) || []) as SetRow[]
+  const setData =
+    availableSets.find((row) => String(row.code || '').trim().toUpperCase() === rawCode.toUpperCase()) ||
+    availableSets.find((row) => normalizeSetCode(String(row.code || '')) === normalizedCode) ||
+    null
+
+  if (!setData) {
     return NextResponse.json({ error: 'Set introuvable' }, { status: 404 })
   }
 

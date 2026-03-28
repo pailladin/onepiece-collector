@@ -251,6 +251,20 @@ export default function AdminDecksPage() {
         >
           Lier cartes Cardmarket
         </Link>
+        <Link
+          href="/admin/don-cards"
+          style={{
+            background: '#be123c',
+            color: '#fff',
+            padding: '6px 10px',
+            borderRadius: 4,
+            textDecoration: 'none',
+            display: 'inline-flex',
+            alignItems: 'center'
+          }}
+        >
+          Resoudre les DON
+        </Link>
       </div>
 
       {apiDecks.map((deck) => {

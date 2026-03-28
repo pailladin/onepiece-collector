@@ -2,6 +2,10 @@ import crypto from 'node:crypto'
 import { createClient } from '@supabase/supabase-js'
 import { getRequestUser } from '@/lib/server/authUser'
 import { isAdminEmail, parseAdminEmails } from '@/lib/admin'
+import {
+  normalizeDonApiCard,
+  resolveDonTargetSetCode
+} from '@/lib/server/donCards'
 
 export const runtime = 'nodejs'
 
@@ -366,6 +370,97 @@ export async function POST(
             return
           }
           apiCards = setCards as any[]
+        }
+
+        const donRes = await fetch('https://www.optcgapi.com/api/allDonCards/')
+        if (!donRes.ok) {
+          push(`Warning API DON ${donRes.status}: import DON ignore`)
+        } else {
+          const donRaw = await donRes.json().catch(() => [])
+          if (!Array.isArray(donRaw)) {
+            push('Warning format API DON invalide: import DON ignore')
+          } else {
+            const normalizedDonCards = donRaw
+              .map((card, index) => normalizeDonApiCard(card, index))
+              .filter((card): card is NonNullable<typeof card> => Boolean(card))
+
+            const overrideByExternalId = new Map<
+              string,
+              {
+                external_id: string
+                suggested_set_code: string | null
+                target_set_code: string | null
+                is_validated: boolean | null
+                notes: string | null
+              }
+            >()
+
+            const externalIds = normalizedDonCards.map((card) => card.externalId)
+            if (externalIds.length > 0) {
+              const { data: overrideRows, error: overrideError } = await supabase
+                .from('don_import_overrides')
+                .select(
+                  'external_id, suggested_set_code, target_set_code, is_validated, notes'
+                )
+                .in('external_id', externalIds)
+
+              if (overrideError) {
+                push(`Warning lecture overrides DON impossible: ${overrideError.message}`)
+              } else {
+                for (const row of overrideRows || []) {
+                  overrideByExternalId.set(row.external_id, row)
+                }
+              }
+            }
+
+            let validatedDonCount = 0
+            let unresolvedDonCount = 0
+            let wrongTargetDonCount = 0
+
+            for (const donCard of normalizedDonCards) {
+              const override = overrideByExternalId.get(donCard.externalId)
+              const resolution = resolveDonTargetSetCode(donCard, override)
+
+              if (!resolution.isValidated || !resolution.targetSetCode) {
+                unresolvedDonCount += 1
+                continue
+              }
+
+              if (resolution.targetSetCode !== normalizedImportCode) {
+                wrongTargetDonCount += 1
+                continue
+              }
+
+              apiCards.push({
+                set_id: normalizedImportCode,
+                set_name: donCard.suggestedSetLabel || code,
+                card_set_id: donCard.baseCode,
+                card_name: donCard.cardName,
+                card_text: donCard.cardText,
+                rarity: donCard.rarity,
+                card_type: donCard.cardType,
+                card_image: donCard.imageUrl || null,
+                card_image_id: donCard.imageId || donCard.externalId,
+                optcg_don_name: donCard.optcgDonName,
+                is_external_don: true
+              })
+              validatedDonCount += 1
+            }
+
+            if (validatedDonCount > 0) {
+              push(`${validatedDonCount} carte(s) DON ajoutee(s) via validation admin`)
+            }
+            if (unresolvedDonCount > 0) {
+              push(
+                `${unresolvedDonCount} carte(s) DON en attente de validation admin ignoree(s)`
+              )
+            }
+            if (wrongTargetDonCount > 0) {
+              push(
+                `${wrongTargetDonCount} carte(s) DON validee(s) pour un autre set ignoree(s)`
+              )
+            }
+          }
         }
 
         if (apiCards.length === 0) {

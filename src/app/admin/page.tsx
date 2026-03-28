@@ -327,6 +327,21 @@ export default function AdminPage() {
         >
           Moderer les contributions
         </Link>
+        <Link
+          href="/admin/don-cards"
+          style={{
+            background: '#be123c',
+            color: '#fff',
+            padding: '6px 10px',
+            borderRadius: 4,
+            textDecoration: 'none',
+            display: 'inline-flex',
+            alignItems: 'center',
+            marginLeft: 8
+          }}
+        >
+          Resoudre les DON
+        </Link>
       </div>
 
       <div
