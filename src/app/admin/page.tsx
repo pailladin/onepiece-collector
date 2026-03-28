@@ -342,6 +342,21 @@ export default function AdminPage() {
         >
           Resoudre les DON
         </Link>
+        <Link
+          href="/admin/places"
+          style={{
+            background: '#ea580c',
+            color: '#fff',
+            padding: '6px 10px',
+            borderRadius: 4,
+            textDecoration: 'none',
+            display: 'inline-flex',
+            alignItems: 'center',
+            marginLeft: 8
+          }}
+        >
+          Gerer les lieux
+        </Link>
       </div>
 
       <div

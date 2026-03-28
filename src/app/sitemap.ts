@@ -9,6 +9,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     .from('sets')
     .select('code')
     .order('code', { ascending: true })
+  const { data: placesData } = await supabaseServiceServer
+    .from('places')
+    .select('slug')
+    .eq('is_active', true)
+    .order('slug', { ascending: true })
 
   const setEntries = (((setsData as Array<{ code: string | null }> | null) || []) as Array<{
     code: string | null
@@ -19,6 +24,17 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       url: `${siteUrl}/catalogue/${code}`,
       changeFrequency: 'weekly' as const,
       priority: 0.8
+    }))
+
+  const placeEntries = (((placesData as Array<{ slug: string | null }> | null) || []) as Array<{
+    slug: string | null
+  }>)
+    .map((row) => String(row.slug || '').trim())
+    .filter(Boolean)
+    .map((slug) => ({
+      url: `${siteUrl}/lieux/${slug}`,
+      changeFrequency: 'weekly' as const,
+      priority: 0.7
     }))
 
   return [
@@ -32,7 +48,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: 'daily',
       priority: 0.9
     },
-    ...setEntries
+    {
+      url: `${siteUrl}/lieux`,
+      changeFrequency: 'weekly',
+      priority: 0.8
+    },
+    ...setEntries,
+    ...placeEntries
   ]
 }
-

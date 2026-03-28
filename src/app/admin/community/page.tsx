@@ -69,7 +69,9 @@ function getStatusColors(status: AdminSubmissionRow['status']) {
 }
 
 function getTypeLabel(type: CommunitySubmissionType) {
-  return type === 'card_add' ? 'Ajout de carte' : 'Correction'
+  if (type === 'card_add') return 'Ajout de carte'
+  if (type === 'place_add') return 'Ajout de lieu'
+  return 'Correction'
 }
 
 function buildSubmissionDiff(
@@ -78,6 +80,28 @@ function buildSubmissionDiff(
 ): DiffField[] {
   const payload = row.payload || {}
   const currentValues = row.currentValues || {}
+  if (row.submission_type === 'place_add') {
+    const fields: Array<{ key: string; label: string; before: string; after: string }> = [
+      { key: 'name', label: 'Nom', before: '', after: normalizeValue(payload.name) },
+      { key: 'city', label: 'Ville', before: '', after: normalizeValue(payload.city) },
+      { key: 'postalCode', label: 'Code postal', before: '', after: normalizeValue(payload.postalCode) },
+      { key: 'addressLine', label: 'Adresse', before: '', after: normalizeValue(payload.addressLine) },
+      { key: 'country', label: 'Pays', before: '', after: normalizeValue(payload.country) },
+      { key: 'activities', label: 'Activites', before: '', after: normalizeValue(payload.activities) },
+      { key: 'discordUrl', label: 'Discord', before: '', after: normalizeValue(payload.discordUrl) },
+      { key: 'websiteUrl', label: 'Site web', before: '', after: normalizeValue(payload.websiteUrl) },
+      { key: 'googleMapsUrl', label: 'Maps', before: '', after: normalizeValue(payload.googleMapsUrl) },
+      { key: 'imageUrl', label: 'Image URL', before: '', after: normalizeValue(payload.imageUrl) }
+    ]
+
+    return fields
+      .map((field) => ({
+        ...field,
+        changed: field.before !== field.after
+      }))
+      .filter((field) => field.after)
+  }
+
   const effectiveCurrentPrintCode = String(
     overrides?.currentPrintCode || payload.currentPrintCode || ''
   ).trim()
@@ -456,6 +480,7 @@ export default function AdminCommunityPage() {
               <option value="all">Tous les types</option>
               <option value="card_edit">Corrections</option>
               <option value="card_add">Ajouts</option>
+              <option value="place_add">Lieux</option>
             </select>
           </div>
 
@@ -635,24 +660,26 @@ export default function AdminCommunityPage() {
                           }}
                         />
                       )}
-                      <input
-                        value={payloadOverrides[row.id]?.printCode || ''}
-                        onChange={(e) =>
-                          setPayloadOverrides((prev) => ({
-                            ...prev,
-                            [row.id]: {
-                              ...prev[row.id],
-                              printCode: e.target.value.toUpperCase()
-                            }
-                          }))
-                        }
-                        placeholder={
-                          row.submission_type === 'card_add'
-                            ? 'Print code (admin)'
-                            : 'Nouveau print code (admin, optionnel)'
-                        }
-                        style={fieldStyle()}
-                      />
+                      {row.submission_type !== 'place_add' && (
+                        <input
+                          value={payloadOverrides[row.id]?.printCode || ''}
+                          onChange={(e) =>
+                            setPayloadOverrides((prev) => ({
+                              ...prev,
+                              [row.id]: {
+                                ...prev[row.id],
+                                printCode: e.target.value.toUpperCase()
+                              }
+                            }))
+                          }
+                          placeholder={
+                            row.submission_type === 'card_add'
+                              ? 'Print code (admin)'
+                              : 'Nouveau print code (admin, optionnel)'
+                          }
+                          style={fieldStyle()}
+                        />
+                      )}
                     </div>
 
                     <textarea

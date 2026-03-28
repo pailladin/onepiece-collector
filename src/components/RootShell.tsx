@@ -325,6 +325,13 @@ export function RootShell({
                       Contrib
                     </Link>
                   )}
+                  <Link
+                    href="/lieux"
+                    className="root-shell-mobile-link"
+                    style={{ color: '#fff', textDecoration: 'none' }}
+                  >
+                    Lieux
+                  </Link>
                   {user && canAccessAdmin && (
                     <Link
                       href="/admin"
@@ -435,6 +442,26 @@ export function RootShell({
                       />
                     </Link>
                   )}
+
+                  <Link
+                    href="/lieux"
+                    className="root-shell-admin-link"
+                    style={{
+                      color: '#fff7ed',
+                      textDecoration: 'none',
+                      padding: '18px 14px',
+                      borderRadius: 999,
+                      background: 'rgba(249, 115, 22, 0.82)',
+                      border: '1px solid rgba(255,255,255,0.28)',
+                      fontWeight: 700,
+                      fontSize: 16,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 7
+                    }}
+                  >
+                    Lieux
+                  </Link>
 
                   {user && canAccessAdmin && (
                     <Link

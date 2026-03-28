@@ -52,26 +52,35 @@ export async function POST(request: Request) {
     typeof body?.payload === 'object' && body?.payload ? (body.payload as Record<string, unknown>) : {}
   )
 
-  const normalizedSetCode = String(payload.setCode || '').trim()
-  if (!normalizedSetCode) {
-    return NextResponse.json({ error: 'Set requis' }, { status: 400 })
-  }
+  if (submissionType === 'place_add') {
+    if (!String(payload.name || '') || !String(payload.city || '')) {
+      return NextResponse.json(
+        { error: 'Nom du lieu et ville obligatoires' },
+        { status: 400 }
+      )
+    }
+  } else {
+    const normalizedSetCode = String(payload.setCode || '').trim()
+    if (!normalizedSetCode) {
+      return NextResponse.json({ error: 'Set requis' }, { status: 400 })
+    }
 
-  const { data: setData, error: setError } = await supabaseServiceServer
-    .from('sets')
-    .select('id')
-    .eq('code', normalizedSetCode)
-    .maybeSingle()
+    const { data: setData, error: setError } = await supabaseServiceServer
+      .from('sets')
+      .select('id')
+      .eq('code', normalizedSetCode)
+      .maybeSingle()
 
-  if (setError) {
-    return NextResponse.json({ error: setError.message }, { status: 500 })
-  }
+    if (setError) {
+      return NextResponse.json({ error: setError.message }, { status: 500 })
+    }
 
-  if (!setData) {
-    return NextResponse.json(
-      { error: 'Le set doit deja exister dans la base avant toute proposition.' },
-      { status: 400 }
-    )
+    if (!setData) {
+      return NextResponse.json(
+        { error: 'Le set doit deja exister dans la base avant toute proposition.' },
+        { status: 400 }
+      )
+    }
   }
 
   if (submissionType === 'card_add') {
@@ -81,7 +90,7 @@ export async function POST(request: Request) {
         { status: 400 }
       )
     }
-  } else {
+  } else if (submissionType === 'card_edit') {
     if (!String(payload.setCode || '') || !String(payload.baseCode || '') || !String(payload.currentPrintCode || '')) {
       return NextResponse.json(
         { error: 'Set, base code et carte selectionnee sont obligatoires pour une modification' },
@@ -93,9 +102,16 @@ export async function POST(request: Request) {
   const insertRow = {
     user_id: userResult.user.id,
     submission_type: submissionType,
-    target_type: submissionType === 'card_add' ? 'new_card' : 'card_print',
+    target_type:
+      submissionType === 'place_add'
+        ? 'place'
+        : submissionType === 'card_add'
+          ? 'new_card'
+          : 'card_print',
     target_id:
-      submissionType === 'card_add'
+      submissionType === 'place_add'
+        ? String(payload.slug || payload.name || '')
+        : submissionType === 'card_add'
         ? String(payload.baseCode || '')
         : `${String(payload.setCode || '')}:${String(payload.baseCode || '')}`,
     title,

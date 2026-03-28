@@ -4,13 +4,9 @@ import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuth } from '@/lib/auth'
 import { supabase } from '@/lib/supabaseClient'
-import {
-  COMMUNITY_SUBMISSION_STATUSES,
-  COMMUNITY_SUBMISSION_TYPES,
-  type CommunitySubmissionStatus,
-  type CommunitySubmissionType
-} from '@/lib/community'
+import { type CommunitySubmissionStatus, type CommunitySubmissionType } from '@/lib/community'
 import { SET_LANGUAGE_CODES, getCollectionLanguageShortLabel } from '@/lib/collections/languages'
+import { PLACE_ACTIVITY_OPTIONS } from '@/lib/places'
 
 type SetOption = {
   code: string
@@ -20,14 +16,10 @@ type SetOption = {
 type SubmissionListRow = {
   id: string
   submission_type: CommunitySubmissionType
-  target_type: string
-  target_id: string | null
   title: string
   message: string | null
-  payload: Record<string, unknown>
   status: CommunitySubmissionStatus
   admin_comment: string | null
-  reviewed_at: string | null
   created_at: string
 }
 
@@ -73,14 +65,21 @@ function fieldStyle() {
   } as const
 }
 
+function getSubmissionLabel(type: CommunitySubmissionType) {
+  if (type === 'card_add') return 'Ajout de carte'
+  if (type === 'place_add') return 'Ajout de lieu'
+  return 'Correction de carte'
+}
+
 export default function CommunityPage() {
   const { user, loading: authLoading } = useAuth()
-  const [submissionType, setSubmissionType] = useState<CommunitySubmissionType>('card_edit')
+  const [proposalDomain, setProposalDomain] = useState<'cards' | 'places'>('cards')
+  const [cardMode, setCardMode] = useState<'card_edit' | 'card_add'>('card_edit')
   const [title, setTitle] = useState('')
   const [message, setMessage] = useState('')
   const [setCode, setSetCode] = useState('')
-  const [currentPrintCode, setCurrentPrintCode] = useState('')
   const [selectedSetCardId, setSelectedSetCardId] = useState('')
+  const [currentPrintCode, setCurrentPrintCode] = useState('')
   const [baseCode, setBaseCode] = useState('')
   const [name, setName] = useState('')
   const [rarity, setRarity] = useState('')
@@ -89,6 +88,15 @@ export default function CommunityPage() {
   const [imageUrl, setImageUrl] = useState('')
   const [cardmarketProductId, setCardmarketProductId] = useState('')
   const [availableLanguages, setAvailableLanguages] = useState<Record<string, boolean>>({})
+  const [placeSlug, setPlaceSlug] = useState('')
+  const [placeAddressLine, setPlaceAddressLine] = useState('')
+  const [placeCity, setPlaceCity] = useState('')
+  const [placePostalCode, setPlacePostalCode] = useState('')
+  const [placeCountry, setPlaceCountry] = useState('France')
+  const [placeDiscordUrl, setPlaceDiscordUrl] = useState('')
+  const [placeWebsiteUrl, setPlaceWebsiteUrl] = useState('')
+  const [placeGoogleMapsUrl, setPlaceGoogleMapsUrl] = useState('')
+  const [placeActivities, setPlaceActivities] = useState<Record<string, boolean>>({})
   const [sets, setSets] = useState<SetOption[]>([])
   const [rarityOptions, setRarityOptions] = useState<string[]>([])
   const [typeOptions, setTypeOptions] = useState<string[]>([])
@@ -118,31 +126,36 @@ export default function CommunityPage() {
     setLoadingData(true)
 
     const authHeaders = await getAuthHeader()
-    const [setsData, raritiesData, typesData, variantsData, submissionsRes, leaderboardRes] = await Promise.all([
-      supabase.from('sets').select('code, name').order('code', { ascending: true }),
-      supabase.from('cards').select('rarity').not('rarity', 'is', null),
-      supabase.from('cards').select('type').not('type', 'is', null),
-      supabase.from('card_prints').select('variant_type').not('variant_type', 'is', null),
-      fetch('/api/community/submissions', { headers: authHeaders }),
-      fetch('/api/community/leaderboard', { headers: authHeaders })
-    ])
+    const [setsData, raritiesData, typesData, variantsData, submissionsRes, leaderboardRes] =
+      await Promise.all([
+        supabase.from('sets').select('code, name').order('code', { ascending: true }),
+        supabase.from('cards').select('rarity').not('rarity', 'is', null),
+        supabase.from('cards').select('type').not('type', 'is', null),
+        supabase.from('card_prints').select('variant_type').not('variant_type', 'is', null),
+        fetch('/api/community/submissions', { headers: authHeaders }),
+        fetch('/api/community/leaderboard', { headers: authHeaders })
+      ])
+
+    const rarityValues = (((raritiesData.data as Array<{ rarity: string | null }> | null) || []) as Array<{
+      rarity: string | null
+    }>)
+      .map((row) => String(row.rarity || '').trim())
+      .filter(Boolean)
+    const typeValues = (((typesData.data as Array<{ type: string | null }> | null) || []) as Array<{
+      type: string | null
+    }>)
+      .map((row) => String(row.type || '').trim())
+      .filter(Boolean)
+    const variantValues = (((variantsData.data as Array<{ variant_type: string | null }> | null) || []) as Array<{
+      variant_type: string | null
+    }>)
+      .map((row) => String(row.variant_type || '').trim())
+      .filter(Boolean)
 
     setSets((((setsData.data as SetOption[] | null) || []) as SetOption[]))
-    setRarityOptions(
-      [...new Set((((raritiesData.data as Array<{ rarity: string | null }> | null) || []) as Array<{ rarity: string | null }>)
-        .map((row) => String(row.rarity || '').trim())
-        .filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'))
-    )
-    setTypeOptions(
-      [...new Set((((typesData.data as Array<{ type: string | null }> | null) || []) as Array<{ type: string | null }>)
-        .map((row) => String(row.type || '').trim())
-        .filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'))
-    )
-    setVariantOptions(
-      [...new Set((((variantsData.data as Array<{ variant_type: string | null }> | null) || []) as Array<{ variant_type: string | null }>)
-        .map((row) => String(row.variant_type || '').trim())
-        .filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'))
-    )
+    setRarityOptions([...new Set(rarityValues)].sort((a, b) => a.localeCompare(b, 'fr')))
+    setTypeOptions([...new Set(typeValues)].sort((a, b) => a.localeCompare(b, 'fr')))
+    setVariantOptions([...new Set(variantValues)].sort((a, b) => a.localeCompare(b, 'fr')))
 
     const submissionsData = await submissionsRes.json().catch(() => ({}))
     const leaderboardData = await leaderboardRes.json().catch(() => ({}))
@@ -158,42 +171,37 @@ export default function CommunityPage() {
 
   useEffect(() => {
     const loadSetCards = async () => {
-      if (!user || submissionType !== 'card_edit' || !setCode.trim()) {
+      if (!user || proposalDomain !== 'cards' || cardMode !== 'card_edit' || !setCode.trim()) {
         setSetCardOptions([])
         setSelectedSetCardId('')
         setCurrentPrintCode('')
         return
       }
 
-      try {
-        const authHeaders = await getAuthHeader()
-        const res = await fetch(`/api/community/set-cards/${encodeURIComponent(setCode.trim())}`, {
-          headers: authHeaders
-        })
-        const data = await res.json().catch(() => ({}))
-        if (!res.ok) {
-          setSetCardOptions([])
-          setSelectedSetCardId('')
-          setCurrentPrintCode('')
-          return
-        }
+      const authHeaders = await getAuthHeader()
+      const res = await fetch(`/api/community/set-cards/${encodeURIComponent(setCode.trim())}`, {
+        headers: authHeaders
+      })
+      const data = await res.json().catch(() => ({}))
 
-        const items = Array.isArray(data?.items) ? (data.items as SetCardOption[]) : []
-        setSetCardOptions(items)
-        setSelectedSetCardId('')
-        setCurrentPrintCode('')
-      } catch {
+      if (!res.ok) {
         setSetCardOptions([])
         setSelectedSetCardId('')
         setCurrentPrintCode('')
+        return
       }
+
+      const items = Array.isArray(data?.items) ? (data.items as SetCardOption[]) : []
+      setSetCardOptions(items)
+      setSelectedSetCardId('')
+      setCurrentPrintCode('')
     }
 
     void loadSetCards()
-  }, [getAuthHeader, setCode, submissionType, user])
+  }, [cardMode, getAuthHeader, proposalDomain, setCode, user])
 
   useEffect(() => {
-    if (submissionType !== 'card_edit') return
+    if (proposalDomain !== 'cards' || cardMode !== 'card_edit') return
     const selected = setCardOptions.find((entry) => entry.id === selectedSetCardId)
     if (!selected) return
 
@@ -211,14 +219,14 @@ export default function CommunityPage() {
     if (!title.trim()) {
       setTitle(`Correction de ${selected.baseCode || selected.name}`)
     }
-  }, [selectedSetCardId, setCardOptions, submissionType, title])
+  }, [cardMode, proposalDomain, selectedSetCardId, setCardOptions, title])
 
   const resetForm = () => {
     setTitle('')
     setMessage('')
     setSetCode('')
-    setCurrentPrintCode('')
     setSelectedSetCardId('')
+    setCurrentPrintCode('')
     setBaseCode('')
     setName('')
     setRarity('')
@@ -227,6 +235,15 @@ export default function CommunityPage() {
     setImageUrl('')
     setCardmarketProductId('')
     setAvailableLanguages({})
+    setPlaceSlug('')
+    setPlaceAddressLine('')
+    setPlaceCity('')
+    setPlacePostalCode('')
+    setPlaceCountry('France')
+    setPlaceDiscordUrl('')
+    setPlaceWebsiteUrl('')
+    setPlaceGoogleMapsUrl('')
+    setPlaceActivities({})
   }
 
   const submitProposal = async () => {
@@ -236,31 +253,51 @@ export default function CommunityPage() {
 
     try {
       const authHeaders = await getAuthHeader()
+      const submissionType: CommunitySubmissionType =
+        proposalDomain === 'places' ? 'place_add' : cardMode
+
       const payload =
-        submissionType === 'card_add'
+        submissionType === 'place_add'
           ? {
-              setCode,
-              baseCode,
+              slug: placeSlug,
               name,
-              rarity,
-              type,
-              variantType,
+              description: message,
               imageUrl,
-              cardmarketProductId,
-              availableLanguages: SET_LANGUAGE_CODES.filter((entry) => availableLanguages[entry])
+              addressLine: placeAddressLine,
+              city: placeCity,
+              postalCode: placePostalCode,
+              country: placeCountry,
+              discordUrl: placeDiscordUrl,
+              websiteUrl: placeWebsiteUrl,
+              googleMapsUrl: placeGoogleMapsUrl,
+              activities: PLACE_ACTIVITY_OPTIONS.filter((entry) => placeActivities[entry.value]).map(
+                (entry) => entry.value
+              )
             }
-          : {
-              setCode,
-              currentPrintCode,
-              baseCode,
-              name,
-              rarity,
-              type,
-              variantType,
-              imageUrl,
-              cardmarketProductId,
-              availableLanguages: SET_LANGUAGE_CODES.filter((entry) => availableLanguages[entry])
-            }
+          : submissionType === 'card_add'
+            ? {
+                setCode,
+                baseCode,
+                name,
+                rarity,
+                type,
+                variantType,
+                imageUrl,
+                cardmarketProductId,
+                availableLanguages: SET_LANGUAGE_CODES.filter((entry) => availableLanguages[entry])
+              }
+            : {
+                setCode,
+                currentPrintCode,
+                baseCode,
+                name,
+                rarity,
+                type,
+                variantType,
+                imageUrl,
+                cardmarketProductId,
+                availableLanguages: SET_LANGUAGE_CODES.filter((entry) => availableLanguages[entry])
+              }
 
       const res = await fetch('/api/community/submissions', {
         method: 'POST',
@@ -291,21 +328,15 @@ export default function CommunityPage() {
     }
   }
 
-  if (authLoading || loadingData) {
-    return <div style={{ padding: 40 }}>Chargement...</div>
-  }
-
-  if (!user) {
-    return <div style={{ padding: 40 }}>Connecte-toi pour acceder a l'espace contributions.</div>
-  }
+  if (authLoading || loadingData) return <div style={{ padding: 40 }}>Chargement...</div>
+  if (!user) return <div style={{ padding: 40 }}>Connecte-toi pour acceder a l'espace contributions.</div>
 
   return (
     <div
       style={{
         minHeight: '100vh',
         padding: '18px 28px 28px',
-        background:
-          'radial-gradient(circle at 12% 8%, #fff4e6 0%, #e0f2fe 40%, #eef2ff 100%)',
+        background: 'radial-gradient(circle at 12% 8%, #fff4e6 0%, #e0f2fe 40%, #eef2ff 100%)',
         display: 'grid',
         gap: 12,
         alignContent: 'start'
@@ -321,7 +352,7 @@ export default function CommunityPage() {
       >
         <h1 style={{ margin: 0, fontSize: 30, color: '#0f172a' }}>Contributions</h1>
         <p style={{ marginTop: 8, color: '#475569' }}>
-          Propose des corrections de cartes ou des ajouts. Chaque proposition est relue
+          Propose des corrections de cartes ou de nouveaux lieux. Chaque proposition est relue
           et validee par un admin avant application.
         </p>
       </section>
@@ -339,131 +370,197 @@ export default function CommunityPage() {
 
           <div style={{ display: 'grid', gap: 8, minWidth: 0 }}>
             <select
-              value={submissionType}
-              onChange={(e) => setSubmissionType(e.target.value as CommunitySubmissionType)}
+              value={proposalDomain}
+              onChange={(e) => setProposalDomain(e.target.value as 'cards' | 'places')}
               style={fieldStyle()}
             >
-              <option value="card_edit">Correction d'une carte</option>
-              <option value="card_add">Ajout d'une carte</option>
+              <option value="cards">Cartes</option>
+              <option value="places">Lieux</option>
             </select>
 
-            <input
-              list="community-set-options"
-              value={setCode}
-              onChange={(e) => setSetCode(e.target.value.toUpperCase())}
-              placeholder="Set concerne. Exemple: OP01"
-              style={fieldStyle()}
-            />
-            <datalist id="community-set-options">
-              {setOptions.map((value) => (
-                <option key={value} value={value.split(' - ')[0]} />
-              ))}
-            </datalist>
+            {proposalDomain === 'cards' && (
+              <>
+                <select
+                  value={cardMode}
+                  onChange={(e) => setCardMode(e.target.value as 'card_edit' | 'card_add')}
+                  style={fieldStyle()}
+                >
+                  <option value="card_edit">Correction d'une carte</option>
+                  <option value="card_add">Ajout d'une carte</option>
+                </select>
 
-            {submissionType === 'card_edit' && (
-              <select
-                value={selectedSetCardId}
-                onChange={(e) => setSelectedSetCardId(e.target.value)}
-                style={fieldStyle()}
-              >
-                <option value="">Choisir une carte du set</option>
-                {setCardOptions.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+                <input
+                  list="community-set-options"
+                  value={setCode}
+                  onChange={(e) => setSetCode(e.target.value.toUpperCase())}
+                  placeholder="Set concerne. Exemple: OP01"
+                  style={fieldStyle()}
+                />
+                <datalist id="community-set-options">
+                  {setOptions.map((value) => (
+                    <option key={value} value={value.split(' - ')[0]} />
+                  ))}
+                </datalist>
+
+                {cardMode === 'card_edit' && (
+                  <select
+                    value={selectedSetCardId}
+                    onChange={(e) => setSelectedSetCardId(e.target.value)}
+                    style={fieldStyle()}
+                  >
+                    <option value="">Choisir une carte du set</option>
+                    {setCardOptions.map((option) => (
+                      <option key={option.id} value={option.id}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </>
             )}
 
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="Titre court. Exemple: Correction du nom de OP01-001"
+              placeholder={
+                proposalDomain === 'places'
+                  ? 'Titre court. Exemple: Ajout de la boutique X a Paris'
+                  : 'Titre court. Exemple: Correction du nom de OP01-001'
+              }
               style={fieldStyle()}
             />
 
-            <input
-              value={baseCode}
-              onChange={(e) => setBaseCode(e.target.value.toUpperCase())}
-              placeholder="Base code. Exemple: OP01-001"
-              style={fieldStyle()}
-            />
+            {proposalDomain === 'cards' ? (
+              <input
+                value={baseCode}
+                onChange={(e) => setBaseCode(e.target.value.toUpperCase())}
+                placeholder="Base code. Exemple: OP01-001"
+                style={fieldStyle()}
+              />
+            ) : (
+              <input
+                value={placeSlug}
+                onChange={(e) => setPlaceSlug(e.target.value)}
+                placeholder="Slug du lieu (optionnel)"
+                style={fieldStyle()}
+              />
+            )}
+
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Nom propose. Exemple: Roronoa Zoro"
-              style={fieldStyle()}
-            />
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8, minWidth: 0 }}>
-              <select
-                value={rarity}
-                onChange={(e) => setRarity(e.target.value)}
-                style={fieldStyle()}
-              >
-                <option value="">Rarete</option>
-                {rarityOptions.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={type}
-                onChange={(e) => setType(e.target.value)}
-                style={fieldStyle()}
-              >
-                <option value="">Type</option>
-                {typeOptions.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={variantType}
-                onChange={(e) => setVariantType(e.target.value)}
-                style={fieldStyle()}
-              >
-                <option value="">Variant</option>
-                {variantOptions.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <input
-              value={imageUrl}
-              onChange={(e) => setImageUrl(e.target.value)}
-              placeholder="Image URL (optionnel). Exemple: https://..."
-              style={fieldStyle()}
-            />
-            <input
-              value={cardmarketProductId}
-              onChange={(e) => setCardmarketProductId(e.target.value)}
-              placeholder="ID Cardmarket (optionnel). Exemple: 870973"
+              placeholder={
+                proposalDomain === 'places'
+                  ? 'Nom du lieu'
+                  : 'Nom propose. Exemple: Roronoa Zoro'
+              }
               style={fieldStyle()}
             />
 
-            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-              {SET_LANGUAGE_CODES.map((language) => (
-                <label key={language} style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
-                  <input
-                    type="checkbox"
-                    checked={Boolean(availableLanguages[language])}
-                    onChange={(e) =>
-                      setAvailableLanguages((prev) => ({ ...prev, [language]: e.target.checked }))
-                    }
-                  />
-                  <span>{getCollectionLanguageShortLabel(language)}</span>
-                </label>
-              ))}
-            </div>
+            {proposalDomain === 'cards' ? (
+              <>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8 }}>
+                  <select value={rarity} onChange={(e) => setRarity(e.target.value)} style={fieldStyle()}>
+                    <option value="">Rarete</option>
+                    {rarityOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                  <select value={type} onChange={(e) => setType(e.target.value)} style={fieldStyle()}>
+                    <option value="">Type</option>
+                    {typeOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                  <select value={variantType} onChange={(e) => setVariantType(e.target.value)} style={fieldStyle()}>
+                    <option value="">Variant</option>
+                    {variantOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <input
+                  value={imageUrl}
+                  onChange={(e) => setImageUrl(e.target.value)}
+                  placeholder="Image URL (optionnel)"
+                  style={fieldStyle()}
+                />
+                <input
+                  value={cardmarketProductId}
+                  onChange={(e) => setCardmarketProductId(e.target.value)}
+                  placeholder="ID Cardmarket (optionnel)"
+                  style={fieldStyle()}
+                />
+
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                  {SET_LANGUAGE_CODES.map((language) => (
+                    <label key={language} style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(availableLanguages[language])}
+                        onChange={(e) =>
+                          setAvailableLanguages((prev) => ({ ...prev, [language]: e.target.checked }))
+                        }
+                      />
+                      <span>{getCollectionLanguageShortLabel(language)}</span>
+                    </label>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <>
+                <input
+                  value={imageUrl}
+                  onChange={(e) => setImageUrl(e.target.value)}
+                  placeholder="Image URL du lieu"
+                  style={fieldStyle()}
+                />
+                <input
+                  value={placeAddressLine}
+                  onChange={(e) => setPlaceAddressLine(e.target.value)}
+                  placeholder="Adresse"
+                  style={fieldStyle()}
+                />
+                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 160px', gap: 8 }}>
+                  <input value={placeCity} onChange={(e) => setPlaceCity(e.target.value)} placeholder="Ville" style={fieldStyle()} />
+                  <input value={placePostalCode} onChange={(e) => setPlacePostalCode(e.target.value)} placeholder="Code postal" style={fieldStyle()} />
+                </div>
+                <input value={placeCountry} onChange={(e) => setPlaceCountry(e.target.value)} placeholder="Pays" style={fieldStyle()} />
+                <input value={placeDiscordUrl} onChange={(e) => setPlaceDiscordUrl(e.target.value)} placeholder="Lien Discord du lieu" style={fieldStyle()} />
+                <input value={placeWebsiteUrl} onChange={(e) => setPlaceWebsiteUrl(e.target.value)} placeholder="Site web (optionnel)" style={fieldStyle()} />
+                <input value={placeGoogleMapsUrl} onChange={(e) => setPlaceGoogleMapsUrl(e.target.value)} placeholder="Lien Google Maps (optionnel)" style={fieldStyle()} />
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                  {PLACE_ACTIVITY_OPTIONS.map((activity) => (
+                    <label key={activity.value} style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(placeActivities[activity.value])}
+                        onChange={(e) =>
+                          setPlaceActivities((prev) => ({ ...prev, [activity.value]: e.target.checked }))
+                        }
+                      />
+                      <span>{activity.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </>
+            )}
 
             <textarea
               value={message}
               onChange={(e) => setMessage(e.target.value)}
-              placeholder="Explique ce qui doit etre corrige ou ajoute. Exemple: le nom francais affiche actuellement Zoro mais la carte officielle indique Roronoa Zoro."
+              placeholder={
+                proposalDomain === 'places'
+                  ? 'Decris le lieu et ce qu on peut y faire.'
+                  : 'Explique ce qui doit etre corrige ou ajoute.'
+              }
               rows={5}
               style={{ ...fieldStyle(), resize: 'vertical' }}
             />
@@ -546,7 +643,7 @@ export default function CommunityPage() {
                 <div>
                   <div style={{ fontWeight: 700, color: '#0f172a' }}>{row.title}</div>
                   <div style={{ fontSize: 12, color: '#64748b' }}>
-                    {row.submission_type === 'card_add' ? 'Ajout de carte' : 'Correction'} • {new Date(row.created_at).toLocaleString('fr-FR')}
+                    {getSubmissionLabel(row.submission_type)} • {new Date(row.created_at).toLocaleString('fr-FR')}
                   </div>
                 </div>
                 <div
@@ -561,11 +658,7 @@ export default function CommunityPage() {
                           : '#92400e'
                   }}
                 >
-                  {row.status === 'approved'
-                    ? 'Validee'
-                    : row.status === 'rejected'
-                      ? 'Refusee'
-                      : 'En attente'}
+                  {row.status === 'approved' ? 'Validee' : row.status === 'rejected' ? 'Refusee' : 'En attente'}
                 </div>
               </div>
               {row.message && (

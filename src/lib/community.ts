@@ -1,11 +1,17 @@
 import { normalizeSetLanguages } from '@/lib/collections/languages'
 import { getDisplayPrintCode } from '@/lib/cards/printDisplay'
+import {
+  buildPlaceSearchText,
+  deriveDepartmentCode,
+  normalizePlaceActivities,
+  normalizePlaceSlug
+} from '@/lib/places'
 import { supabaseServiceServer } from '@/lib/server/supabaseServer'
 
 const BUCKET = 'cards-images'
 const MISSING_IMAGE_PATH = '__missing__'
 
-export const COMMUNITY_SUBMISSION_TYPES = ['card_edit', 'card_add'] as const
+export const COMMUNITY_SUBMISSION_TYPES = ['card_edit', 'card_add', 'place_add'] as const
 export type CommunitySubmissionType = (typeof COMMUNITY_SUBMISSION_TYPES)[number]
 
 export const COMMUNITY_SUBMISSION_STATUSES = ['pending', 'approved', 'rejected'] as const
@@ -45,6 +51,7 @@ function extractNumber(baseCode: string) {
 }
 
 export function getSubmissionPoints(type: CommunitySubmissionType) {
+  if (type === 'place_add') return 6
   return type === 'card_add' ? 10 : 3
 }
 
@@ -52,6 +59,31 @@ export function sanitizeSubmissionPayload(
   submissionType: CommunitySubmissionType,
   rawPayload: Record<string, unknown>
 ) {
+  if (submissionType === 'place_add') {
+    const name = String(rawPayload.name || '').trim()
+    const city = String(rawPayload.city || '').trim()
+    const postalCode = String(rawPayload.postalCode || '').trim()
+    const departmentCode = deriveDepartmentCode(postalCode)
+
+    return {
+      name,
+      slug:
+        normalizePlaceSlug(String(rawPayload.slug || '').trim()) ||
+        normalizePlaceSlug(`${name}-${city}-${postalCode}`),
+      description: String(rawPayload.description || '').trim(),
+      imageUrl: String(rawPayload.imageUrl || '').trim(),
+      addressLine: String(rawPayload.addressLine || '').trim(),
+      city,
+      postalCode,
+      departmentCode: departmentCode || String(rawPayload.departmentCode || '').trim(),
+      country: String(rawPayload.country || '').trim() || 'France',
+      discordUrl: String(rawPayload.discordUrl || '').trim(),
+      websiteUrl: String(rawPayload.websiteUrl || '').trim(),
+      googleMapsUrl: String(rawPayload.googleMapsUrl || '').trim(),
+      activities: normalizePlaceActivities(rawPayload.activities)
+    }
+  }
+
   if (submissionType === 'card_add') {
     return {
       setCode: normalizeCode(String(rawPayload.setCode || '')),
@@ -227,8 +259,84 @@ async function ensureNoSemanticDuplicate(params: {
   }
 }
 
+async function ensureUniquePlaceSlug(slug: string) {
+  const baseSlug = normalizePlaceSlug(slug)
+  if (!baseSlug) throw new Error('slug de lieu invalide')
+
+  const { data: existing } = await supabaseServiceServer
+    .from('places')
+    .select('slug')
+    .eq('slug', baseSlug)
+    .maybeSingle()
+
+  if (!existing) return baseSlug
+
+  let suffix = 2
+  while (suffix < 1000) {
+    const candidate = `${baseSlug}-${suffix}`
+    const { data: candidateExisting } = await supabaseServiceServer
+      .from('places')
+      .select('slug')
+      .eq('slug', candidate)
+      .maybeSingle()
+    if (!candidateExisting) return candidate
+    suffix += 1
+  }
+
+  throw new Error('Impossible de generer un slug unique pour ce lieu')
+}
+
 export async function applyApprovedSubmission(submission: CommunitySubmissionRow, reviewerUserId: string) {
   const payload = sanitizeSubmissionPayload(submission.submission_type, submission.payload)
+
+  if (submission.submission_type === 'place_add') {
+    const name = String(payload.name || '').trim()
+    const city = String(payload.city || '').trim()
+    const postalCode = String(payload.postalCode || '').trim()
+    const slug = await ensureUniquePlaceSlug(String(payload.slug || `${name}-${city}-${postalCode}`))
+
+    if (!name || !city) {
+      throw new Error('Proposition de lieu invalide: nom et ville sont obligatoires')
+    }
+
+    const departmentCode =
+      deriveDepartmentCode(postalCode) || String(payload.departmentCode || '').trim() || null
+    const searchText = buildPlaceSearchText({
+      name,
+      description: String(payload.description || '').trim(),
+      city,
+      postalCode,
+      departmentCode,
+      addressLine: String(payload.addressLine || '').trim(),
+      country: String(payload.country || '').trim() || 'France'
+    })
+
+    const { error: placeError } = await supabaseServiceServer.from('places').insert({
+      slug,
+      name,
+      description: String(payload.description || '').trim() || null,
+      image_url: String(payload.imageUrl || '').trim() || null,
+      address_line: String(payload.addressLine || '').trim() || null,
+      city,
+      postal_code: postalCode || null,
+      department_code: departmentCode,
+      country: String(payload.country || '').trim() || 'France',
+      discord_url: String(payload.discordUrl || '').trim() || null,
+      website_url: String(payload.websiteUrl || '').trim() || null,
+      google_maps_url: String(payload.googleMapsUrl || '').trim() || null,
+      activities: normalizePlaceActivities(payload.activities),
+      search_text: searchText,
+      is_active: true
+    })
+
+    if (placeError) {
+      throw new Error(`Erreur creation lieu: ${placeError.message}`)
+    }
+
+    return {
+      slug
+    }
+  }
 
   if (submission.submission_type === 'card_add') {
     const setCode = String(payload.setCode || '')
