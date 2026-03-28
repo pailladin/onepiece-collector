@@ -355,6 +355,56 @@ export default function CommunityPage() {
           Propose des corrections de cartes ou de nouveaux lieux. Chaque proposition est relue
           et validee par un admin avant application.
         </p>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+            gap: 12,
+            marginTop: 14
+          }}
+        >
+          <button
+            onClick={() => setProposalDomain('cards')}
+            style={{
+              textAlign: 'left',
+              borderRadius: 16,
+              border:
+                proposalDomain === 'cards' ? '2px solid #2563eb' : '1px solid #cbd5e1',
+              background:
+                proposalDomain === 'cards'
+                  ? 'linear-gradient(145deg, #eff6ff, #dbeafe)'
+                  : '#fff',
+              padding: 16,
+              cursor: 'pointer'
+            }}
+          >
+            <div style={{ fontSize: 22, fontWeight: 800, color: '#0f172a' }}>Cartes</div>
+            <div style={{ marginTop: 6, color: '#475569', lineHeight: 1.5 }}>
+              Corriger une carte existante ou proposer l&apos;ajout d&apos;une nouvelle carte.
+            </div>
+          </button>
+          <button
+            onClick={() => setProposalDomain('places')}
+            style={{
+              textAlign: 'left',
+              borderRadius: 16,
+              border:
+                proposalDomain === 'places' ? '2px solid #ea580c' : '1px solid #cbd5e1',
+              background:
+                proposalDomain === 'places'
+                  ? 'linear-gradient(145deg, #fff7ed, #fed7aa)'
+                  : '#fff',
+              padding: 16,
+              cursor: 'pointer'
+            }}
+          >
+            <div style={{ fontSize: 22, fontWeight: 800, color: '#0f172a' }}>Lieux</div>
+            <div style={{ marginTop: 6, color: '#475569', lineHeight: 1.5 }}>
+              Proposer une boutique, une salle ou un lieu ou l&apos;on peut acheter, jouer ou faire
+              des tournois One Piece TCG.
+            </div>
+          </button>
+        </div>
       </section>
 
       <div
@@ -366,18 +416,25 @@ export default function CommunityPage() {
         }}
       >
         <section style={sectionStyle()}>
-          <h2 style={{ marginTop: 0, color: '#0f172a' }}>Faire une proposition</h2>
+          <h2 style={{ marginTop: 0, color: '#0f172a' }}>
+            {proposalDomain === 'places' ? 'Proposer un lieu' : 'Contribuer sur une carte'}
+          </h2>
+          <div
+            style={{
+              marginBottom: 12,
+              borderRadius: 12,
+              padding: '10px 12px',
+              background: proposalDomain === 'places' ? '#fff7ed' : '#eff6ff',
+              color: '#334155',
+              lineHeight: 1.5
+            }}
+          >
+            {proposalDomain === 'places'
+              ? 'Renseigne au minimum le nom du lieu, la ville, ce qu on peut y faire et si possible un Discord ou un lien Maps.'
+              : 'Choisis d abord le set, puis la carte si tu proposes une correction. Pour un ajout, renseigne les informations principales de la carte.'}
+          </div>
 
           <div style={{ display: 'grid', gap: 8, minWidth: 0 }}>
-            <select
-              value={proposalDomain}
-              onChange={(e) => setProposalDomain(e.target.value as 'cards' | 'places')}
-              style={fieldStyle()}
-            >
-              <option value="cards">Cartes</option>
-              <option value="places">Lieux</option>
-            </select>
-
             {proposalDomain === 'cards' && (
               <>
                 <select
@@ -621,9 +678,6 @@ export default function CommunityPage() {
       <section style={sectionStyle()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
           <h2 style={{ margin: 0, color: '#0f172a' }}>Mes propositions</h2>
-          <Link href="/admin/community" style={{ color: '#1d4ed8' }}>
-            Moderation admin
-          </Link>
         </div>
         <div style={{ display: 'grid', gap: 8, marginTop: 10 }}>
           {mySubmissions.length === 0 && (

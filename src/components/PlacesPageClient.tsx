@@ -95,6 +95,32 @@ export function PlacesPageClient() {
             Trouve des boutiques, lieux de jeu et points de rencontre pour acheter des
             boosters, des singles ou participer a des tournois.
           </p>
+          <div
+            style={{
+              marginTop: 14,
+              display: 'flex',
+              gap: 10,
+              flexWrap: 'wrap',
+              alignItems: 'center'
+            }}
+          >
+            <Link
+              href="/community"
+              style={{
+                textDecoration: 'none',
+                background: '#ea580c',
+                color: '#fff',
+                padding: '10px 14px',
+                borderRadius: 999,
+                fontWeight: 700
+              }}
+            >
+              Proposer un lieu
+            </Link>
+            <span style={{ color: '#64748b' }}>
+              Tu connais une boutique ou un lieu de jeu manquant ? Propose-le a la communaute.
+            </span>
+          </div>
         </div>
 
         <div
