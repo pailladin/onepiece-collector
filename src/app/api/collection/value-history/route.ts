@@ -34,7 +34,7 @@ export async function GET(request: Request) {
       'period_start, period_end, set_code, set_name, is_total, total_value, priced_count, expected_count, us_fallback_count, currency, created_at, updated_at'
     )
     .eq('user_id', userResult.userId)
-    .order('period_start', { ascending: false })
+    .order('period_start', { ascending: true })
     .order('is_total', { ascending: true })
     .limit(1200)
 
@@ -102,7 +102,7 @@ export async function GET(request: Request) {
   }
 
   const weeks = [...byWeek.values()]
-    .sort((a, b) => b.periodStart.localeCompare(a.periodStart))
+    .sort((a, b) => a.periodStart.localeCompare(b.periodStart))
     .map((week) => ({
       ...week,
       sets: week.sets.sort((a, b) => b.value - a.value || a.setCode.localeCompare(b.setCode))

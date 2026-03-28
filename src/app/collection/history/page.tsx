@@ -214,7 +214,7 @@ export default function CollectionHistoryPage() {
               </text>
             </svg>
             <div style={{ marginTop: 8, display: 'grid', gap: 4 }}>
-              {series.map((row) => (
+              {[...series].reverse().map((row) => (
                 <div key={`legend-${row.x}`} style={{ fontSize: 12, color: '#334155' }}>
                   {shortDate(row.x)}: <strong>{formatCurrency(row.value, row.currency)}</strong>
                 </div>

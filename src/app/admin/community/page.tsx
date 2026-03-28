@@ -4,8 +4,15 @@ import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { isAdminEmail, parseAdminEmails } from '@/lib/admin'
 import { useAuth } from '@/lib/auth'
+import { PLACE_ACTIVITY_OPTIONS } from '@/lib/places'
 import { supabase } from '@/lib/supabaseClient'
 import { type CommunitySubmissionType } from '@/lib/community'
+import { SET_LANGUAGE_CODES, getCollectionLanguageShortLabel } from '@/lib/collections/languages'
+
+type SetOption = {
+  code: string
+  name: string | null
+}
 
 type AdminSubmissionRow = {
   id: string
@@ -23,8 +30,26 @@ type AdminSubmissionRow = {
 }
 
 type PayloadOverrides = {
+  setCode?: string
+  nextSetCode?: string
+  baseCode?: string
   currentPrintCode?: string
   printCode?: string
+  name?: string
+  rarity?: string
+  type?: string
+  variantType?: string
+  imageUrl?: string
+  cardmarketProductId?: string
+  availableLanguages?: string[]
+  addressLine?: string
+  city?: string
+  postalCode?: string
+  country?: string
+  discordUrl?: string
+  websiteUrl?: string
+  googleMapsUrl?: string
+  activities?: string[]
 }
 
 type DiffField = {
@@ -80,18 +105,22 @@ function buildSubmissionDiff(
 ): DiffField[] {
   const payload = row.payload || {}
   const currentValues = row.currentValues || {}
+  const mergedPayload = {
+    ...payload,
+    ...(overrides || {})
+  }
   if (row.submission_type === 'place_add') {
     const fields: Array<{ key: string; label: string; before: string; after: string }> = [
-      { key: 'name', label: 'Nom', before: '', after: normalizeValue(payload.name) },
-      { key: 'city', label: 'Ville', before: '', after: normalizeValue(payload.city) },
-      { key: 'postalCode', label: 'Code postal', before: '', after: normalizeValue(payload.postalCode) },
-      { key: 'addressLine', label: 'Adresse', before: '', after: normalizeValue(payload.addressLine) },
-      { key: 'country', label: 'Pays', before: '', after: normalizeValue(payload.country) },
-      { key: 'activities', label: 'Activites', before: '', after: normalizeValue(payload.activities) },
-      { key: 'discordUrl', label: 'Discord', before: '', after: normalizeValue(payload.discordUrl) },
-      { key: 'websiteUrl', label: 'Site web', before: '', after: normalizeValue(payload.websiteUrl) },
-      { key: 'googleMapsUrl', label: 'Maps', before: '', after: normalizeValue(payload.googleMapsUrl) },
-      { key: 'imageUrl', label: 'Image URL', before: '', after: normalizeValue(payload.imageUrl) }
+      { key: 'name', label: 'Nom', before: '', after: normalizeValue(mergedPayload.name) },
+      { key: 'city', label: 'Ville', before: '', after: normalizeValue(mergedPayload.city) },
+      { key: 'postalCode', label: 'Code postal', before: '', after: normalizeValue(mergedPayload.postalCode) },
+      { key: 'addressLine', label: 'Adresse', before: '', after: normalizeValue(mergedPayload.addressLine) },
+      { key: 'country', label: 'Pays', before: '', after: normalizeValue(mergedPayload.country) },
+      { key: 'activities', label: 'Activites', before: '', after: normalizeValue(mergedPayload.activities) },
+      { key: 'discordUrl', label: 'Discord', before: '', after: normalizeValue(mergedPayload.discordUrl) },
+      { key: 'websiteUrl', label: 'Site web', before: '', after: normalizeValue(mergedPayload.websiteUrl) },
+      { key: 'googleMapsUrl', label: 'Maps', before: '', after: normalizeValue(mergedPayload.googleMapsUrl) },
+      { key: 'imageUrl', label: 'Image URL', before: '', after: normalizeValue(mergedPayload.imageUrl) }
     ]
 
     return fields
@@ -103,22 +132,28 @@ function buildSubmissionDiff(
   }
 
   const effectiveCurrentPrintCode = String(
-    overrides?.currentPrintCode || payload.currentPrintCode || ''
+    mergedPayload.currentPrintCode || ''
   ).trim()
-  const effectivePrintCode = String(overrides?.printCode || payload.printCode || '').trim()
+  const effectivePrintCode = String(mergedPayload.printCode || '').trim()
 
   const fields: Array<{ key: string; label: string; before: string; after: string }> = [
     {
       key: 'setCode',
       label: 'Set',
       before: normalizeValue(currentValues.setCode),
-      after: normalizeValue(payload.setCode)
+      after: normalizeValue(mergedPayload.setCode)
+    },
+    {
+      key: 'nextSetCode',
+      label: 'Set cible',
+      before: normalizeValue(currentValues.setCode),
+      after: normalizeValue(mergedPayload.nextSetCode || mergedPayload.setCode)
     },
     {
       key: 'baseCode',
       label: 'Base code',
       before: normalizeValue(currentValues.baseCode),
-      after: normalizeValue(payload.baseCode)
+      after: normalizeValue(mergedPayload.baseCode)
     },
     {
       key: 'printCode',
@@ -130,43 +165,43 @@ function buildSubmissionDiff(
       key: 'name',
       label: 'Nom',
       before: normalizeValue(currentValues.name),
-      after: normalizeValue(payload.name)
+      after: normalizeValue(mergedPayload.name)
     },
     {
       key: 'rarity',
       label: 'Rarete',
       before: normalizeValue(currentValues.rarity),
-      after: normalizeValue(payload.rarity)
+      after: normalizeValue(mergedPayload.rarity)
     },
     {
       key: 'type',
       label: 'Type',
       before: normalizeValue(currentValues.type),
-      after: normalizeValue(payload.type)
+      after: normalizeValue(mergedPayload.type)
     },
     {
       key: 'variantType',
       label: 'Variant',
       before: normalizeValue(currentValues.variantType),
-      after: normalizeValue(payload.variantType)
+      after: normalizeValue(mergedPayload.variantType)
     },
     {
       key: 'availableLanguages',
       label: 'Langues',
       before: normalizeValue(currentValues.availableLanguages),
-      after: normalizeValue(payload.availableLanguages)
+      after: normalizeValue(mergedPayload.availableLanguages)
     },
     {
       key: 'cardmarketProductId',
       label: 'ID Cardmarket',
       before: normalizeValue(currentValues.cardmarketProductId),
-      after: normalizeValue(payload.cardmarketProductId)
+      after: normalizeValue(mergedPayload.cardmarketProductId)
     },
     {
       key: 'imageUrl',
       label: 'Image URL',
       before: normalizeValue(currentValues.imageUrl),
-      after: normalizeValue(payload.imageUrl)
+      after: normalizeValue(mergedPayload.imageUrl)
     }
   ]
 
@@ -212,6 +247,10 @@ export default function AdminCommunityPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all')
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({})
+  const [sets, setSets] = useState<SetOption[]>([])
+  const [rarityOptions, setRarityOptions] = useState<string[]>([])
+  const [typeOptions, setTypeOptions] = useState<string[]>([])
+  const [variantOptions, setVariantOptions] = useState<string[]>([])
 
   const getAuthHeader = useCallback(async () => {
     const { data } = await supabase.auth.getSession()
@@ -235,7 +274,34 @@ export default function AdminCommunityPage() {
     }
 
     const submissions = Array.isArray(data?.submissions) ? data.submissions : []
+    const [setsData, raritiesData, typesData, variantsData] = await Promise.all([
+      supabase.from('sets').select('code, name').order('code', { ascending: true }),
+      supabase.from('cards').select('rarity').not('rarity', 'is', null),
+      supabase.from('cards').select('type').not('type', 'is', null),
+      supabase.from('card_prints').select('variant_type').not('variant_type', 'is', null)
+    ])
+
+    const rarityValues = (((raritiesData.data as Array<{ rarity: string | null }> | null) || []) as Array<{
+      rarity: string | null
+    }>)
+      .map((row) => String(row.rarity || '').trim())
+      .filter(Boolean)
+    const typeValues = (((typesData.data as Array<{ type: string | null }> | null) || []) as Array<{
+      type: string | null
+    }>)
+      .map((row) => String(row.type || '').trim())
+      .filter(Boolean)
+    const variantValues = (((variantsData.data as Array<{ variant_type: string | null }> | null) || []) as Array<{
+      variant_type: string | null
+    }>)
+      .map((row) => String(row.variant_type || '').trim())
+      .filter(Boolean)
+
     setRows(submissions)
+    setSets((((setsData.data as SetOption[] | null) || []) as SetOption[]))
+    setRarityOptions([...new Set(rarityValues)].sort((a, b) => a.localeCompare(b, 'fr')))
+    setTypeOptions([...new Set([...typeValues, 'DON!!'])].sort((a, b) => a.localeCompare(b, 'fr')))
+    setVariantOptions([...new Set(variantValues)].sort((a, b) => a.localeCompare(b, 'fr')))
     setComments(
       Object.fromEntries(
         submissions.map((row: AdminSubmissionRow) => [row.id, row.admin_comment || ''])
@@ -246,8 +312,30 @@ export default function AdminCommunityPage() {
         submissions.map((row: AdminSubmissionRow) => [
           row.id,
           {
+            setCode: String(row.payload?.setCode || ''),
+            nextSetCode: String(row.payload?.nextSetCode || row.payload?.setCode || ''),
+            baseCode: String(row.payload?.baseCode || ''),
             currentPrintCode: String(row.payload?.currentPrintCode || ''),
-            printCode: String(row.payload?.printCode || '')
+            printCode: String(row.payload?.printCode || ''),
+            name: String(row.payload?.name || ''),
+            rarity: String(row.payload?.rarity || ''),
+            type: String(row.payload?.type || ''),
+            variantType: String(row.payload?.variantType || ''),
+            imageUrl: String(row.payload?.imageUrl || ''),
+            cardmarketProductId: String(row.payload?.cardmarketProductId || ''),
+            availableLanguages: Array.isArray(row.payload?.availableLanguages)
+              ? (row.payload.availableLanguages as string[])
+              : [],
+            addressLine: String(row.payload?.addressLine || ''),
+            city: String(row.payload?.city || ''),
+            postalCode: String(row.payload?.postalCode || ''),
+            country: String(row.payload?.country || ''),
+            discordUrl: String(row.payload?.discordUrl || ''),
+            websiteUrl: String(row.payload?.websiteUrl || ''),
+            googleMapsUrl: String(row.payload?.googleMapsUrl || ''),
+            activities: Array.isArray(row.payload?.activities)
+              ? (row.payload.activities as string[])
+              : []
           }
         ])
       )
@@ -648,6 +736,58 @@ export default function AdminCommunityPage() {
                         gap: 8
                       }}
                     >
+                      {row.submission_type !== 'place_add' && (
+                        <>
+                          <select
+                            value={payloadOverrides[row.id]?.setCode || ''}
+                            onChange={(e) =>
+                              setPayloadOverrides((prev) => ({
+                                ...prev,
+                                [row.id]: { ...prev[row.id], setCode: e.target.value.toUpperCase() }
+                              }))
+                            }
+                            style={fieldStyle()}
+                          >
+                            <option value="">Set source</option>
+                            {sets.map((setRow) => (
+                              <option key={`source-${setRow.code}`} value={setRow.code}>
+                                {setRow.code}{setRow.name ? ` - ${setRow.name}` : ''}
+                              </option>
+                            ))}
+                          </select>
+                          <select
+                            value={payloadOverrides[row.id]?.nextSetCode || ''}
+                            onChange={(e) =>
+                              setPayloadOverrides((prev) => ({
+                                ...prev,
+                                [row.id]: {
+                                  ...prev[row.id],
+                                  nextSetCode: e.target.value.toUpperCase()
+                                }
+                              }))
+                            }
+                            style={fieldStyle()}
+                          >
+                            <option value="">Set cible</option>
+                            {sets.map((setRow) => (
+                              <option key={`target-${setRow.code}`} value={setRow.code}>
+                                {setRow.code}{setRow.name ? ` - ${setRow.name}` : ''}
+                              </option>
+                            ))}
+                          </select>
+                          <input
+                            value={payloadOverrides[row.id]?.baseCode || ''}
+                            onChange={(e) =>
+                              setPayloadOverrides((prev) => ({
+                                ...prev,
+                                [row.id]: { ...prev[row.id], baseCode: e.target.value.toUpperCase() }
+                              }))
+                            }
+                            placeholder="Base code"
+                            style={fieldStyle()}
+                          />
+                        </>
+                      )}
                       {row.submission_type === 'card_edit' && (
                         <input
                           value={payloadOverrides[row.id]?.currentPrintCode || ''}
@@ -680,7 +820,271 @@ export default function AdminCommunityPage() {
                           style={fieldStyle()}
                         />
                       )}
+                      {row.submission_type !== 'place_add' && (
+                        <>
+                          <input
+                            value={payloadOverrides[row.id]?.name || ''}
+                            onChange={(e) =>
+                              setPayloadOverrides((prev) => ({
+                                ...prev,
+                                [row.id]: { ...prev[row.id], name: e.target.value }
+                              }))
+                            }
+                            placeholder="Nom"
+                            style={fieldStyle()}
+                          />
+                          <select
+                            value={payloadOverrides[row.id]?.rarity || ''}
+                            onChange={(e) =>
+                              setPayloadOverrides((prev) => ({
+                                ...prev,
+                                [row.id]: { ...prev[row.id], rarity: e.target.value }
+                              }))
+                            }
+                            style={fieldStyle()}
+                          >
+                            <option value="">Rarete</option>
+                            {rarityOptions.map((option) => (
+                              <option key={`${row.id}-rarity-${option}`} value={option}>
+                                {option}
+                              </option>
+                            ))}
+                          </select>
+                          <select
+                            value={payloadOverrides[row.id]?.type || ''}
+                            onChange={(e) =>
+                              setPayloadOverrides((prev) => ({
+                                ...prev,
+                                [row.id]: { ...prev[row.id], type: e.target.value }
+                              }))
+                            }
+                            style={fieldStyle()}
+                          >
+                            <option value="">Type</option>
+                            {typeOptions.map((option) => (
+                              <option key={`${row.id}-type-${option}`} value={option}>
+                                {option}
+                              </option>
+                            ))}
+                          </select>
+                          <select
+                            value={payloadOverrides[row.id]?.variantType || ''}
+                            onChange={(e) =>
+                              setPayloadOverrides((prev) => ({
+                                ...prev,
+                                [row.id]: { ...prev[row.id], variantType: e.target.value }
+                              }))
+                            }
+                            style={fieldStyle()}
+                          >
+                            <option value="">Variant</option>
+                            {variantOptions.map((option) => (
+                              <option key={`${row.id}-variant-${option}`} value={option}>
+                                {option}
+                              </option>
+                            ))}
+                          </select>
+                          <input
+                            value={payloadOverrides[row.id]?.cardmarketProductId || ''}
+                            onChange={(e) =>
+                              setPayloadOverrides((prev) => ({
+                                ...prev,
+                                [row.id]: {
+                                  ...prev[row.id],
+                                  cardmarketProductId: e.target.value
+                                }
+                              }))
+                            }
+                            placeholder="ID Cardmarket"
+                            style={fieldStyle()}
+                          />
+                          <input
+                            value={payloadOverrides[row.id]?.imageUrl || ''}
+                            onChange={(e) =>
+                              setPayloadOverrides((prev) => ({
+                                ...prev,
+                                [row.id]: { ...prev[row.id], imageUrl: e.target.value }
+                              }))
+                            }
+                            placeholder="Image URL"
+                            style={fieldStyle()}
+                          />
+                          <div
+                            style={{
+                              border: '1px solid #e2e8f0',
+                              borderRadius: 10,
+                              padding: '10px 12px',
+                              display: 'flex',
+                              gap: 10,
+                              flexWrap: 'wrap'
+                            }}
+                          >
+                            {SET_LANGUAGE_CODES.map((language) => {
+                              const checked = Boolean(
+                                payloadOverrides[row.id]?.availableLanguages?.includes(language)
+                              )
+
+                              return (
+                                <label
+                                  key={`${row.id}-${language}`}
+                                  style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={(e) =>
+                                      setPayloadOverrides((prev) => {
+                                        const current =
+                                          prev[row.id]?.availableLanguages || []
+                                        return {
+                                          ...prev,
+                                          [row.id]: {
+                                            ...prev[row.id],
+                                            availableLanguages: e.target.checked
+                                              ? [...current, language]
+                                              : current.filter((entry) => entry !== language)
+                                          }
+                                        }
+                                      })
+                                    }
+                                  />
+                                  <span>{getCollectionLanguageShortLabel(language)}</span>
+                                </label>
+                              )
+                            })}
+                          </div>
+                        </>
+                      )}
+                      {row.submission_type === 'place_add' && (
+                        <>
+                          <input
+                            value={payloadOverrides[row.id]?.name || ''}
+                            onChange={(e) =>
+                              setPayloadOverrides((prev) => ({
+                                ...prev,
+                                [row.id]: { ...prev[row.id], name: e.target.value }
+                              }))
+                            }
+                            placeholder="Nom du lieu"
+                            style={fieldStyle()}
+                          />
+                          <input
+                            value={payloadOverrides[row.id]?.city || ''}
+                            onChange={(e) =>
+                              setPayloadOverrides((prev) => ({
+                                ...prev,
+                                [row.id]: { ...prev[row.id], city: e.target.value }
+                              }))
+                            }
+                            placeholder="Ville"
+                            style={fieldStyle()}
+                          />
+                          <input
+                            value={payloadOverrides[row.id]?.postalCode || ''}
+                            onChange={(e) =>
+                              setPayloadOverrides((prev) => ({
+                                ...prev,
+                                [row.id]: { ...prev[row.id], postalCode: e.target.value }
+                              }))
+                            }
+                            placeholder="Code postal"
+                            style={fieldStyle()}
+                          />
+                          <input
+                            value={payloadOverrides[row.id]?.addressLine || ''}
+                            onChange={(e) =>
+                              setPayloadOverrides((prev) => ({
+                                ...prev,
+                                [row.id]: { ...prev[row.id], addressLine: e.target.value }
+                              }))
+                            }
+                            placeholder="Adresse"
+                            style={fieldStyle()}
+                          />
+                          <input
+                            value={payloadOverrides[row.id]?.discordUrl || ''}
+                            onChange={(e) =>
+                              setPayloadOverrides((prev) => ({
+                                ...prev,
+                                [row.id]: { ...prev[row.id], discordUrl: e.target.value }
+                              }))
+                            }
+                            placeholder="Discord"
+                            style={fieldStyle()}
+                          />
+                          <input
+                            value={payloadOverrides[row.id]?.websiteUrl || ''}
+                            onChange={(e) =>
+                              setPayloadOverrides((prev) => ({
+                                ...prev,
+                                [row.id]: { ...prev[row.id], websiteUrl: e.target.value }
+                              }))
+                            }
+                            placeholder="Site web"
+                            style={fieldStyle()}
+                          />
+                          <input
+                            value={payloadOverrides[row.id]?.googleMapsUrl || ''}
+                            onChange={(e) =>
+                              setPayloadOverrides((prev) => ({
+                                ...prev,
+                                [row.id]: { ...prev[row.id], googleMapsUrl: e.target.value }
+                              }))
+                            }
+                            placeholder="Google Maps"
+                            style={fieldStyle()}
+                          />
+                          <input
+                            value={payloadOverrides[row.id]?.imageUrl || ''}
+                            onChange={(e) =>
+                              setPayloadOverrides((prev) => ({
+                                ...prev,
+                                [row.id]: { ...prev[row.id], imageUrl: e.target.value }
+                              }))
+                            }
+                            placeholder="Image URL"
+                            style={fieldStyle()}
+                          />
+                        </>
+                      )}
                     </div>
+
+                    {row.submission_type === 'place_add' && (
+                      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                        {PLACE_ACTIVITY_OPTIONS.map((activity) => {
+                          const checked = Boolean(
+                            payloadOverrides[row.id]?.activities?.includes(activity.value)
+                          )
+
+                          return (
+                            <label
+                              key={`${row.id}-${activity.value}`}
+                              style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={(e) =>
+                                  setPayloadOverrides((prev) => {
+                                    const current = prev[row.id]?.activities || []
+                                    return {
+                                      ...prev,
+                                      [row.id]: {
+                                        ...prev[row.id],
+                                        activities: e.target.checked
+                                          ? [...current, activity.value]
+                                          : current.filter((entry) => entry !== activity.value)
+                                      }
+                                    }
+                                  })
+                                }
+                              />
+                              <span>{activity.label}</span>
+                            </label>
+                          )
+                        })}
+                      </div>
+                    )}
 
                     <textarea
                       value={comments[row.id] || ''}
