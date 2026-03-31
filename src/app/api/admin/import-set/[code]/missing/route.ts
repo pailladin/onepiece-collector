@@ -5,12 +5,17 @@ import { isAdminEmail, parseAdminEmails } from '@/lib/admin'
 
 export const runtime = 'nodejs'
 
+const PROMO_IMPORT_CODE = 'PROMO'
+const PROMO_SET_NAME = 'Promos Speciales'
+
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
 function formatApiCode(code: string) {
+  if (normalizeSetCode(code) === PROMO_IMPORT_CODE) return PROMO_IMPORT_CODE
+
   const raw = (code || '').trim().toUpperCase().replace(/-/g, '')
 
   if (/^ST\d{2}$/i.test(raw)) {
@@ -25,6 +30,61 @@ function formatApiCode(code: string) {
   const prefix = raw.slice(0, -2)
   const suffix = raw.slice(-2)
   return `${prefix}-${suffix}`
+}
+
+function asTrimmedString(value: unknown) {
+  if (typeof value === 'string') return value.trim()
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value)
+  return ''
+}
+
+function normalizePromoApiCard(
+  rawCard: unknown,
+  fallbackIndex: number
+): Record<string, unknown> | null {
+  const row =
+    rawCard && typeof rawCard === 'object'
+      ? (rawCard as Record<string, unknown>)
+      : null
+  if (!row) return null
+
+  const cardSetId =
+    asTrimmedString(row.card_set_id) ||
+    asTrimmedString(row.cardSetId) ||
+    asTrimmedString(row.print_code) ||
+    asTrimmedString(row.printCode) ||
+    asTrimmedString(row.card_id) ||
+    asTrimmedString(row.cardId) ||
+    asTrimmedString(row.id)
+
+  if (!cardSetId) return null
+
+  const cardImage =
+    asTrimmedString(row.card_image) ||
+    asTrimmedString(row.cardImage) ||
+    asTrimmedString(row.image) ||
+    asTrimmedString(row.image_url) ||
+    asTrimmedString(row.imageUrl)
+
+  return {
+    set_id: PROMO_IMPORT_CODE,
+    set_name: PROMO_SET_NAME,
+    card_set_id: cardSetId.toUpperCase(),
+    card_name:
+      asTrimmedString(row.card_name) ||
+      asTrimmedString(row.cardName) ||
+      asTrimmedString(row.name_en) ||
+      asTrimmedString(row.name) ||
+      `Promo ${fallbackIndex + 1}`,
+    rarity: asTrimmedString(row.rarity) || 'Promo',
+    card_type: asTrimmedString(row.card_type) || asTrimmedString(row.type) || 'Promo',
+    card_image: cardImage,
+    card_image_id:
+      asTrimmedString(row.card_image_id) ||
+      asTrimmedString(row.cardImageId) ||
+      extractPrintCodeFromImageUrl(cardImage) ||
+      null
+  }
 }
 
 function normalizeSetCode(value: string | null | undefined) {
@@ -153,17 +213,41 @@ export async function GET(
 
   const apiCode = formatApiCode(normalizedCode)
   const isDeckCode = /^ST\d{2}$/i.test(normalizedCode)
-  const endpoint = isDeckCode
-    ? `https://www.optcgapi.com/api/decks/${apiCode}/`
-    : `https://www.optcgapi.com/api/sets/${apiCode}/`
-  const res = await fetch(endpoint)
-  if (!res.ok) {
-    return NextResponse.json({ error: `Erreur API ${res.status}` }, { status: 502 })
-  }
+  const isPromoImport = apiCode === PROMO_IMPORT_CODE
+  let apiCards: Array<Record<string, unknown>> = []
 
-  const apiCards = await res.json()
-  if (!Array.isArray(apiCards)) {
-    return NextResponse.json({ error: 'Reponse API invalide' }, { status: 502 })
+  if (isPromoImport) {
+    const promoRes = await fetch('https://www.optcgapi.com/api/allPromos/')
+    if (!promoRes.ok) {
+      return NextResponse.json(
+        { error: `Erreur API promos ${promoRes.status}` },
+        { status: 502 }
+      )
+    }
+
+    const promoRaw = await promoRes.json()
+    if (!Array.isArray(promoRaw)) {
+      return NextResponse.json({ error: 'Reponse API invalide' }, { status: 502 })
+    }
+
+    apiCards = promoRaw
+      .map((card, index) => normalizePromoApiCard(card, index))
+      .filter((card): card is Record<string, unknown> => Boolean(card))
+  } else {
+    const endpoint = isDeckCode
+      ? `https://www.optcgapi.com/api/decks/${apiCode}/`
+      : `https://www.optcgapi.com/api/sets/${apiCode}/`
+    const res = await fetch(endpoint)
+    if (!res.ok) {
+      return NextResponse.json({ error: `Erreur API ${res.status}` }, { status: 502 })
+    }
+
+    const setCards = await res.json()
+    if (!Array.isArray(setCards)) {
+      return NextResponse.json({ error: 'Reponse API invalide' }, { status: 502 })
+    }
+
+    apiCards = setCards as Array<Record<string, unknown>>
   }
 
   const seen = new Set<string>()
@@ -176,17 +260,18 @@ export async function GET(
   }> = []
 
   for (const card of apiCards) {
-    const apiSetCode = normalizeSetCode(card?.set_id)
-    if (apiSetCode && apiSetCode !== normalizedCode) continue
-    if (!card?.card_set_id) continue
+    const apiSetCode = normalizeSetCode(asTrimmedString(card.set_id))
+    if (!isPromoImport && apiSetCode && apiSetCode !== normalizedCode) continue
+    const cardSetId = asTrimmedString(card.card_set_id)
+    if (!cardSetId) continue
 
-    const imageUrl = card?.card_image?.toString().trim()
+    const imageUrl = asTrimmedString(card.card_image)
     const basePrintCode = resolvePrintCode({
-      providedPrintCode: card?.card_image_id?.toString().trim(),
+      providedPrintCode: asTrimmedString(card.card_image_id),
       imageUrl,
-      baseCode: card.card_set_id,
+      baseCode: cardSetId,
       setCode: normalizedCode,
-      variantTag: extractVariantTag(card?.card_name)
+      variantTag: extractVariantTag(asTrimmedString(card.card_name))
     })
     const printCode = await ensureSetScopedPrintCode({
       printCode: basePrintCode,
@@ -202,10 +287,10 @@ export async function GET(
 
     missing.push({
       printCode,
-      baseCode: card.card_set_id,
-      name: card.card_name || card.card_set_id,
-      rarity: card.rarity || '',
-      type: card.card_type || ''
+      baseCode: cardSetId,
+      name: asTrimmedString(card.card_name) || cardSetId,
+      rarity: asTrimmedString(card.rarity),
+      type: asTrimmedString(card.card_type)
     })
   }
 
