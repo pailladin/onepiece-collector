@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
+import { supabase } from '@/lib/supabaseClient'
 import {
   getLinkedProviders,
   getProviderLabel,
@@ -11,6 +12,8 @@ import {
   updatePassword
 } from '@/lib/authClient'
 import { getAuthErrorMessage } from '@/lib/authMessages'
+
+const DELETE_ACCOUNT_CONFIRMATION_TEXT = 'SUPPRIMER MON COMPTE'
 
 export function AccountPageClient() {
   const router = useRouter()
@@ -27,9 +30,12 @@ export function AccountPageClient() {
   const [linkedProviders, setLinkedProviders] = useState<Set<'google' | 'discord'>>(new Set())
   const [nextPassword, setNextPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [deleteConfirmationText, setDeleteConfirmationText] = useState('')
+  const [deleteLoading, setDeleteLoading] = useState(false)
 
   const canUpdatePassword =
     nextPassword.length >= 6 && confirmPassword.length >= 6 && nextPassword === confirmPassword
+  const canDeleteAccount = deleteConfirmationText.trim() === DELETE_ACCOUNT_CONFIRMATION_TEXT
   const googleLinked = linkedProviders.has('google')
   const discordLinked = linkedProviders.has('discord')
 
@@ -104,6 +110,44 @@ export function AccountPageClient() {
     setConfirmPassword('')
     setMessage('Mot de passe mis a jour avec succes.')
     setLoading(false)
+  }
+
+  const handleDeleteAccount = async () => {
+    if (!user || deleteLoading || !canDeleteAccount) return
+
+    setDeleteLoading(true)
+    setMessage('')
+
+    const { data } = await supabase.auth.getSession()
+    const accessToken = data.session?.access_token
+
+    if (!accessToken) {
+      setMessage('Session introuvable. Reconnecte-toi puis reessaie.')
+      setDeleteLoading(false)
+      return
+    }
+
+    const res = await fetch('/api/account/delete', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`
+      },
+      body: JSON.stringify({
+        confirmationText: deleteConfirmationText.trim()
+      })
+    })
+
+    const payload = await res.json().catch(() => ({}))
+
+    if (!res.ok) {
+      setMessage(payload?.error || 'Suppression impossible pour le moment.')
+      setDeleteLoading(false)
+      return
+    }
+
+    await supabase.auth.signOut().catch(() => null)
+    window.location.href = '/'
   }
 
   if (authLoading) {
@@ -286,6 +330,63 @@ export function AccountPageClient() {
             }}
           >
             {loading ? 'Mise a jour...' : 'Mettre a jour'}
+          </button>
+        </section>
+
+        <section
+          style={{
+            display: 'grid',
+            gap: 12,
+            padding: 16,
+            borderRadius: 14,
+            border: '1px solid #fecaca',
+            background: 'linear-gradient(180deg, #fff5f5 0%, #fff1f2 100%)'
+          }}
+        >
+          <div style={{ display: 'grid', gap: 6 }}>
+            <div style={{ fontWeight: 800, color: '#991b1b' }}>Zone de danger</div>
+            <div style={{ fontSize: 13, color: '#7f1d1d', lineHeight: 1.5 }}>
+              La suppression du compte est definitive. Elle efface ton profil, ta collection, ton
+              historique de valeur, ta wishlist, tes liens d&apos;amis, tes demandes en attente et
+              tes liaisons externes.
+            </div>
+            <div style={{ fontSize: 13, color: '#7f1d1d', lineHeight: 1.5 }}>
+              Pour confirmer, recopie exactement le texte suivant:
+              <strong> {DELETE_ACCOUNT_CONFIRMATION_TEXT}</strong>
+            </div>
+          </div>
+
+          <input
+            type="text"
+            value={deleteConfirmationText}
+            onChange={(e) => setDeleteConfirmationText(e.target.value)}
+            placeholder={DELETE_ACCOUNT_CONFIRMATION_TEXT}
+            style={{
+              width: '100%',
+              padding: '10px 12px',
+              borderRadius: 8,
+              border: '1px solid #fca5a5',
+              outline: 'none',
+              boxSizing: 'border-box',
+              background: '#fff'
+            }}
+          />
+
+          <button
+            onClick={handleDeleteAccount}
+            disabled={!canDeleteAccount || deleteLoading}
+            style={{
+              justifySelf: 'start',
+              background: '#b91c1c',
+              color: '#fff',
+              border: 'none',
+              borderRadius: 8,
+              padding: '10px 14px',
+              cursor: !canDeleteAccount || deleteLoading ? 'not-allowed' : 'pointer',
+              opacity: !canDeleteAccount || deleteLoading ? 0.6 : 1
+            }}
+          >
+            {deleteLoading ? 'Suppression du compte...' : 'Supprimer mon compte'}
           </button>
         </section>
 
