@@ -445,22 +445,23 @@ export function RootShell({
 
                   <Link
                     href="/lieux"
-                    className="root-shell-admin-link"
+                    className="root-shell-nav-link"
                     style={{
-                      color: '#fff7ed',
                       textDecoration: 'none',
-                      padding: '18px 14px',
-                      borderRadius: 999,
-                      background: 'rgba(249, 115, 22, 0.82)',
-                      border: '1px solid rgba(255,255,255,0.28)',
-                      fontWeight: 700,
-                      fontSize: 16,
                       display: 'inline-flex',
                       alignItems: 'center',
-                      gap: 7
+                      padding: 0,
+                      lineHeight: 0
                     }}
                   >
-                    Lieux
+                    <Image
+                      src="/bouton_lieu.png?v=1"
+                      alt="Lieux"
+                      className="root-shell-nav-image"
+                      width={96}
+                      height={64}
+                      unoptimized
+                    />
                   </Link>
 
                   {user && canAccessAdmin && (
