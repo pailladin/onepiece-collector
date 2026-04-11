@@ -43,6 +43,10 @@ function shortDate(value: string) {
   return new Intl.DateTimeFormat('fr-FR').format(parsed)
 }
 
+function weekLabel(start: string, end: string) {
+  return `${shortDate(start)} -> ${shortDate(end)}`
+}
+
 export default function CollectionHistoryPage() {
   const { user, loading: authLoading } = useAuth()
   const [loading, setLoading] = useState(true)
@@ -72,6 +76,8 @@ export default function CollectionHistoryPage() {
       weeks
         .map((week) => ({
           x: week.periodStart,
+          periodStart: week.periodStart,
+          periodEnd: week.periodEnd,
           value:
             selectedSetCode === 'TOTAL'
               ? week.total?.value || 0
@@ -135,7 +141,7 @@ export default function CollectionHistoryPage() {
         <div>
           <h1 style={{ margin: 0 }}>Suivi valeur collection</h1>
           <div style={{ marginTop: 4, color: '#475569', fontSize: 14 }}>
-            Evolution hebdomadaire par set.
+            Evolution hebdomadaire par set. Chaque point correspond a un snapshot pris en fin de semaine.
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -169,6 +175,9 @@ export default function CollectionHistoryPage() {
         </div>
 
         <div style={{ fontWeight: 700, marginBottom: 8 }}>Evolution: {selectedSetLabel}</div>
+        <div style={{ marginBottom: 12, color: '#64748b', fontSize: 13 }}>
+          Date affichee = date du snapshot hebdomadaire, pas date de debut de semaine.
+        </div>
         {series.length === 0 ? (
           <div style={{ color: '#64748b' }}>Aucune semaine sauvegardee.</div>
         ) : (
@@ -199,7 +208,7 @@ export default function CollectionHistoryPage() {
                       <g key={p.row.x}>
                         <circle cx={p.x} cy={p.y} r="4" fill="#0ea5e9" />
                         <text x={p.x} y={238} textAnchor="middle" fontSize="10" fill="#475569">
-                          {shortDate(p.row.x)}
+                          {shortDate(p.row.periodEnd)}
                         </text>
                       </g>
                     ))}
@@ -216,7 +225,8 @@ export default function CollectionHistoryPage() {
             <div style={{ marginTop: 8, display: 'grid', gap: 4 }}>
               {[...series].reverse().map((row) => (
                 <div key={`legend-${row.x}`} style={{ fontSize: 12, color: '#334155' }}>
-                  {shortDate(row.x)}: <strong>{formatCurrency(row.value, row.currency)}</strong>
+                  Snapshot du {shortDate(row.periodEnd)} ({weekLabel(row.periodStart, row.periodEnd)}):{' '}
+                  <strong>{formatCurrency(row.value, row.currency)}</strong>
                 </div>
               ))}
             </div>
