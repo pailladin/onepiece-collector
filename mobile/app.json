@@ -1,0 +1,28 @@
+{
+  "expo": {
+    "name": "One Piece Collector",
+    "slug": "onepiece-collector-mobile",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "backgroundColor": "#fff7ed"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.onepiececollector.mobile"
+    },
+    "android": {
+      "package": "com.onepiececollector.mobile",
+      "adaptiveIcon": {
+        "backgroundColor": "#fff7ed"
+      }
+    },
+    "web": {
+      "bundler": "metro"
+    }
+  }
+}

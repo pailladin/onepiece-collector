@@ -7,6 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "mobile:start": "npm --prefix mobile start",
+    "mobile:android": "npm --prefix mobile run android",
+    "mobile:ios": "npm --prefix mobile run ios",
     "cardmarket:extract-local": "node scripts/cardmarket-extract-local.mjs",
     "cardmarket:extract-list-local": "node scripts/cardmarket-extract-list-local.mjs"
   },
