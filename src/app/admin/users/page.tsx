@@ -17,6 +17,14 @@ type AdminUser = {
   emailConfirmedAt: string | null
 }
 
+type SortKey =
+  | 'email'
+  | 'startedSetsCount'
+  | 'cardsCount'
+  | 'createdAt'
+  | 'lastSignInAt'
+  | 'emailConfirmedAt'
+
 function formatDate(value: string | null) {
   if (!value) return '-'
   const date = new Date(value)
@@ -34,6 +42,9 @@ export default function AdminUsersPage() {
   const [selected, setSelected] = useState<Record<string, boolean>>({})
   const [logs, setLogs] = useState<string[]>([])
   const [isDeleting, setIsDeleting] = useState(false)
+  const [generatedAt, setGeneratedAt] = useState<string | null>(null)
+  const [sortKey, setSortKey] = useState<SortKey>('createdAt')
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
 
   const selectedIds = useMemo(
     () =>
@@ -41,6 +52,59 @@ export default function AdminUsersPage() {
         .filter(([, checked]) => checked)
         .map(([id]) => id),
     [selected]
+  )
+
+  const sortedUsers = useMemo(() => {
+    const getSortValue = (row: AdminUser) => {
+      if (sortKey === 'email') return `${row.email || ''} ${row.username || ''}`.toLowerCase()
+      if (sortKey === 'startedSetsCount') return row.startedSetsCount
+      if (sortKey === 'cardsCount') return row.cardsCount
+      return row[sortKey] ? Date.parse(row[sortKey] || '') || 0 : 0
+    }
+
+    return [...users].sort((a, b) => {
+      const av = getSortValue(a)
+      const bv = getSortValue(b)
+      const direction = sortDirection === 'asc' ? 1 : -1
+
+      if (typeof av === 'number' && typeof bv === 'number') {
+        return (av - bv) * direction
+      }
+
+      return String(av).localeCompare(String(bv)) * direction
+    })
+  }, [sortDirection, sortKey, users])
+
+  const changeSort = (nextKey: SortKey) => {
+    if (sortKey === nextKey) {
+      setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'))
+      return
+    }
+
+    setSortKey(nextKey)
+    setSortDirection(nextKey === 'email' ? 'asc' : 'desc')
+  }
+
+  const renderSortHeader = (key: SortKey, label: string) => (
+    <button
+      type="button"
+      onClick={() => changeSort(key)}
+      style={{
+        border: 'none',
+        background: 'transparent',
+        padding: 0,
+        font: 'inherit',
+        fontWeight: 600,
+        cursor: 'pointer',
+        textAlign: 'left',
+        color: '#0f172a'
+      }}
+    >
+      {label}
+      <span style={{ marginLeft: 6, color: sortKey === key ? '#1d4ed8' : '#94a3b8' }}>
+        {sortKey === key ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}
+      </span>
+    </button>
   )
 
   const getAuthHeader = useCallback(async () => {
@@ -54,7 +118,10 @@ export default function AdminUsersPage() {
   const loadUsers = useCallback(async () => {
     setLoading(true)
     const authHeaders = await getAuthHeader()
-    const res = await fetch('/api/admin/users', { headers: authHeaders })
+    const res = await fetch('/api/admin/users', {
+      headers: authHeaders,
+      cache: 'no-store'
+    })
     const data = await res.json().catch(() => ({}))
     if (!res.ok) {
       setUsers([])
@@ -66,6 +133,7 @@ export default function AdminUsersPage() {
 
     const rows: AdminUser[] = Array.isArray(data?.users) ? data.users : []
     setUsers(rows)
+    setGeneratedAt(typeof data?.generatedAt === 'string' ? data.generatedAt : null)
     setSelected(
       Object.fromEntries(rows.map((row) => [row.id, false])) as Record<string, boolean>
     )
@@ -146,9 +214,19 @@ export default function AdminUsersPage() {
       </div>
 
       <h1 style={{ marginBottom: 8 }}>Admin - Utilisateurs</h1>
-      <div style={{ marginBottom: 14 }}>{users.length} utilisateur(s)</div>
+      <div style={{ marginBottom: 14 }}>
+        {users.length} utilisateur(s)
+        {generatedAt ? (
+          <span style={{ marginLeft: 10, color: '#64748b', fontSize: 14 }}>
+            Actualise le {formatDate(generatedAt)}
+          </span>
+        ) : null}
+      </div>
 
       <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
+        <button onClick={() => void loadUsers()} disabled={loading || isDeleting}>
+          Actualiser
+        </button>
         <button onClick={() => toggleAll(true)}>Tout cocher</button>
         <button onClick={() => toggleAll(false)}>Tout decocher</button>
         <button
@@ -188,19 +266,19 @@ export default function AdminUsersPage() {
           }}
         >
           <div />
-          <div>Email / Pseudo</div>
-          <div>Sets demarres</div>
-          <div>Cartes</div>
-          <div>Cree le</div>
-          <div>Derniere connexion</div>
-          <div>Email confirme</div>
+          <div>{renderSortHeader('email', 'Email / Pseudo')}</div>
+          <div>{renderSortHeader('startedSetsCount', 'Sets')}</div>
+          <div>{renderSortHeader('cardsCount', 'Cartes')}</div>
+          <div>{renderSortHeader('createdAt', 'Cree le')}</div>
+          <div>{renderSortHeader('lastSignInAt', 'Derniere connexion')}</div>
+          <div>{renderSortHeader('emailConfirmedAt', 'Email confirme')}</div>
           <div>Support</div>
         </div>
 
         {users.length === 0 ? (
           <div style={{ padding: 12 }}>Aucun utilisateur.</div>
         ) : (
-          users.map((row) => (
+          sortedUsers.map((row) => (
             <div
               key={row.id}
               style={{

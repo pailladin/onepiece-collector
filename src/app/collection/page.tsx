@@ -10,6 +10,7 @@ import {
   type SetStats
 } from '@/lib/collections/fetchUserSetStats'
 import { CollectionSetsGrid } from '@/components/CollectionSetsGrid'
+import { CollectionCardsSearch } from '@/components/CollectionCardsSearch'
 import { aggregateCollectionRows, fetchAllUserCollectionRows } from '@/lib/collections/quantities'
 import { buildCardmarketProductOrSearchUrl } from '@/lib/cardmarketUrls'
 
@@ -99,6 +100,7 @@ export default function CollectionPage() {
   const [opportunityError, setOpportunityError] = useState<string | null>(null)
   const [showOpportunityModal, setShowOpportunityModal] = useState(false)
   const [opportunityRows, setOpportunityRows] = useState<OpportunityRow[]>([])
+  const [collectionMode, setCollectionMode] = useState<'sets' | 'cards'>('sets')
 
   useEffect(() => {
     const syncCompactActions = () => {
@@ -484,172 +486,235 @@ export default function CollectionPage() {
 
   return (
     <>
-      <CollectionSetsGrid
-        title="Ma Collection"
-        sets={visibleSets}
-        stats={stats}
-        getSetHref={(setCode) => `/collection/${setCode}`}
-        headerActions={
-          useCompactActions ? (
-            <div
-              className="collection-page-actions collection-page-actions-compact"
+      <div style={{ padding: useCompactActions ? '0 0 12px' : '40px 40px 0' }}>
+        {!useCompactActions && (
+          <h1 style={{ fontSize: 24, fontWeight: 'bold', margin: '0 0 18px' }}>Ma Collection</h1>
+        )}
+        <div
+          style={{
+            border: '1px solid #d1d5db',
+            borderRadius: 12,
+            padding: useCompactActions ? 10 : 12,
+            background: '#ffffffd1',
+            marginBottom: useCompactActions ? 12 : 18
+          }}
+        >
+          <div style={{ fontSize: 12, color: '#475569', marginBottom: 8 }}>Mode de navigation</div>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: useCompactActions ? 'repeat(2, minmax(0, 1fr))' : 'repeat(2, max-content)',
+              gap: 10
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => setCollectionMode('sets')}
               style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(5, minmax(0, 1fr))',
-                gap: 4,
-                width: '100%',
-                margin: '0 auto'
+                padding: useCompactActions ? '10px 12px' : '10px 14px',
+                borderRadius: 999,
+                border: collectionMode === 'sets' ? '1px solid #1d4ed8' : '1px solid #cbd5e1',
+                background: collectionMode === 'sets' ? '#dbeafe' : '#fff',
+                color: collectionMode === 'sets' ? '#1d4ed8' : '#334155',
+                fontWeight: 700,
+                cursor: 'pointer',
+                minWidth: 0
               }}
             >
-              <Link
-                href="/collection/wishlist"
-                className="collection-page-action collection-page-action-pink"
+              Vue par set
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setCollectionMode('cards')}
+              style={{
+                padding: useCompactActions ? '10px 12px' : '10px 14px',
+                borderRadius: 999,
+                border: collectionMode === 'cards' ? '1px solid #1d4ed8' : '1px solid #cbd5e1',
+                background: collectionMode === 'cards' ? '#dbeafe' : '#fff',
+                color: collectionMode === 'cards' ? '#1d4ed8' : '#334155',
+                fontWeight: 700,
+                cursor: 'pointer',
+                minWidth: 0
+              }}
+            >
+              Recherche dans ma collection
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {collectionMode === 'sets' ? (
+        <CollectionSetsGrid
+          title="Ma Collection"
+          sets={visibleSets}
+          stats={stats}
+          getSetHref={(setCode) => `/collection/${setCode}`}
+          hideTitle
+          headerActions={
+            useCompactActions ? (
+              <div
+                className="collection-page-actions collection-page-actions-compact"
                 style={{
-                  ...collectionActionBaseStyle,
-                  border: 'none',
-                  background: '#db2777',
-                  minHeight: 32,
-                  minWidth: 0,
-                  padding: '4px 2px',
-                  fontSize: 10
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(5, minmax(0, 1fr))',
+                  gap: 4,
+                  width: '100%',
+                  margin: '0 auto'
                 }}
               >
-                Wishlist
-              </Link>
-              <Link
-                href="/collection/history"
-                className="collection-page-action collection-page-action-blue"
-                style={{
-                  ...collectionActionBaseStyle,
-                  border: 'none',
-                  background: '#1d4ed8',
-                  minHeight: 32,
-                  minWidth: 0,
-                  padding: '4px 2px',
-                  fontSize: 10
-                }}
-              >
-                Valeur
-              </Link>
-              <Link
-                href="/collection/top10"
-                className="collection-page-action collection-page-action-green"
-                style={{
-                  ...collectionActionBaseStyle,
-                  border: 'none',
-                  background: '#0f766e',
-                  minHeight: 32,
-                  minWidth: 0,
-                  padding: '4px 2px',
-                  fontSize: 10
-                }}
-              >
-                TOP10
-              </Link>
-              <button
-                onClick={calculateCollectionPrice}
-                disabled={priceLoading || visibleSets.length === 0}
-                className="collection-page-action collection-page-action-blue"
-                style={{
-                  ...collectionActionBaseStyle,
-                  border: 'none',
-                  background: '#2563eb',
-                  cursor: priceLoading || visibleSets.length === 0 ? 'not-allowed' : 'pointer',
-                  opacity: priceLoading || visibleSets.length === 0 ? 0.6 : 1,
-                  minHeight: 32,
-                  minWidth: 0,
-                  padding: '4px 2px',
-                  fontSize: 10
-                }}
-              >
-                {priceLoading ? 'Calcul...' : 'Prix'}
-              </button>
-              <button
-                onClick={calculateOpportunities}
-                disabled={opportunityLoading || visibleSets.length === 0}
-                className="collection-page-action collection-page-action-purple"
-                style={{
-                  ...collectionActionBaseStyle,
-                  border: 'none',
-                  background: '#7c3aed',
-                  cursor: opportunityLoading || visibleSets.length === 0 ? 'not-allowed' : 'pointer',
-                  opacity: opportunityLoading || visibleSets.length === 0 ? 0.6 : 1,
-                  minHeight: 32,
-                  minWidth: 0,
-                  padding: '4px 2px',
-                  fontSize: 10
-                }}
-              >
-                {opportunityLoading ? 'Analyse...' : 'Achats'}
-              </button>
-            </div>
-          ) : (
-            <div className="collection-page-actions" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <Link
-                href="/collection/wishlist"
-                className="collection-page-action collection-page-action-pink"
-                style={{
-                  ...collectionActionBaseStyle,
-                  border: '1px solid #db2777',
-                  background: '#db2777'
-                }}
-              >
-                Wishlist
-              </Link>
-              <Link
-                href="/collection/history"
-                className="collection-page-action collection-page-action-blue"
-                style={{
-                  ...collectionActionBaseStyle,
-                  border: '1px solid #1d4ed8',
-                  background: '#1d4ed8'
-                }}
-              >
-                Suivi valeur
-              </Link>
-              <Link
-                href="/collection/top10"
-                className="collection-page-action collection-page-action-green"
-                style={{
-                  ...collectionActionBaseStyle,
-                  border: '1px solid #0f766e',
-                  background: '#0f766e'
-                }}
-              >
-                TOP10 cartes
-              </Link>
-              <button
-                onClick={calculateCollectionPrice}
-                disabled={priceLoading || visibleSets.length === 0}
-                className="collection-page-action collection-page-action-blue"
-                style={{
-                  ...collectionActionBaseStyle,
-                  border: '1px solid #2563eb',
-                  background: '#2563eb',
-                  cursor: priceLoading || visibleSets.length === 0 ? 'not-allowed' : 'pointer',
-                  opacity: priceLoading || visibleSets.length === 0 ? 0.6 : 1
-                }}
-              >
-                {priceLoading ? 'Calcul en cours...' : 'Calculer prix collection'}
-              </button>
-              <button
-                onClick={calculateOpportunities}
-                disabled={opportunityLoading || visibleSets.length === 0}
-                className="collection-page-action collection-page-action-purple"
-                style={{
-                  ...collectionActionBaseStyle,
-                  border: '1px solid #7c3aed',
-                  background: '#7c3aed',
-                  cursor: opportunityLoading || visibleSets.length === 0 ? 'not-allowed' : 'pointer',
-                  opacity: opportunityLoading || visibleSets.length === 0 ? 0.6 : 1
-                }}
-              >
-                {opportunityLoading ? 'Analyse en cours...' : "Opportunites d'achat"}
-              </button>
-            </div>
-          )
-        }
-      />
+                <Link
+                  href="/collection/wishlist"
+                  className="collection-page-action collection-page-action-pink"
+                  style={{
+                    ...collectionActionBaseStyle,
+                    border: 'none',
+                    background: '#db2777',
+                    minHeight: 32,
+                    minWidth: 0,
+                    padding: '4px 2px',
+                    fontSize: 10
+                  }}
+                >
+                  Wishlist
+                </Link>
+                <Link
+                  href="/collection/history"
+                  className="collection-page-action collection-page-action-blue"
+                  style={{
+                    ...collectionActionBaseStyle,
+                    border: 'none',
+                    background: '#1d4ed8',
+                    minHeight: 32,
+                    minWidth: 0,
+                    padding: '4px 2px',
+                    fontSize: 10
+                  }}
+                >
+                  Valeur
+                </Link>
+                <Link
+                  href="/collection/top10"
+                  className="collection-page-action collection-page-action-green"
+                  style={{
+                    ...collectionActionBaseStyle,
+                    border: 'none',
+                    background: '#0f766e',
+                    minHeight: 32,
+                    minWidth: 0,
+                    padding: '4px 2px',
+                    fontSize: 10
+                  }}
+                >
+                  TOP10
+                </Link>
+                <button
+                  onClick={calculateCollectionPrice}
+                  disabled={priceLoading || visibleSets.length === 0}
+                  className="collection-page-action collection-page-action-blue"
+                  style={{
+                    ...collectionActionBaseStyle,
+                    border: 'none',
+                    background: '#2563eb',
+                    cursor: priceLoading || visibleSets.length === 0 ? 'not-allowed' : 'pointer',
+                    opacity: priceLoading || visibleSets.length === 0 ? 0.6 : 1,
+                    minHeight: 32,
+                    minWidth: 0,
+                    padding: '4px 2px',
+                    fontSize: 10
+                  }}
+                >
+                  {priceLoading ? 'Calcul...' : 'Prix'}
+                </button>
+                <button
+                  onClick={calculateOpportunities}
+                  disabled={opportunityLoading || visibleSets.length === 0}
+                  className="collection-page-action collection-page-action-purple"
+                  style={{
+                    ...collectionActionBaseStyle,
+                    border: 'none',
+                    background: '#7c3aed',
+                    cursor: opportunityLoading || visibleSets.length === 0 ? 'not-allowed' : 'pointer',
+                    opacity: opportunityLoading || visibleSets.length === 0 ? 0.6 : 1,
+                    minHeight: 32,
+                    minWidth: 0,
+                    padding: '4px 2px',
+                    fontSize: 10
+                  }}
+                >
+                  {opportunityLoading ? 'Analyse...' : 'Achats'}
+                </button>
+              </div>
+            ) : (
+              <div className="collection-page-actions" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <Link
+                  href="/collection/wishlist"
+                  className="collection-page-action collection-page-action-pink"
+                  style={{
+                    ...collectionActionBaseStyle,
+                    border: '1px solid #db2777',
+                    background: '#db2777'
+                  }}
+                >
+                  Wishlist
+                </Link>
+                <Link
+                  href="/collection/history"
+                  className="collection-page-action collection-page-action-blue"
+                  style={{
+                    ...collectionActionBaseStyle,
+                    border: '1px solid #1d4ed8',
+                    background: '#1d4ed8'
+                  }}
+                >
+                  Suivi valeur
+                </Link>
+                <Link
+                  href="/collection/top10"
+                  className="collection-page-action collection-page-action-green"
+                  style={{
+                    ...collectionActionBaseStyle,
+                    border: '1px solid #0f766e',
+                    background: '#0f766e'
+                  }}
+                >
+                  TOP10 cartes
+                </Link>
+                <button
+                  onClick={calculateCollectionPrice}
+                  disabled={priceLoading || visibleSets.length === 0}
+                  className="collection-page-action collection-page-action-blue"
+                  style={{
+                    ...collectionActionBaseStyle,
+                    border: '1px solid #2563eb',
+                    background: '#2563eb',
+                    cursor: priceLoading || visibleSets.length === 0 ? 'not-allowed' : 'pointer',
+                    opacity: priceLoading || visibleSets.length === 0 ? 0.6 : 1
+                  }}
+                >
+                  {priceLoading ? 'Calcul en cours...' : 'Calculer prix collection'}
+                </button>
+                <button
+                  onClick={calculateOpportunities}
+                  disabled={opportunityLoading || visibleSets.length === 0}
+                  className="collection-page-action collection-page-action-purple"
+                  style={{
+                    ...collectionActionBaseStyle,
+                    border: '1px solid #7c3aed',
+                    background: '#7c3aed',
+                    cursor: opportunityLoading || visibleSets.length === 0 ? 'not-allowed' : 'pointer',
+                    opacity: opportunityLoading || visibleSets.length === 0 ? 0.6 : 1
+                  }}
+                >
+                  {opportunityLoading ? 'Analyse en cours...' : "Opportunites d'achat"}
+                </button>
+              </div>
+            )
+          }
+        />
+      ) : (
+        <CollectionCardsSearch />
+      )}
 
       {priceError && (
         <div style={{ padding: '0 40px 24px', color: '#b91c1c', fontSize: 13 }}>
@@ -885,9 +950,9 @@ export default function CollectionPage() {
               }}
             >
               <div>
-                <h2 style={{ margin: 0, fontSize: 18 }}>Opportunites d'achat (cartes en baisse)</h2>
+                <h2 style={{ margin: 0, fontSize: 18 }}>Opportunites d&apos;achat (cartes en baisse)</h2>
                 <div style={{ fontSize: 13, color: '#475569', marginTop: 4 }}>
-                  Tri par indice d'interet (baisse + spread + accessibilite prix).
+                  Tri par indice d&apos;interet (baisse + spread + accessibilite prix).
                 </div>
               </div>
               <button onClick={() => setShowOpportunityModal(false)}>Fermer</button>
@@ -904,7 +969,7 @@ export default function CollectionPage() {
                       color: '#475569'
                     }}
                   >
-                    Aucune opportunite detectee pour l'instant sur les cartes manquantes.
+                    Aucune opportunite detectee pour l&apos;instant sur les cartes manquantes.
                   </div>
                 ) : (
                   opportunityRows.map((row) => (
@@ -1037,7 +1102,7 @@ export default function CollectionPage() {
 
                 {opportunityRows.length === 0 ? (
                   <div style={{ padding: 12 }}>
-                    Aucune opportunite detectee pour l'instant sur les cartes manquantes.
+                    Aucune opportunite detectee pour l&apos;instant sur les cartes manquantes.
                   </div>
                 ) : (
                   opportunityRows.map((row) => (

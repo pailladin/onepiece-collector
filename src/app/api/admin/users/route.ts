@@ -4,6 +4,8 @@ import { getRequestUser } from '@/lib/server/authUser'
 import { isAdminEmail, parseAdminEmails } from '@/lib/admin'
 
 export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -32,6 +34,38 @@ function chunkArray<T>(items: T[], size: number) {
     chunks.push(items.slice(i, i + size))
   }
   return chunks
+}
+
+async function fetchCollectionRowsForUsers(userIds: string[]) {
+  const rows: CollectionRow[] = []
+  const pageSize = 1000
+
+  for (const userIdsChunk of chunkArray(userIds, 80)) {
+    let from = 0
+
+    while (true) {
+      const { data, error } = await supabase
+        .from('collections')
+        .select('user_id, card_print_id, quantity')
+        .in('user_id', userIdsChunk)
+        .gt('quantity', 0)
+        .order('user_id', { ascending: true })
+        .order('card_print_id', { ascending: true })
+        .range(from, from + pageSize - 1)
+
+      if (error) {
+        throw new Error(`Erreur lecture collections: ${error.message}`)
+      }
+
+      const pageRows = ((data as CollectionRow[] | null) || []) as CollectionRow[]
+      rows.push(...pageRows)
+
+      if (pageRows.length < pageSize) break
+      from += pageSize
+    }
+  }
+
+  return rows
 }
 
 export async function GET(request: Request) {
@@ -67,55 +101,49 @@ export async function GET(request: Request) {
   const cardsCountByUserId = new Map<string, number>()
   const startedSetsByUserId = new Map<string, Set<string>>()
   if (userIds.length > 0) {
-    const { data: profilesData, error: profilesError } = await supabase
-      .from('profiles')
-      .select('id, username')
-      .in('id', userIds)
+    try {
+      const { data: profilesData, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, username')
+        .in('id', userIds)
 
-    if (!profilesError) {
-      const profiles = (profilesData as ProfileRow[] | null) || []
-      profileById = new Map(profiles.map((row) => [row.id, row.username]))
-    }
-
-    const collectionRows: CollectionRow[] = []
-    for (const userIdsChunk of chunkArray(userIds, 200)) {
-      const { data: collectionsData, error: collectionsError } = await supabase
-        .from('collections')
-        .select('user_id, card_print_id, quantity')
-        .in('user_id', userIdsChunk)
-        .gt('quantity', 0)
-
-      if (!collectionsError) {
-        collectionRows.push(
-          ...((((collectionsData as CollectionRow[] | null) || []) as CollectionRow[]))
-        )
+      if (!profilesError) {
+        const profiles = (profilesData as ProfileRow[] | null) || []
+        profileById = new Map(profiles.map((row) => [row.id, row.username]))
       }
-    }
 
-    const printIds = [...new Set(collectionRows.map((row) => row.card_print_id))]
-    const printToSetId = new Map<string, string>()
-    for (const printIdsChunk of chunkArray(printIds, 500)) {
-      const { data: printsData, error: printsError } = await supabase
-        .from('card_prints')
-        .select('id, distribution_set_id')
-        .in('id', printIdsChunk)
+      const collectionRows = await fetchCollectionRowsForUsers(userIds)
 
-      if (!printsError) {
+      const printIds = [...new Set(collectionRows.map((row) => row.card_print_id))]
+      const printToSetId = new Map<string, string>()
+      for (const printIdsChunk of chunkArray(printIds, 80)) {
+        const { data: printsData, error: printsError } = await supabase
+          .from('card_prints')
+          .select('id, distribution_set_id')
+          .in('id', printIdsChunk)
+
+        if (printsError) {
+          throw new Error(`Erreur lecture prints: ${printsError.message}`)
+        }
+
         ;((((printsData as CardPrintRow[] | null) || []) as CardPrintRow[])).forEach((row) => {
           printToSetId.set(row.id, row.distribution_set_id)
         })
       }
-    }
 
-    for (const row of collectionRows) {
-      cardsCountByUserId.set(row.user_id, (cardsCountByUserId.get(row.user_id) || 0) + (row.quantity || 0))
+      for (const row of collectionRows) {
+        cardsCountByUserId.set(row.user_id, (cardsCountByUserId.get(row.user_id) || 0) + (row.quantity || 0))
 
-      const setId = printToSetId.get(row.card_print_id)
-      if (!setId) continue
-      if (!startedSetsByUserId.has(row.user_id)) {
-        startedSetsByUserId.set(row.user_id, new Set<string>())
+        const setId = printToSetId.get(row.card_print_id)
+        if (!setId) continue
+        if (!startedSetsByUserId.has(row.user_id)) {
+          startedSetsByUserId.set(row.user_id, new Set<string>())
+        }
+        startedSetsByUserId.get(row.user_id)?.add(setId)
       }
-      startedSetsByUserId.get(row.user_id)?.add(setId)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Erreur chargement statistiques users'
+      return NextResponse.json({ error: message }, { status: 500 })
     }
   }
 
@@ -140,5 +168,8 @@ export async function GET(request: Request) {
       return bv - av
     })
 
-  return NextResponse.json({ users: payload })
+  return NextResponse.json(
+    { users: payload, generatedAt: new Date().toISOString() },
+    { headers: { 'Cache-Control': 'no-store, max-age=0' } }
+  )
 }

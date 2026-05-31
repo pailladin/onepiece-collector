@@ -47,12 +47,17 @@ function weekLabel(start: string, end: string) {
   return `${shortDate(start)} -> ${shortDate(end)}`
 }
 
+function formatCardCount(count: number) {
+  return `${count} ${count > 1 ? 'cartes' : 'carte'}`
+}
+
 export default function CollectionHistoryPage() {
   const { user, loading: authLoading } = useAuth()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [weeks, setWeeks] = useState<WeekRow[]>([])
   const [selectedSetCode, setSelectedSetCode] = useState('TOTAL')
+  const [activePointIndex, setActivePointIndex] = useState<number | null>(null)
 
   const setOptions = useMemo<SetOption[]>(
     () => {
@@ -82,6 +87,10 @@ export default function CollectionHistoryPage() {
             selectedSetCode === 'TOTAL'
               ? week.total?.value || 0
               : week.sets.find((row) => row.setCode === selectedSetCode)?.value || 0,
+          cardCount:
+            selectedSetCode === 'TOTAL'
+              ? week.total?.expectedCount || 0
+              : week.sets.find((row) => row.setCode === selectedSetCode)?.expectedCount || 0,
           currency: week.total?.currency || 'EUR'
         })),
     [weeks, selectedSetCode]
@@ -191,9 +200,21 @@ export default function CollectionHistoryPage() {
                   const x = 56 + (series.length === 1 ? 0 : (index / (series.length - 1)) * 684)
                   const span = Math.max(1, maxValue - minValue)
                   const y = 220 - ((row.value - minValue) / span) * 180
-                  return { x, y, row }
+                  return { x, y, row, index }
                 })
                 const polyline = points.map((p) => `${p.x},${p.y}`).join(' ')
+                const activePoint =
+                  activePointIndex === null ? null : points.find((point) => point.index === activePointIndex) || null
+                const bubbleWidth = 116
+                const bubbleHeight = 48
+                const bubbleX = activePoint
+                  ? Math.min(Math.max(activePoint.x - bubbleWidth / 2, 8), 760 - bubbleWidth - 8)
+                  : 0
+                const bubbleY = activePoint
+                  ? activePoint.y < 78
+                    ? activePoint.y + 14
+                    : activePoint.y - bubbleHeight - 14
+                  : 0
                 return (
                   <>
                     <polyline
@@ -207,11 +228,51 @@ export default function CollectionHistoryPage() {
                     {points.map((p) => (
                       <g key={p.row.x}>
                         <circle cx={p.x} cy={p.y} r="4" fill="#0ea5e9" />
+                        <circle
+                          cx={p.x}
+                          cy={p.y}
+                          r="13"
+                          fill="transparent"
+                          style={{ cursor: 'pointer' }}
+                          tabIndex={0}
+                          role="img"
+                          aria-label={`${shortDate(p.row.periodEnd)}: ${formatCurrency(
+                            p.row.value,
+                            p.row.currency
+                          )}, ${formatCardCount(p.row.cardCount)}`}
+                          onPointerEnter={() => setActivePointIndex(p.index)}
+                          onPointerLeave={() => setActivePointIndex(null)}
+                          onFocus={() => setActivePointIndex(p.index)}
+                          onBlur={() => setActivePointIndex(null)}
+                          onClick={() => setActivePointIndex((current) => (current === p.index ? null : p.index))}
+                        />
                         <text x={p.x} y={238} textAnchor="middle" fontSize="10" fill="#475569">
                           {shortDate(p.row.periodEnd)}
                         </text>
                       </g>
                     ))}
+                    {activePoint && (
+                      <g pointerEvents="none">
+                        <rect
+                          x={bubbleX}
+                          y={bubbleY}
+                          width={bubbleWidth}
+                          height={bubbleHeight}
+                          rx="6"
+                          fill="#0f172a"
+                          opacity="0.94"
+                        />
+                        <text x={bubbleX + 8} y={bubbleY + 16} fontSize="10" fill="#e2e8f0">
+                          {shortDate(activePoint.row.periodEnd)}
+                        </text>
+                        <text x={bubbleX + 8} y={bubbleY + 31} fontSize="11" fontWeight="700" fill="#ffffff">
+                          {formatCurrency(activePoint.row.value, activePoint.row.currency)}
+                        </text>
+                        <text x={bubbleX + 8} y={bubbleY + 43} fontSize="9" fill="#cbd5e1">
+                          {formatCardCount(activePoint.row.cardCount)}
+                        </text>
+                      </g>
+                    )}
                   </>
                 )
               })()}
@@ -226,7 +287,7 @@ export default function CollectionHistoryPage() {
               {[...series].reverse().map((row) => (
                 <div key={`legend-${row.x}`} style={{ fontSize: 12, color: '#334155' }}>
                   Snapshot du {shortDate(row.periodEnd)} ({weekLabel(row.periodStart, row.periodEnd)}):{' '}
-                  <strong>{formatCurrency(row.value, row.currency)}</strong>
+                  <strong>{formatCurrency(row.value, row.currency)}</strong> ({formatCardCount(row.cardCount)})
                 </div>
               ))}
             </div>

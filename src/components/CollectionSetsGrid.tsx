@@ -14,6 +14,7 @@ type Props = {
   stats: Record<string, SetStats>
   getSetHref: (setCode: string) => string
   headerActions?: ReactNode
+  hideTitle?: boolean
 }
 
 export function CollectionSetsGrid({
@@ -21,7 +22,8 @@ export function CollectionSetsGrid({
   sets,
   stats,
   getSetHref,
-  headerActions
+  headerActions,
+  hideTitle = false
 }: Props) {
   const [hideTitleOnMobile, setHideTitleOnMobile] = useState(false)
   const [useCompactLayout, setUseCompactLayout] = useState(false)
@@ -55,7 +57,7 @@ export function CollectionSetsGrid({
           marginBottom: useCompactLayout ? 0 : 30
         }}
       >
-        {!hideTitleOnMobile && (
+        {!hideTitle && !hideTitleOnMobile && (
           <h1 className="collection-grid-title" style={{ fontSize: 24, fontWeight: 'bold', margin: 0 }}>
             {title}
           </h1>
