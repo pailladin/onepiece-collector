@@ -237,6 +237,49 @@ function resolvePrintCode(params: {
   }
 }
 
+function getPotentialPrintCodes(params: {
+  providedPrintCode: string | null | undefined
+  imageUrl: string | null | undefined
+  baseCode: string
+  setCode: string
+  variantTag?: string | null
+}) {
+  const variantSlug = slugifyVariantTag(params.variantTag)
+  const candidates = [
+    extractPrintCodeFromImageUrl(params.imageUrl),
+    params.providedPrintCode,
+    variantSlug ? `${params.baseCode}_${params.setCode}_${variantSlug}` : null,
+    `${params.baseCode}_${params.setCode}`
+  ]
+
+  return new Set(candidates.map((value) => normalizePrintCode(value)).filter(Boolean))
+}
+
+function cardMatchesSelectedPrintCodes(
+  card: any,
+  selectedPrintCodes: Set<string>,
+  setCode: string
+) {
+  if (!card?.card_set_id) return false
+  const { variantTag } = parseCardName(card.card_name || '')
+  const candidates = getPotentialPrintCodes({
+    providedPrintCode: card.card_image_id?.toString().trim(),
+    imageUrl: card.card_image?.toString().trim(),
+    baseCode: card.card_set_id,
+    setCode,
+    variantTag
+  })
+
+  for (const candidate of candidates) {
+    if (selectedPrintCodes.has(candidate)) return true
+    if (selectedPrintCodes.has(`${candidate}_${normalizeSetCode(setCode)}`)) {
+      return true
+    }
+  }
+
+  return false
+}
+
 function toErrorMessage(error: unknown) {
   if (error instanceof Error) return error.message
   return String(error)
@@ -466,6 +509,25 @@ export async function POST(
         if (apiCards.length === 0) {
           push('Aucune carte recue')
           return
+        }
+
+        const receivedCardsCount = apiCards.length
+        if (onlyPrintCodes && onlyPrintCodes.size > 0) {
+          apiCards = apiCards.filter((card) =>
+            cardMatchesSelectedPrintCodes(
+              card,
+              onlyPrintCodes,
+              normalizedImportCode
+            )
+          )
+          push(
+            `Selection appliquee: ${apiCards.length}/${receivedCardsCount} carte(s) API gardee(s)`
+          )
+
+          if (apiCards.length === 0) {
+            push('Aucune carte API ne correspond a la selection')
+            return
+          }
         }
 
         const totalCards = apiCards.length

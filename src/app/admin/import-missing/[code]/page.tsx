@@ -24,6 +24,8 @@ type SetCardOption = {
   printsCount: number
 }
 
+const PAGE_SIZE = 50
+
 export default function ImportMissingCardsPage() {
   const { user, loading: authLoading } = useAuth()
   const params = useParams<{ code: string }>()
@@ -42,6 +44,13 @@ export default function ImportMissingCardsPage() {
   const [cardOptions, setCardOptions] = useState<SetCardOption[]>([])
   const [selectedCardCodes, setSelectedCardCodes] = useState<Record<string, boolean>>({})
   const [isDeleting, setIsDeleting] = useState(false)
+  const [activePanel, setActivePanel] = useState<'import' | 'delete'>('import')
+  const [missingPage, setMissingPage] = useState(1)
+  const [cardsPage, setCardsPage] = useState(1)
+  const [cardsLoading, setCardsLoading] = useState(false)
+  const [hasLoadedSetCards, setHasLoadedSetCards] = useState(false)
+  const [missingFilter, setMissingFilter] = useState('')
+  const [cardsFilter, setCardsFilter] = useState('')
 
   const selectedPrintCodes = useMemo(
     () => Object.entries(selected).filter(([, value]) => value).map(([key]) => key),
@@ -50,6 +59,41 @@ export default function ImportMissingCardsPage() {
   const selectedCards = useMemo(
     () => cardOptions.filter((card) => Boolean(selectedCardCodes[card.baseCode])),
     [cardOptions, selectedCardCodes]
+  )
+  const filteredMissingCards = useMemo(() => {
+    const query = missingFilter.trim().toLowerCase()
+    if (!query) return missingCards
+    return missingCards.filter((card) =>
+      [card.printCode, card.baseCode, card.name, card.rarity, card.type]
+        .join(' ')
+        .toLowerCase()
+        .includes(query)
+    )
+  }, [missingCards, missingFilter])
+  const filteredCardOptions = useMemo(() => {
+    const query = cardsFilter.trim().toLowerCase()
+    if (!query) return cardOptions
+    return cardOptions.filter((card) =>
+      [card.baseCode, card.number || '', card.name]
+        .join(' ')
+        .toLowerCase()
+        .includes(query)
+    )
+  }, [cardOptions, cardsFilter])
+  const missingPageCount = Math.max(1, Math.ceil(filteredMissingCards.length / PAGE_SIZE))
+  const cardsPageCount = Math.max(1, Math.ceil(filteredCardOptions.length / PAGE_SIZE))
+  const visibleMissingCards = useMemo(
+    () =>
+      filteredMissingCards.slice(
+        (missingPage - 1) * PAGE_SIZE,
+        missingPage * PAGE_SIZE
+      ),
+    [filteredMissingCards, missingPage]
+  )
+  const visibleCardOptions = useMemo(
+    () =>
+      filteredCardOptions.slice((cardsPage - 1) * PAGE_SIZE, cardsPage * PAGE_SIZE),
+    [filteredCardOptions, cardsPage]
   )
 
   const getAuthHeader = useCallback(async () => {
@@ -82,8 +126,9 @@ export default function ImportMissingCardsPage() {
     const list: MissingCard[] = data.missing || []
     setSetName(data?.set?.name || code)
     setMissingCards(list)
+    setMissingPage(1)
     setSelected(
-      Object.fromEntries(list.map((card) => [card.printCode, true])) as Record<
+      Object.fromEntries(list.map((card) => [card.printCode, false])) as Record<
         string,
         boolean
       >
@@ -91,7 +136,9 @@ export default function ImportMissingCardsPage() {
     setLoading(false)
   }, [code, getAuthHeader])
 
-  const loadSetCards = useCallback(async () => {
+  const loadSetCards = useCallback(async (options?: { force?: boolean }) => {
+    if (hasLoadedSetCards && !options?.force) return
+    setCardsLoading(true)
     const authHeaders = await getAuthHeader()
     const res = await fetch(`/api/admin/import-set/${code}/cards`, {
       headers: authHeaders
@@ -100,18 +147,22 @@ export default function ImportMissingCardsPage() {
     if (!res.ok) {
       setCardOptions([])
       setSelectedCardCodes({})
+      setCardsLoading(false)
       return
     }
 
     const cards: SetCardOption[] = data.cards || []
     setCardOptions(cards)
+    setCardsPage(1)
     setSelectedCardCodes(
       Object.fromEntries(cards.map((card) => [card.baseCode, false])) as Record<
         string,
         boolean
       >
     )
-  }, [code, getAuthHeader])
+    setHasLoadedSetCards(true)
+    setCardsLoading(false)
+  }, [code, getAuthHeader, hasLoadedSetCards])
 
   useEffect(() => {
     if (!canAccessAdmin) {
@@ -119,16 +170,37 @@ export default function ImportMissingCardsPage() {
       return
     }
     if (!code) return
-    Promise.all([loadMissingCards(), loadSetCards()])
-  }, [canAccessAdmin, code, loadMissingCards, loadSetCards])
+    loadMissingCards()
+  }, [canAccessAdmin, code, loadMissingCards])
+
+  useEffect(() => {
+    if (activePanel === 'delete' && canAccessAdmin && code) {
+      loadSetCards()
+    }
+  }, [activePanel, canAccessAdmin, code, loadSetCards])
+
+  useEffect(() => {
+    setMissingPage(1)
+  }, [missingFilter])
+
+  useEffect(() => {
+    setCardsPage(1)
+  }, [cardsFilter])
 
   const toggleAll = (value: boolean) => {
-    setSelected(
-      Object.fromEntries(missingCards.map((card) => [card.printCode, value])) as Record<
-        string,
-        boolean
-      >
-    )
+    setSelected((prev) => ({
+      ...prev,
+      ...Object.fromEntries(
+        filteredMissingCards.map((card) => [card.printCode, value])
+      )
+    }))
+  }
+
+  const toggleVisibleMissing = (value: boolean) => {
+    setSelected((prev) => ({
+      ...prev,
+      ...Object.fromEntries(visibleMissingCards.map((card) => [card.printCode, value]))
+    }))
   }
 
   const importSelected = async () => {
@@ -238,7 +310,7 @@ export default function ImportMissingCardsPage() {
 
       setLogs(nextLogs)
 
-      await loadSetCards()
+      await loadSetCards({ force: true })
       await loadMissingCards({ keepLogs: true })
     } finally {
       setIsDeleting(false)
@@ -261,86 +333,175 @@ export default function ImportMissingCardsPage() {
         Set: <strong>{code}</strong> ({setName}) - {missingCards.length} carte(s) manquante(s)
       </div>
 
-      <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
-        <button onClick={() => toggleAll(true)}>Tout cocher</button>
-        <button onClick={() => toggleAll(false)}>Tout decocher</button>
+      <div
+        style={{
+          display: 'flex',
+          gap: 8,
+          marginBottom: 20
+        }}
+      >
         <button
-          onClick={importSelected}
-          disabled={selectedPrintCodes.length === 0 || isImporting}
+          onClick={() => setActivePanel('import')}
           style={{
-            background: '#2563eb',
-            color: '#fff',
-            border: 'none',
-            padding: '6px 10px',
+            padding: '8px 12px',
             borderRadius: 4,
-            opacity: selectedPrintCodes.length === 0 || isImporting ? 0.5 : 1
+            border: '1px solid #cbd5e1',
+            background: activePanel === 'import' ? '#0f172a' : '#fff',
+            color: activePanel === 'import' ? '#fff' : '#0f172a'
           }}
         >
-          {isImporting
-            ? 'Import en cours...'
-            : `Importer la selection (${selectedPrintCodes.length})`}
+          Importer les manquantes
+        </button>
+        <button
+          onClick={() => setActivePanel('delete')}
+          style={{
+            padding: '8px 12px',
+            borderRadius: 4,
+            border: '1px solid #cbd5e1',
+            background: activePanel === 'delete' ? '#0f172a' : '#fff',
+            color: activePanel === 'delete' ? '#fff' : '#0f172a'
+          }}
+        >
+          Supprimer du set
         </button>
       </div>
 
-      <div
-        style={{
-          border: '1px solid #ddd',
-          borderRadius: 6,
-          maxHeight: 420,
-          overflowY: 'auto',
-          marginBottom: 20
-        }}
-      >
-        {missingCards.length === 0 ? (
-          <div style={{ padding: 12 }}>Aucune carte manquante.</div>
-        ) : (
-          missingCards.map((card) => (
-            <label
-              key={card.printCode}
+      {activePanel === 'import' ? (
+        <>
+          <div style={{ display: 'flex', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
+            <input
+              type="search"
+              value={missingFilter}
+              onChange={(event) => setMissingFilter(event.target.value)}
+              placeholder="Filtrer par code, nom, rarete..."
               style={{
-                display: 'grid',
-                gridTemplateColumns: '24px 140px 1fr',
-                gap: 8,
-                alignItems: 'start',
-                padding: '8px 10px',
-                borderBottom: '1px solid #eee'
+                minWidth: 260,
+                padding: '7px 10px',
+                border: '1px solid #cbd5e1',
+                borderRadius: 4
+              }}
+            />
+            <button onClick={() => toggleVisibleMissing(true)}>Cocher cette page</button>
+            <button onClick={() => toggleVisibleMissing(false)}>Decocher cette page</button>
+            <button onClick={() => toggleAll(true)}>Tout cocher</button>
+            <button onClick={() => toggleAll(false)}>Tout decocher</button>
+            <button
+              onClick={importSelected}
+              disabled={selectedPrintCodes.length === 0 || isImporting}
+              style={{
+                background: '#2563eb',
+                color: '#fff',
+                border: 'none',
+                padding: '6px 10px',
+                borderRadius: 4,
+                opacity: selectedPrintCodes.length === 0 || isImporting ? 0.5 : 1
               }}
             >
-              <input
-                type="checkbox"
-                checked={Boolean(selected[card.printCode])}
-                onChange={(e) =>
-                  setSelected((prev) => ({
-                    ...prev,
-                    [card.printCode]: e.target.checked
-                  }))
-                }
-              />
-              <code>{card.printCode}</code>
-              <div>
-                <div>{card.name}</div>
-                <div style={{ fontSize: 12, color: '#666' }}>
-                  {card.baseCode} {card.rarity ? `- ${card.rarity}` : ''}{' '}
-                  {card.type ? `- ${card.type}` : ''}
-                </div>
-              </div>
-            </label>
-          ))
-        )}
-      </div>
+              {isImporting
+                ? 'Import en cours...'
+                : `Importer la selection (${selectedPrintCodes.length})`}
+            </button>
+          </div>
 
-      <div
-        style={{
-          border: '1px solid #ddd',
-          borderRadius: 6,
-          padding: 12,
-          marginBottom: 20
-        }}
-      >
-        <h2 style={{ margin: '0 0 10px' }}>Supprimer une carte du set</h2>
-        <div style={{ marginBottom: 10, fontSize: 13, color: '#334155' }}>
-          {selectedCards.length} carte(s) selectionnee(s)
-        </div>
+          <div style={{ marginBottom: 10, fontSize: 13, color: '#334155' }}>
+            {filteredMissingCards.length} resultat(s) - page {missingPage} /{' '}
+            {missingPageCount} - {selectedPrintCodes.length} carte(s) selectionnee(s)
+          </div>
+
+          <div
+            style={{
+              border: '1px solid #ddd',
+              borderRadius: 6,
+              maxHeight: 420,
+              overflowY: 'auto',
+              marginBottom: 12
+            }}
+          >
+            {filteredMissingCards.length === 0 ? (
+              <div style={{ padding: 12 }}>Aucune carte manquante.</div>
+            ) : (
+              visibleMissingCards.map((card) => (
+                <label
+                  key={card.printCode}
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '24px minmax(220px, 360px) minmax(0, 1fr)',
+                    gap: 8,
+                    alignItems: 'start',
+                    padding: '8px 10px',
+                    borderBottom: '1px solid #eee'
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={Boolean(selected[card.printCode])}
+                    onChange={(e) =>
+                      setSelected((prev) => ({
+                        ...prev,
+                        [card.printCode]: e.target.checked
+                      }))
+                    }
+                  />
+                  <code style={{ overflowWrap: 'anywhere', lineHeight: 1.4 }}>
+                    {card.printCode}
+                  </code>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ lineHeight: 1.35 }}>{card.name}</div>
+                    <div style={{ fontSize: 12, color: '#666' }}>
+                      {card.baseCode} {card.rarity ? `- ${card.rarity}` : ''}{' '}
+                      {card.type ? `- ${card.type}` : ''}
+                    </div>
+                  </div>
+                </label>
+              ))
+            )}
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+            <button
+              onClick={() => setMissingPage((page) => Math.max(1, page - 1))}
+              disabled={missingPage <= 1}
+            >
+              Page precedente
+            </button>
+            <button
+              onClick={() =>
+                setMissingPage((page) => Math.min(missingPageCount, page + 1))
+              }
+              disabled={missingPage >= missingPageCount}
+            >
+              Page suivante
+            </button>
+          </div>
+        </>
+      ) : (
+        <div
+          style={{
+            border: '1px solid #ddd',
+            borderRadius: 6,
+            padding: 12,
+            marginBottom: 20
+          }}
+        >
+          <h2 style={{ margin: '0 0 10px' }}>Supprimer une carte du set</h2>
+          <input
+            type="search"
+            value={cardsFilter}
+            onChange={(event) => setCardsFilter(event.target.value)}
+            placeholder="Filtrer par code, numero, nom..."
+            style={{
+              minWidth: 260,
+              padding: '7px 10px',
+              border: '1px solid #cbd5e1',
+              borderRadius: 4,
+              marginBottom: 10
+            }}
+          />
+          <div style={{ marginBottom: 10, fontSize: 13, color: '#334155' }}>
+            {cardsLoading
+              ? 'Chargement des cartes du set...'
+              : `${filteredCardOptions.length} resultat(s) - ${selectedCards.length} carte(s) selectionnee(s) - page ${cardsPage} / ${cardsPageCount}`}
+          </div>
         <div
           style={{
             border: '1px solid #ddd',
@@ -350,10 +511,10 @@ export default function ImportMissingCardsPage() {
             marginBottom: 10
           }}
         >
-          {cardOptions.length === 0 ? (
+          {filteredCardOptions.length === 0 ? (
             <div style={{ padding: 12 }}>Aucune carte.</div>
           ) : (
-            cardOptions.map((card) => (
+            visibleCardOptions.map((card) => (
               <label
                 key={card.id}
                 style={{
@@ -389,6 +550,21 @@ export default function ImportMissingCardsPage() {
           )}
         </div>
 
+        <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+          <button
+            onClick={() => setCardsPage((page) => Math.max(1, page - 1))}
+            disabled={cardsPage <= 1 || cardsLoading}
+          >
+            Page precedente
+          </button>
+          <button
+            onClick={() => setCardsPage((page) => Math.min(cardsPageCount, page + 1))}
+            disabled={cardsPage >= cardsPageCount || cardsLoading}
+          >
+            Page suivante
+          </button>
+        </div>
+
         <button
           onClick={deleteCardFromSet}
           disabled={selectedCards.length === 0 || isDeleting}
@@ -406,6 +582,7 @@ export default function ImportMissingCardsPage() {
             : `Supprimer la selection (${selectedCards.length})`}
         </button>
       </div>
+      )}
 
       <div>
         <h2 style={{ marginBottom: 8 }}>Logs</h2>
