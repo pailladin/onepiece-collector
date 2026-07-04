@@ -149,6 +149,7 @@ function buildViewQuery(params: {
   altTypeFilter: string
   sortKey: SortKey
   sortDirection: SortDirection
+  doublesOnly: boolean
   showOwned: boolean
   showMissing: boolean
 }) {
@@ -160,6 +161,7 @@ function buildViewQuery(params: {
   if (params.altTypeFilter !== 'all') q.set('altType', params.altTypeFilter)
   if (params.sortKey !== 'number') q.set('sort', params.sortKey)
   if (params.sortDirection !== 'asc') q.set('dir', params.sortDirection)
+  if (params.doublesOnly) q.set('doubles', '1')
   if (!params.showOwned) q.set('owned', '0')
   if (!params.showMissing) q.set('missing', '0')
   return q.toString()
@@ -209,6 +211,9 @@ export function CollectionSetView({
   )
   const [altTypeFilter, setAltTypeFilter] = useState(
     () => searchParams.get('altType') || 'all'
+  )
+  const [doublesOnly, setDoublesOnly] = useState(() =>
+    parseBoolFlag(searchParams.get('doubles'), false)
   )
   const [showOwned, setShowOwned] = useState(() =>
     parseBoolFlag(searchParams.get('owned'), true)
@@ -396,8 +401,8 @@ export function CollectionSetView({
         type: typeFilter,
         alt: altFilter,
         altType: altTypeFilter
-      }),
-    [items, searchQuery, rarityFilter, typeFilter, altFilter, altTypeFilter]
+      }).filter((item) => !doublesOnly || (item.quantity || 0) >= 2),
+    [items, searchQuery, rarityFilter, typeFilter, altFilter, altTypeFilter, doublesOnly]
   )
 
   const sortedItems = useMemo(() => {
@@ -726,6 +731,7 @@ export function CollectionSetView({
       altTypeFilter,
       sortKey,
       sortDirection,
+      doublesOnly,
       showOwned,
       showMissing
     })
@@ -736,6 +742,7 @@ export function CollectionSetView({
   }, [
     altFilter,
     altTypeFilter,
+    doublesOnly,
     initialQuery,
     pathname,
     rarityFilter,
@@ -761,6 +768,7 @@ export function CollectionSetView({
       altTypeFilter,
       sortKey,
       sortDirection,
+      doublesOnly,
       showOwned,
       showMissing
     })
@@ -804,6 +812,7 @@ export function CollectionSetView({
     setTypeFilter('all')
     setAltFilter('all')
     setAltTypeFilter('all')
+    setDoublesOnly(false)
     setSortKey('number')
     setSortDirection('asc')
   }
@@ -1269,6 +1278,25 @@ export function CollectionSetView({
                   </option>
                 ))}
               </select>
+
+              <label
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  gridColumn: '1 / -1',
+                  fontSize: 13,
+                  color: '#334155',
+                  cursor: 'pointer'
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={doublesOnly}
+                  onChange={(event) => setDoublesOnly(event.target.checked)}
+                />
+                Cartes possedees au moins en double
+              </label>
             </div>
           </div>
         </div>
