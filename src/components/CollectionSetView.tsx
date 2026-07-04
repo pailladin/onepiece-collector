@@ -633,6 +633,41 @@ export function CollectionSetView({
     await calculatePriceDetails('missing')
   }
 
+  const exportMissingCards = async () => {
+    if (missingItemsAll.length === 0) return
+
+    const XLSX = await import('xlsx')
+    const rows = missingItemsAll
+      .map((item) => {
+        const translation = item.card?.card_translations?.find(
+          (entry: { locale?: string; name?: string }) => entry.locale === DEFAULT_LOCALE
+        )
+
+        return {
+          Code: getDisplayPrintCode(item),
+          Nom: translation?.name || '',
+          Rarete: item.card?.rarity || '',
+          Type: item.card?.type || '',
+          Variante: isAltVersion(item) ? getAltTypeLabel(getAltTypeKey(item)) : 'Normale'
+        }
+      })
+      .sort((a, b) => a.Code.localeCompare(b.Code, 'fr', { numeric: true }))
+
+    const worksheet = XLSX.utils.json_to_sheet(rows)
+    worksheet['!cols'] = [
+      { wch: 18 },
+      { wch: 34 },
+      { wch: 12 },
+      { wch: 20 },
+      { wch: 18 }
+    ]
+    worksheet['!autofilter'] = { ref: `A1:E${rows.length + 1}` }
+
+    const workbook = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Cartes manquantes')
+    XLSX.writeFile(workbook, `cartes-manquantes-${normalizeSetCode(code)}.xlsx`)
+  }
+
   const openDoublesModal = async () => {
     if (!canEdit || doublesDetails.length === 0 || doublesPriceLoading) return
     setDoublesPriceLoading(true)
@@ -1377,6 +1412,23 @@ export function CollectionSetView({
             >
               {doublesPriceLoading ? 'Chargement...' : 'Doubles'}
             </button>
+
+            {canEdit && (
+              <button
+                onClick={() => void exportMissingCards()}
+                disabled={missingItemsAll.length === 0}
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: 8,
+                  border: '1px solid #cbd5e1',
+                  background: '#ffffff',
+                  cursor: missingItemsAll.length === 0 ? 'not-allowed' : 'pointer',
+                  minWidth: 0
+                }}
+              >
+                Exporter les manquantes
+              </button>
+            )}
           </div>
           {priceError && <div style={{ marginTop: 6, fontSize: 12, color: '#b91c1c' }}>{priceError}</div>}
           {collectionMutationError && (
