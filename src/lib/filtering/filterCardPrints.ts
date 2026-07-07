@@ -1,6 +1,5 @@
 import { DEFAULT_LOCALE } from '@/lib/locale'
 import { getDisplayPrintCode, normalizeVariantType } from '@/lib/cards/printDisplay'
-import { parseCardCode } from '@/lib/sorting/parseCardCode'
 
 export type AltFilter = 'all' | 'normal' | 'alt'
 export type AltTypeFilter = 'all' | string
@@ -40,9 +39,8 @@ export function isAltVersion(print: {
   print_code?: string | null
   variant_type?: string | null
 }): boolean {
-  const parsed = parseCardCode(print.print_code || 'OP00-000')
   const variant = normalizeVariantType(print.variant_type)
-  return parsed.variant > 0 || variant !== 'normal'
+  return variant !== 'normal'
 }
 
 const ALT_TYPE_ORDER: Record<string, number> = {
@@ -59,12 +57,10 @@ export function getAltTypeKey(print: {
   print_code?: string | null
   variant_type?: string | null
 }): string {
-  const parsed = parseCardCode(print.print_code || 'OP00-000')
   const variant = normalizeVariantType(print.variant_type)
   const normalizedVariant = variant.toLowerCase()
 
   if (ALLOWED_ALT_TYPES.has(normalizedVariant)) return normalizedVariant
-  if (parsed.variant > 0) return 'parallel'
   return 'normal'
 }
 
