@@ -1,6 +1,5 @@
 'use client'
 
-import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuth } from '@/lib/auth'
 import { supabase } from '@/lib/supabaseClient'
@@ -59,7 +58,9 @@ function fieldStyle() {
     width: '100%',
     minWidth: 0,
     boxSizing: 'border-box',
-    padding: '9px 10px',
+    minHeight: 44,
+    padding: '10px 12px',
+    fontSize: 16,
     borderRadius: 8,
     border: '1px solid #cbd5e1'
   } as const
@@ -73,6 +74,7 @@ function getSubmissionLabel(type: CommunitySubmissionType) {
 
 export default function CommunityPage() {
   const { user, loading: authLoading } = useAuth()
+  const [isMobileView, setIsMobileView] = useState(false)
   const [proposalDomain, setProposalDomain] = useState<'cards' | 'places'>('cards')
   const [cardMode, setCardMode] = useState<'card_edit' | 'card_add'>('card_edit')
   const [title, setTitle] = useState('')
@@ -112,6 +114,13 @@ export default function CommunityPage() {
     () => sets.map((row) => `${row.code}${row.name ? ` - ${row.name}` : ''}`),
     [sets]
   )
+
+  useEffect(() => {
+    const updateViewport = () => setIsMobileView(window.innerWidth <= 820)
+    updateViewport()
+    window.addEventListener('resize', updateViewport)
+    return () => window.removeEventListener('resize', updateViewport)
+  }, [])
 
   const getAuthHeader = useCallback(async () => {
     const { data } = await supabase.auth.getSession()
@@ -329,13 +338,13 @@ export default function CommunityPage() {
   }
 
   if (authLoading || loadingData) return <div style={{ padding: 40 }}>Chargement...</div>
-  if (!user) return <div style={{ padding: 40 }}>Connecte-toi pour acceder a l'espace contributions.</div>
+  if (!user) return <div style={{ padding: 40 }}>Connecte-toi pour acceder a l&apos;espace contributions.</div>
 
   return (
     <div
       style={{
         minHeight: '100vh',
-        padding: '18px 28px 28px',
+        padding: isMobileView ? '10px 10px 18px' : '18px 28px 28px',
         background: 'radial-gradient(circle at 12% 8%, #fff4e6 0%, #e0f2fe 40%, #eef2ff 100%)',
         display: 'grid',
         gap: 12,
@@ -345,20 +354,21 @@ export default function CommunityPage() {
       <section
         style={{
           border: '1px solid #cfe4ff',
-          borderRadius: 14,
+          borderRadius: isMobileView ? 10 : 14,
           background: 'linear-gradient(145deg, #ffffff 0%, #eff6ff 100%)',
-          padding: 14
+          padding: isMobileView ? 12 : 14,
+          minWidth: 0
         }}
       >
-        <h1 style={{ margin: 0, fontSize: 30, color: '#0f172a' }}>Contributions</h1>
-        <p style={{ marginTop: 8, color: '#475569' }}>
+        <h1 style={{ margin: 0, fontSize: isMobileView ? 24 : 30, color: '#0f172a' }}>Contributions</h1>
+        <p style={{ marginTop: 8, marginBottom: 0, color: '#475569', lineHeight: 1.45 }}>
           Propose des corrections de cartes ou de nouveaux lieux. Chaque proposition est relue
           et validee par un admin avant application.
         </p>
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+            gridTemplateColumns: isMobileView ? '1fr' : 'repeat(auto-fit, minmax(260px, 1fr))',
             gap: 12,
             marginTop: 14
           }}
@@ -374,11 +384,11 @@ export default function CommunityPage() {
                 proposalDomain === 'cards'
                   ? 'linear-gradient(145deg, #eff6ff, #dbeafe)'
                   : '#fff',
-              padding: 16,
+              padding: isMobileView ? 12 : 16,
               cursor: 'pointer'
             }}
           >
-            <div style={{ fontSize: 22, fontWeight: 800, color: '#0f172a' }}>Cartes</div>
+            <div style={{ fontSize: isMobileView ? 18 : 22, fontWeight: 800, color: '#0f172a' }}>Cartes</div>
             <div style={{ marginTop: 6, color: '#475569', lineHeight: 1.5 }}>
               Corriger une carte existante ou proposer l&apos;ajout d&apos;une nouvelle carte.
             </div>
@@ -394,11 +404,11 @@ export default function CommunityPage() {
                 proposalDomain === 'places'
                   ? 'linear-gradient(145deg, #fff7ed, #fed7aa)'
                   : '#fff',
-              padding: 16,
+              padding: isMobileView ? 12 : 16,
               cursor: 'pointer'
             }}
           >
-            <div style={{ fontSize: 22, fontWeight: 800, color: '#0f172a' }}>Lieux</div>
+            <div style={{ fontSize: isMobileView ? 18 : 22, fontWeight: 800, color: '#0f172a' }}>Lieux</div>
             <div style={{ marginTop: 6, color: '#475569', lineHeight: 1.5 }}>
               Proposer une boutique, une salle ou un lieu ou l&apos;on peut acheter, jouer ou faire
               des tournois One Piece TCG.
@@ -410,13 +420,13 @@ export default function CommunityPage() {
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'minmax(0, 1.2fr) minmax(0, 0.8fr)',
+          gridTemplateColumns: isMobileView ? '1fr' : 'minmax(0, 1.2fr) minmax(0, 0.8fr)',
           gap: 12,
           minWidth: 0
         }}
       >
         <section style={sectionStyle()}>
-          <h2 style={{ marginTop: 0, color: '#0f172a' }}>
+          <h2 style={{ marginTop: 0, fontSize: isMobileView ? 20 : 24, color: '#0f172a' }}>
             {proposalDomain === 'places' ? 'Proposer un lieu' : 'Contribuer sur une carte'}
           </h2>
           <div
@@ -442,8 +452,8 @@ export default function CommunityPage() {
                   onChange={(e) => setCardMode(e.target.value as 'card_edit' | 'card_add')}
                   style={fieldStyle()}
                 >
-                  <option value="card_edit">Correction d'une carte</option>
-                  <option value="card_add">Ajout d'une carte</option>
+                  <option value="card_edit">Correction d&apos;une carte</option>
+                  <option value="card_add">Ajout d&apos;une carte</option>
                 </select>
 
                 <input
@@ -516,7 +526,13 @@ export default function CommunityPage() {
 
             {proposalDomain === 'cards' ? (
               <>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8 }}>
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: isMobileView ? '1fr' : 'repeat(3, minmax(0, 1fr))',
+                    gap: 8
+                  }}
+                >
                   <select value={rarity} onChange={(e) => setRarity(e.target.value)} style={fieldStyle()}>
                     <option value="">Rarete</option>
                     {rarityOptions.map((option) => (
@@ -556,9 +572,21 @@ export default function CommunityPage() {
                   style={fieldStyle()}
                 />
 
-                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: isMobileView ? 8 : 12, flexWrap: 'wrap' }}>
                   {SET_LANGUAGE_CODES.map((language) => (
-                    <label key={language} style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                    <label
+                      key={language}
+                      style={{
+                        display: 'inline-flex',
+                        gap: 6,
+                        alignItems: 'center',
+                        minHeight: 34,
+                        padding: '4px 8px',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: 999,
+                        background: '#fff'
+                      }}
+                    >
                       <input
                         type="checkbox"
                         checked={Boolean(availableLanguages[language])}
@@ -585,7 +613,13 @@ export default function CommunityPage() {
                   placeholder="Adresse"
                   style={fieldStyle()}
                 />
-                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 160px', gap: 8 }}>
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: isMobileView ? '1fr' : 'minmax(0, 1fr) 160px',
+                    gap: 8
+                  }}
+                >
                   <input value={placeCity} onChange={(e) => setPlaceCity(e.target.value)} placeholder="Ville" style={fieldStyle()} />
                   <input value={placePostalCode} onChange={(e) => setPlacePostalCode(e.target.value)} placeholder="Code postal" style={fieldStyle()} />
                 </div>
@@ -593,9 +627,21 @@ export default function CommunityPage() {
                 <input value={placeDiscordUrl} onChange={(e) => setPlaceDiscordUrl(e.target.value)} placeholder="Lien Discord du lieu" style={fieldStyle()} />
                 <input value={placeWebsiteUrl} onChange={(e) => setPlaceWebsiteUrl(e.target.value)} placeholder="Site web (optionnel)" style={fieldStyle()} />
                 <input value={placeGoogleMapsUrl} onChange={(e) => setPlaceGoogleMapsUrl(e.target.value)} placeholder="Lien Google Maps (optionnel)" style={fieldStyle()} />
-                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: isMobileView ? 8 : 12, flexWrap: 'wrap' }}>
                   {PLACE_ACTIVITY_OPTIONS.map((activity) => (
-                    <label key={activity.value} style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                    <label
+                      key={activity.value}
+                      style={{
+                        display: 'inline-flex',
+                        gap: 6,
+                        alignItems: 'center',
+                        minHeight: 34,
+                        padding: '4px 8px',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: 999,
+                        background: '#fff'
+                      }}
+                    >
                       <input
                         type="checkbox"
                         checked={Boolean(placeActivities[activity.value])}
@@ -626,12 +672,14 @@ export default function CommunityPage() {
               onClick={submitProposal}
               disabled={saving}
               style={{
-                width: 'fit-content',
+                width: isMobileView ? '100%' : 'fit-content',
                 background: '#0f766e',
                 color: '#fff',
                 border: 'none',
                 borderRadius: 8,
-                padding: '8px 12px',
+                padding: isMobileView ? '12px 14px' : '8px 12px',
+                fontSize: isMobileView ? 16 : 14,
+                fontWeight: 700,
                 cursor: saving ? 'not-allowed' : 'pointer',
                 opacity: saving ? 0.7 : 1
               }}
@@ -642,7 +690,7 @@ export default function CommunityPage() {
         </section>
 
         <section style={sectionStyle()}>
-          <h2 style={{ marginTop: 0, color: '#0f172a' }}>Classement des contributeurs</h2>
+          <h2 style={{ marginTop: 0, fontSize: isMobileView ? 20 : 24, color: '#0f172a' }}>Classement des contributeurs</h2>
           <div style={{ display: 'grid', gap: 8 }}>
             {leaderboard.length === 0 && (
               <div style={{ fontSize: 14, color: '#64748b' }}>Aucun classement pour le moment.</div>
@@ -652,7 +700,7 @@ export default function CommunityPage() {
                 key={row.userId}
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: '40px 1fr auto',
+                  gridTemplateColumns: isMobileView ? '32px minmax(0, 1fr)' : '40px 1fr auto',
                   alignItems: 'center',
                   gap: 8,
                   border: '1px solid #e2e8f0',
@@ -662,13 +710,21 @@ export default function CommunityPage() {
                 }}
               >
                 <div style={{ fontWeight: 700, color: '#0f172a' }}>#{row.rank}</div>
-                <div>
+                <div style={{ minWidth: 0 }}>
                   <div style={{ fontWeight: 600, color: '#0f172a' }}>{row.username}</div>
                   <div style={{ fontSize: 12, color: '#64748b' }}>
                     {row.approvedCount} validation(s) • {row.rejectedCount} refus
                   </div>
                 </div>
-                <div style={{ fontWeight: 700, color: '#0f766e' }}>{row.points} pts</div>
+                <div
+                  style={{
+                    gridColumn: isMobileView ? '2 / -1' : undefined,
+                    fontWeight: 700,
+                    color: '#0f766e'
+                  }}
+                >
+                  {row.points} pts
+                </div>
               </div>
             ))}
           </div>
@@ -677,7 +733,7 @@ export default function CommunityPage() {
 
       <section style={sectionStyle()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
-          <h2 style={{ margin: 0, color: '#0f172a' }}>Mes propositions</h2>
+          <h2 style={{ margin: 0, fontSize: isMobileView ? 20 : 24, color: '#0f172a' }}>Mes propositions</h2>
         </div>
         <div style={{ display: 'grid', gap: 8, marginTop: 10 }}>
           {mySubmissions.length === 0 && (
@@ -689,12 +745,12 @@ export default function CommunityPage() {
               style={{
                 border: '1px solid #e2e8f0',
                 borderRadius: 10,
-                padding: '12px 14px',
+                padding: isMobileView ? '10px 12px' : '12px 14px',
                 background: '#fff'
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
-                <div>
+                <div style={{ minWidth: 0 }}>
                   <div style={{ fontWeight: 700, color: '#0f172a' }}>{row.title}</div>
                   <div style={{ fontSize: 12, color: '#64748b' }}>
                     {getSubmissionLabel(row.submission_type)} • {new Date(row.created_at).toLocaleString('fr-FR')}
