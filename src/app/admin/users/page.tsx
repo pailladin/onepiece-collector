@@ -37,6 +37,7 @@ export default function AdminUsersPage() {
   const adminEmails = parseAdminEmails(process.env.NEXT_PUBLIC_ADMIN_EMAILS)
   const canAccessAdmin = isAdminEmail(user?.email, adminEmails)
 
+  const [isMobileView, setIsMobileView] = useState(false)
   const [loading, setLoading] = useState(true)
   const [users, setUsers] = useState<AdminUser[]>([])
   const [selected, setSelected] = useState<Record<string, boolean>>({})
@@ -53,6 +54,13 @@ export default function AdminUsersPage() {
         .map(([id]) => id),
     [selected]
   )
+
+  useEffect(() => {
+    const updateViewport = () => setIsMobileView(window.innerWidth <= 820)
+    updateViewport()
+    window.addEventListener('resize', updateViewport)
+    return () => window.removeEventListener('resize', updateViewport)
+  }, [])
 
   const sortedUsers = useMemo(() => {
     const getSortValue = (row: AdminUser) => {
@@ -208,36 +216,54 @@ export default function AdminUsersPage() {
   if (!canAccessAdmin) return <div style={{ padding: 40 }}>Acces refuse.</div>
 
   return (
-    <div style={{ padding: 40 }}>
-      <div style={{ marginBottom: 16 }}>
+    <div style={{ padding: isMobileView ? 12 : 40 }}>
+      <div style={{ marginBottom: isMobileView ? 12 : 16 }}>
         <Link href="/admin">Retour admin</Link>
       </div>
 
-      <h1 style={{ marginBottom: 8 }}>Admin - Utilisateurs</h1>
-      <div style={{ marginBottom: 14 }}>
+      <h1 style={{ marginBottom: 8, fontSize: isMobileView ? 24 : 32 }}>Admin - Utilisateurs</h1>
+      <div style={{ marginBottom: 14, color: '#334155', lineHeight: 1.4 }}>
         {users.length} utilisateur(s)
         {generatedAt ? (
-          <span style={{ marginLeft: 10, color: '#64748b', fontSize: 14 }}>
+          <span
+            style={{
+              display: isMobileView ? 'block' : 'inline',
+              marginLeft: isMobileView ? 0 : 10,
+              marginTop: isMobileView ? 4 : 0,
+              color: '#64748b',
+              fontSize: 14
+            }}
+          >
             Actualise le {formatDate(generatedAt)}
           </span>
         ) : null}
       </div>
 
-      <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
-        <button onClick={() => void loadUsers()} disabled={loading || isDeleting}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+        <button
+          onClick={() => void loadUsers()}
+          disabled={loading || isDeleting}
+          style={{ minHeight: 40, padding: '8px 12px' }}
+        >
           Actualiser
         </button>
-        <button onClick={() => toggleAll(true)}>Tout cocher</button>
-        <button onClick={() => toggleAll(false)}>Tout decocher</button>
+        <button onClick={() => toggleAll(true)} style={{ minHeight: 40, padding: '8px 12px' }}>
+          Tout cocher
+        </button>
+        <button onClick={() => toggleAll(false)} style={{ minHeight: 40, padding: '8px 12px' }}>
+          Tout decocher
+        </button>
         <button
           onClick={deleteSelected}
           disabled={selectedIds.length === 0 || isDeleting}
           style={{
+            width: isMobileView ? '100%' : undefined,
+            minHeight: 40,
             background: '#b91c1c',
             color: '#fff',
             border: 'none',
-            padding: '6px 10px',
-            borderRadius: 4,
+            padding: '8px 12px',
+            borderRadius: 8,
             opacity: selectedIds.length === 0 || isDeleting ? 0.5 : 1
           }}
         >
@@ -253,84 +279,185 @@ export default function AdminUsersPage() {
           marginBottom: 20
         }}
       >
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns:
-              '30px minmax(220px,1.3fr) 110px 110px minmax(150px,1fr) minmax(150px,1fr) minmax(150px,1fr) 110px',
-            gap: 10,
-            padding: '8px 10px',
-            background: '#f8fafc',
-            borderBottom: '1px solid #e2e8f0',
-            fontWeight: 600
-          }}
-        >
-          <div />
-          <div>{renderSortHeader('email', 'Email / Pseudo')}</div>
-          <div>{renderSortHeader('startedSetsCount', 'Sets')}</div>
-          <div>{renderSortHeader('cardsCount', 'Cartes')}</div>
-          <div>{renderSortHeader('createdAt', 'Cree le')}</div>
-          <div>{renderSortHeader('lastSignInAt', 'Derniere connexion')}</div>
-          <div>{renderSortHeader('emailConfirmedAt', 'Email confirme')}</div>
-          <div>Support</div>
-        </div>
-
         {users.length === 0 ? (
           <div style={{ padding: 12 }}>Aucun utilisateur.</div>
-        ) : (
-          sortedUsers.map((row) => (
-            <div
-              key={row.id}
-              style={{
-                display: 'grid',
-                gridTemplateColumns:
-                  '30px minmax(220px,1.3fr) 110px 110px minmax(150px,1fr) minmax(150px,1fr) minmax(150px,1fr) 110px',
-                gap: 10,
-                padding: '10px',
-                borderBottom: '1px solid #eee',
-                alignItems: 'start'
-              }}
-            >
-              <input
-                type="checkbox"
-                checked={Boolean(selected[row.id])}
-                onChange={(e) =>
-                  setSelected((prev) => ({
-                    ...prev,
-                    [row.id]: e.target.checked
-                  }))
-                }
-                disabled={row.id === user?.id}
-              />
-              <div>
-                <div>{row.email || '-'}</div>
-                <div style={{ fontSize: 12, color: '#64748b' }}>
-                  @{row.username || '-'} - {row.id}
-                  {row.id === user?.id ? ' (toi)' : ''}
+        ) : isMobileView ? (
+          <div style={{ display: 'grid', gap: 10, padding: 10, background: '#f8fafc' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              {renderSortHeader('email', 'Email')}
+              {renderSortHeader('createdAt', 'Creation')}
+              {renderSortHeader('startedSetsCount', 'Sets')}
+              {renderSortHeader('cardsCount', 'Cartes')}
+            </div>
+            {sortedUsers.map((row) => (
+              <div
+                key={row.id}
+                style={{
+                  border: '1px solid #e2e8f0',
+                  borderRadius: 10,
+                  padding: 12,
+                  background: '#fff',
+                  display: 'grid',
+                  gap: 10
+                }}
+              >
+                <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                  <input
+                    type="checkbox"
+                    checked={Boolean(selected[row.id])}
+                    onChange={(e) =>
+                      setSelected((prev) => ({
+                        ...prev,
+                        [row.id]: e.target.checked
+                      }))
+                    }
+                    disabled={row.id === user?.id}
+                    style={{ width: 20, height: 20, flex: '0 0 auto' }}
+                  />
+                  <div style={{ minWidth: 0 }}>
+                    <div
+                      style={{
+                        fontWeight: 700,
+                        color: '#0f172a',
+                        overflowWrap: 'anywhere'
+                      }}
+                    >
+                      {row.email || '-'}
+                    </div>
+                    <div style={{ fontSize: 12, color: '#64748b', overflowWrap: 'anywhere' }}>
+                      @{row.username || '-'} - {row.id}
+                      {row.id === user?.id ? ' (toi)' : ''}
+                    </div>
+                  </div>
                 </div>
-              </div>
-              <div>{row.startedSetsCount}</div>
-              <div>{row.cardsCount}</div>
-              <div>{formatDate(row.createdAt)}</div>
-              <div>{formatDate(row.lastSignInAt)}</div>
-              <div>{formatDate(row.emailConfirmedAt)}</div>
-              <div>
+
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+                    gap: 8,
+                    fontSize: 13
+                  }}
+                >
+                  <div>
+                    <div style={{ color: '#64748b' }}>Sets</div>
+                    <strong>{row.startedSetsCount}</strong>
+                  </div>
+                  <div>
+                    <div style={{ color: '#64748b' }}>Cartes</div>
+                    <strong>{row.cardsCount}</strong>
+                  </div>
+                  <div>
+                    <div style={{ color: '#64748b' }}>Cree le</div>
+                    <span>{formatDate(row.createdAt)}</span>
+                  </div>
+                  <div>
+                    <div style={{ color: '#64748b' }}>Connexion</div>
+                    <span>{formatDate(row.lastSignInAt)}</span>
+                  </div>
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <div style={{ color: '#64748b' }}>Email confirme</div>
+                    <span>{formatDate(row.emailConfirmedAt)}</span>
+                  </div>
+                </div>
+
                 <button
                   onClick={() => void startSupportMode(row.id)}
                   style={{
+                    width: '100%',
+                    minHeight: 40,
                     border: '1px solid #2563eb',
                     background: '#eff6ff',
                     color: '#1d4ed8',
                     borderRadius: 8,
-                    padding: '6px 10px',
-                    cursor: 'pointer'
+                    padding: '8px 10px',
+                    cursor: 'pointer',
+                    fontWeight: 700
                   }}
                 >
                   Lecture seule
                 </button>
               </div>
+            ))}
+          </div>
+        ) : (
+          <>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns:
+                  '30px minmax(220px,1.3fr) 110px 110px minmax(150px,1fr) minmax(150px,1fr) minmax(150px,1fr) 110px',
+                gap: 10,
+                padding: '8px 10px',
+                background: '#f8fafc',
+                borderBottom: '1px solid #e2e8f0',
+                fontWeight: 600
+              }}
+            >
+              <div />
+              <div>{renderSortHeader('email', 'Email / Pseudo')}</div>
+              <div>{renderSortHeader('startedSetsCount', 'Sets')}</div>
+              <div>{renderSortHeader('cardsCount', 'Cartes')}</div>
+              <div>{renderSortHeader('createdAt', 'Cree le')}</div>
+              <div>{renderSortHeader('lastSignInAt', 'Derniere connexion')}</div>
+              <div>{renderSortHeader('emailConfirmedAt', 'Email confirme')}</div>
+              <div>Support</div>
             </div>
-          ))
+
+            {sortedUsers.map((row) => (
+              <div
+                key={row.id}
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns:
+                    '30px minmax(220px,1.3fr) 110px 110px minmax(150px,1fr) minmax(150px,1fr) minmax(150px,1fr) 110px',
+                  gap: 10,
+                  padding: '10px',
+                  borderBottom: '1px solid #eee',
+                  alignItems: 'start'
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={Boolean(selected[row.id])}
+                  onChange={(e) =>
+                    setSelected((prev) => ({
+                      ...prev,
+                      [row.id]: e.target.checked
+                    }))
+                  }
+                  disabled={row.id === user?.id}
+                />
+                <div>
+                  <div>{row.email || '-'}</div>
+                  <div style={{ fontSize: 12, color: '#64748b' }}>
+                    @{row.username || '-'} - {row.id}
+                    {row.id === user?.id ? ' (toi)' : ''}
+                  </div>
+                </div>
+                <div>{row.startedSetsCount}</div>
+                <div>{row.cardsCount}</div>
+                <div>{formatDate(row.createdAt)}</div>
+                <div>{formatDate(row.lastSignInAt)}</div>
+                <div>{formatDate(row.emailConfirmedAt)}</div>
+                <div>
+                  <button
+                    onClick={() => void startSupportMode(row.id)}
+                    style={{
+                      border: '1px solid #2563eb',
+                      background: '#eff6ff',
+                      color: '#1d4ed8',
+                      borderRadius: 8,
+                      padding: '6px 10px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Lecture seule
+                  </button>
+                </div>
+              </div>
+            ))}
+          </>
         )}
       </div>
 
