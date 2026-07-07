@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { DEFAULT_LOCALE } from '@/lib/locale'
-import { getDisplayPrintCode } from '@/lib/cards/printDisplay'
+import { getDisplayPrintCode, getPrintVariantTypeBadgeLabel } from '@/lib/cards/printDisplay'
 import {
   getAltTypeKey,
   getAltTypeLabel,
@@ -433,7 +433,7 @@ export function CollectionCardsSearch() {
             const isAlt = isAltVersion(item)
             const altType = getAltTypeKey(item)
             const isFoil = altType === 'foil'
-            const altBadgeLabel = altType === 'foil' ? 'FOIL' : 'ALT'
+            const variantBadgeLabel = getPrintVariantTypeBadgeLabel(item)
             const rarityTheme = ALT_RARITY_THEME[item.card?.rarity || ''] || {
               background: 'linear-gradient(145deg, #f3f4f6, #e5e7eb)',
               border: '#9ca3af'
@@ -456,7 +456,7 @@ export function CollectionCardsSearch() {
                       : '0 8px 20px -18px #374151'
                 }}
               >
-                {isAlt && (
+                {variantBadgeLabel && (
                   <div
                     style={{
                       position: 'absolute',
@@ -471,7 +471,7 @@ export function CollectionCardsSearch() {
                       padding: '3px 8px'
                     }}
                   >
-                    {altBadgeLabel}
+                    {variantBadgeLabel}
                   </div>
                 )}
 

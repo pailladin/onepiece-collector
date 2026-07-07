@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { DEFAULT_LOCALE } from '@/lib/locale'
-import { getDisplayPrintCode } from '@/lib/cards/printDisplay'
+import { getDisplayPrintCode, getPrintVariantTypeBadgeLabel } from '@/lib/cards/printDisplay'
 import {
   getAltTypeLabel,
   getAltTypeKey,
@@ -929,7 +929,7 @@ export default function CatalogueSetsBrowser({ sets }: { sets: CatalogueSetRow[]
                   const isAlt = isAltVersion(item)
                   const altType = getAltTypeKey(item)
                   const isFoil = altType === 'foil'
-                  const altBadgeLabel = altType === 'foil' ? 'FOIL' : 'ALT'
+                  const variantBadgeLabel = getPrintVariantTypeBadgeLabel(item)
                   const rarityTheme = ALT_RARITY_THEME[item.card?.rarity || ''] || {
                     background: 'linear-gradient(145deg, #f3f4f6, #e5e7eb)',
                     border: '#9ca3af'
@@ -963,7 +963,7 @@ export default function CatalogueSetsBrowser({ sets }: { sets: CatalogueSetRow[]
                           onToggle={() => void toggleWishlist(item.id)}
                         />
                       )}
-                      {isAlt && (
+                      {variantBadgeLabel && (
                         <div
                           style={{
                             position: 'absolute',
@@ -978,7 +978,7 @@ export default function CatalogueSetsBrowser({ sets }: { sets: CatalogueSetRow[]
                             padding: '3px 8px'
                           }}
                         >
-                          {altBadgeLabel}
+                          {variantBadgeLabel}
                         </div>
                       )}
                       <img

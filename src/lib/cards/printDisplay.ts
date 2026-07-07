@@ -38,6 +38,14 @@ export function getPrintVariantLabel(print: {
   return null
 }
 
+export function getPrintVariantTypeBadgeLabel(print: {
+  variant_type?: string | null
+}): string | null {
+  const variant = (print.variant_type || '').trim()
+  if (!variant || variant.toLowerCase() === 'normal') return null
+  return variant
+}
+
 export function getDisplayPrintCode(print: {
   print_code?: string | null
   variant_type?: string | null

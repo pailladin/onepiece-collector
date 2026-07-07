@@ -5,7 +5,7 @@ import { useParams, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 import { useAuth } from '@/lib/auth'
 import { DEFAULT_LOCALE } from '@/lib/locale'
-import { getDisplayPrintCode } from '@/lib/cards/printDisplay'
+import { getDisplayPrintCode, getPrintVariantTypeBadgeLabel } from '@/lib/cards/printDisplay'
 import { parseCardCode } from '@/lib/sorting/parseCardCode'
 import {
   filterCardPrints,
@@ -634,7 +634,7 @@ export function CatalogueSetPageClient() {
           const isAlt = isAltVersion(item)
           const altType = getAltTypeKey(item)
           const isFoil = altType === 'foil'
-          const altBadgeLabel = altType === 'foil' ? 'FOIL' : 'ALT'
+          const variantBadgeLabel = getPrintVariantTypeBadgeLabel(item)
           const rarityTheme = ALT_RARITY_THEME[item.card?.rarity ?? ''] || {
             background: 'linear-gradient(145deg, #f3f4f6, #e5e7eb)',
             border: '#9ca3af'
@@ -668,7 +668,7 @@ export function CatalogueSetPageClient() {
                   onToggle={() => void toggleWishlist(item.id)}
                 />
               )}
-              {isAlt && (
+              {variantBadgeLabel && (
                 <div
                   style={{
                     position: 'absolute',
@@ -683,7 +683,7 @@ export function CatalogueSetPageClient() {
                     padding: '3px 8px'
                   }}
                 >
-                  {altBadgeLabel}
+                  {variantBadgeLabel}
                 </div>
               )}
               <img
