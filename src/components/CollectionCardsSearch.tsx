@@ -3,7 +3,11 @@
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { DEFAULT_LOCALE } from '@/lib/locale'
-import { getDisplayPrintCode, getPrintVariantTypeBadgeLabel } from '@/lib/cards/printDisplay'
+import {
+  getDisplayPrintCode,
+  getPrintVariantTypeBadgeLabel,
+  getPrintVariantTypeBorderColor
+} from '@/lib/cards/printDisplay'
 import {
   getAltTypeKey,
   getAltTypeLabel,
@@ -431,9 +435,8 @@ export function CollectionCardsSearch() {
               ? `${STORAGE_BASE_URL}/${item.set.code}/${item.image_path}`
               : CARD_PLACEHOLDER_IMAGE
             const isAlt = isAltVersion(item)
-            const altType = getAltTypeKey(item)
-            const isFoil = altType === 'foil'
             const variantBadgeLabel = getPrintVariantTypeBadgeLabel(item)
+            const variantBorderColor = getPrintVariantTypeBorderColor(item)
             const rarityTheme = ALT_RARITY_THEME[item.card?.rarity || ''] || {
               background: 'linear-gradient(145deg, #f3f4f6, #e5e7eb)',
               border: '#9ca3af'
@@ -443,16 +446,16 @@ export function CollectionCardsSearch() {
               <div
                 key={item.id}
                 style={{
-                  border: `2px solid ${isFoil ? '#f5c84c' : isAlt ? rarityTheme.border : '#d1d5db'}`,
+                  border: `2px solid ${variantBorderColor}`,
                   borderRadius: 12,
                   padding: isMobileView ? 7 : 10,
                   background: isAlt ? rarityTheme.background : 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)',
                   textAlign: 'center',
                   position: 'relative',
-                  boxShadow: isFoil
+                  boxShadow: variantBorderColor === '#f5c84c'
                     ? '0 0 0 1px rgba(255,245,204,0.7) inset, 0 0 18px -6px rgba(251,191,36,0.95), 0 8px 24px -18px #374151'
                     : isAlt
-                      ? `0 10px 24px -14px ${rarityTheme.border}`
+                      ? `0 10px 24px -14px ${variantBorderColor}`
                       : '0 8px 20px -18px #374151'
                 }}
               >

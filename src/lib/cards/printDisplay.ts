@@ -46,6 +46,18 @@ export function getPrintVariantTypeBadgeLabel(print: {
   return variant
 }
 
+export function getPrintVariantTypeBorderColor(print: {
+  variant_type?: string | null
+}): string {
+  const variant = (print.variant_type || '').trim().toLowerCase()
+  if (variant === 'parallel') return '#3b82f6'
+  if (variant === 'foil') return '#f5c84c'
+  if (variant === 'sp') return '#8b5cf6'
+  if (variant === 'manga') return '#ec4899'
+  if (variant === 'wanted poster') return '#f97316'
+  return '#d1d5db'
+}
+
 export function getDisplayPrintCode(print: {
   print_code?: string | null
   variant_type?: string | null
