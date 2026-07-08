@@ -39,7 +39,9 @@ export async function POST(
   const body = await request.json().catch(() => ({}))
   const forceDelete = Boolean(body?.forceDelete)
   const deleteToken = String(body?.deleteToken || '').trim()
+  const confirmationText = String(body?.confirmationText || '').trim().toUpperCase()
   const logs: string[] = []
+  const expectedConfirmationText = `SUPPRIMER ${String(code || '').trim().toUpperCase()}`
 
   const expectedDeleteToken = String(process.env.CRON_SECRET || '').trim()
   if (!expectedDeleteToken) {
@@ -53,6 +55,13 @@ export async function POST(
     return NextResponse.json(
       { logs: ['Token de suppression invalide'] },
       { status: 403 }
+    )
+  }
+
+  if (confirmationText !== expectedConfirmationText) {
+    return NextResponse.json(
+      { logs: [`Confirmation invalide: saisissez exactement "${expectedConfirmationText}"`] },
+      { status: 400 }
     )
   }
 

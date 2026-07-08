@@ -16,7 +16,8 @@ export function RootShell({
   const adminEmails = parseAdminEmails(process.env.NEXT_PUBLIC_ADMIN_EMAILS)
   const canAccessAdmin = isAdminEmail(user?.email, adminEmails)
   const [hasPendingFriendRequests, setHasPendingFriendRequests] = useState(false)
-  const [hasPendingAdminSubmissions, setHasPendingAdminSubmissions] = useState(false)
+  const [pendingAdminSubmissionsCount, setPendingAdminSubmissionsCount] = useState(0)
+  const [hasOverdueAdminSubmissions, setHasOverdueAdminSubmissions] = useState(false)
   const [supportTarget, setSupportTarget] = useState<{ id: string; email: string; username: string } | null>(null)
   const [profileUsername, setProfileUsername] = useState<string>('')
   const [useCompactNav, setUseCompactNav] = useState(false)
@@ -54,21 +55,26 @@ export function RootShell({
   useEffect(() => {
     const loadPendingAdminSubmissions = async () => {
       if (!user || !canAccessAdmin) {
-        setHasPendingAdminSubmissions(false)
+        setPendingAdminSubmissionsCount(0)
+        setHasOverdueAdminSubmissions(false)
         return
       }
 
-      const { count, error } = await supabase
-        .from('community_submissions')
-        .select('id', { count: 'exact', head: true })
-        .eq('status', 'pending')
+      const authHeaders = await getAuthHeader()
+      const res = await fetch('/api/admin/community/pending-count', {
+        headers: authHeaders,
+        cache: 'no-store'
+      })
+      const data = await res.json().catch(() => ({}))
 
-      if (error) {
-        setHasPendingAdminSubmissions(false)
+      if (!res.ok) {
+        setPendingAdminSubmissionsCount(0)
+        setHasOverdueAdminSubmissions(false)
         return
       }
 
-      setHasPendingAdminSubmissions((count || 0) > 0)
+      setPendingAdminSubmissionsCount(Number(data?.pendingCount || 0))
+      setHasOverdueAdminSubmissions(Number(data?.overdueCount || 0) > 0)
     }
 
     void loadPendingAdminSubmissions()
@@ -150,6 +156,13 @@ export function RootShell({
   }
 
   const displayIdentity = profileUsername.trim() || user?.email || ''
+  const hasPendingAdminSubmissions = pendingAdminSubmissionsCount > 0
+  const adminSubmissionsAlertColor = hasOverdueAdminSubmissions ? '#dc2626' : '#f59e0b'
+  const adminSubmissionsAlertTitle = hasPendingAdminSubmissions
+    ? `${pendingAdminSubmissionsCount} contribution(s) en attente${
+        hasOverdueAdminSubmissions ? ', dont au moins une depuis plus de 48h' : ''
+      }`
+    : 'Aucune contribution en attente'
   const accountBadgeContent = user ? (
     <>
       <Link
@@ -336,9 +349,37 @@ export function RootShell({
                     <Link
                       href="/admin"
                       className="root-shell-mobile-link root-shell-mobile-link-admin"
-                      style={{ color: '#fff7ed', textDecoration: 'none' }}
+                      title={adminSubmissionsAlertTitle}
+                      style={{
+                        color: '#fff7ed',
+                        textDecoration: 'none',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6
+                      }}
                     >
                       Admin
+                      {hasPendingAdminSubmissions && (
+                        <span
+                          aria-label={adminSubmissionsAlertTitle}
+                          style={{
+                            minWidth: 18,
+                            height: 18,
+                            padding: '0 5px',
+                            borderRadius: 999,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            background: adminSubmissionsAlertColor,
+                            color: '#fff',
+                            fontSize: 11,
+                            fontWeight: 800,
+                            lineHeight: 1
+                          }}
+                        >
+                          {pendingAdminSubmissionsCount > 99 ? '99+' : pendingAdminSubmissionsCount}
+                        </span>
+                      )}
                     </Link>
                   )}
                 </nav>
@@ -468,6 +509,7 @@ export function RootShell({
                     <Link
                       href="/admin"
                       className="root-shell-admin-link"
+                      title={adminSubmissionsAlertTitle}
                       style={{
                         color: '#fffbeb',
                         textDecoration: 'none',
@@ -479,14 +521,42 @@ export function RootShell({
                         fontSize: 16,
                         display: 'inline-flex',
                         alignItems: 'center',
+                        position: 'relative',
                         gap: 7,
                         boxShadow: hasPendingAdminSubmissions
-                          ? '0 0 0 3px rgba(250, 204, 21, 0.98), 0 0 22px rgba(245, 158, 11, 0.75)'
+                          ? `0 0 0 3px ${hasOverdueAdminSubmissions ? 'rgba(220, 38, 38, 0.9)' : 'rgba(250, 204, 21, 0.98)'}, 0 0 22px ${
+                              hasOverdueAdminSubmissions
+                                ? 'rgba(220, 38, 38, 0.65)'
+                                : 'rgba(245, 158, 11, 0.75)'
+                            }`
                           : 'none'
                       }}
                     >
                       <Image src="/op-jolly.svg" alt="" width={13} height={13} />
                       Admin
+                      {hasPendingAdminSubmissions && (
+                        <span
+                          aria-label={adminSubmissionsAlertTitle}
+                          style={{
+                            minWidth: 22,
+                            height: 22,
+                            padding: '0 7px',
+                            borderRadius: 999,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            background: adminSubmissionsAlertColor,
+                            color: '#fff',
+                            border: '1px solid rgba(255,255,255,0.7)',
+                            fontSize: 12,
+                            fontWeight: 900,
+                            lineHeight: 1,
+                            boxShadow: '0 6px 16px rgba(15, 23, 42, 0.28)'
+                          }}
+                        >
+                          {pendingAdminSubmissionsCount > 99 ? '99+' : pendingAdminSubmissionsCount}
+                        </span>
+                      )}
                     </Link>
                   )}
                 </nav>

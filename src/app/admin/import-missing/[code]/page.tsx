@@ -17,11 +17,12 @@ type MissingCard = {
 
 type SetCardOption = {
   id: string
+  printCode: string
   baseCode: string
   number: string | null
   name: string
+  variantType: string
   ownersCount: number
-  printsCount: number
 }
 
 const PAGE_SIZE = 50
@@ -57,7 +58,7 @@ export default function ImportMissingCardsPage() {
     [selected]
   )
   const selectedCards = useMemo(
-    () => cardOptions.filter((card) => Boolean(selectedCardCodes[card.baseCode])),
+    () => cardOptions.filter((card) => Boolean(selectedCardCodes[card.printCode])),
     [cardOptions, selectedCardCodes]
   )
   const filteredMissingCards = useMemo(() => {
@@ -74,7 +75,7 @@ export default function ImportMissingCardsPage() {
     const query = cardsFilter.trim().toLowerCase()
     if (!query) return cardOptions
     return cardOptions.filter((card) =>
-      [card.baseCode, card.number || '', card.name]
+      [card.printCode, card.baseCode, card.number || '', card.name, card.variantType]
         .join(' ')
         .toLowerCase()
         .includes(query)
@@ -155,7 +156,7 @@ export default function ImportMissingCardsPage() {
     setCardOptions(cards)
     setCardsPage(1)
     setSelectedCardCodes(
-      Object.fromEntries(cards.map((card) => [card.baseCode, false])) as Record<
+      Object.fromEntries(cards.map((card) => [card.printCode, false])) as Record<
         string,
         boolean
       >
@@ -266,12 +267,12 @@ export default function ImportMissingCardsPage() {
   }
 
   const deleteCardFromSet = async () => {
-    const targetCodes = selectedCards.map((card) => card.baseCode.trim().toUpperCase())
+    const targetCodes = selectedCards.map((card) => card.printCode.trim().toUpperCase())
     if (targetCodes.length === 0 || isDeleting) return
 
     const ownersCount = selectedCards.reduce((sum, card) => sum + card.ownersCount, 0)
     const confirmed = confirm(
-      `Supprimer ${targetCodes.length} carte(s) du set ${code} ?\nUtilisateurs impactes (somme): ${ownersCount}`
+      `Supprimer ${targetCodes.length} print(s) du set ${code} ?\nUtilisateurs impactes (somme): ${ownersCount}\nLa carte globale sera supprimee uniquement si elle n'a plus aucun print.`
     )
     if (!confirmed) return
 
@@ -291,7 +292,7 @@ export default function ImportMissingCardsPage() {
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            mode: 'base',
+            mode: 'print',
             targetCode
           })
         })
@@ -476,6 +477,7 @@ export default function ImportMissingCardsPage() {
         </>
       ) : (
         <div
+          id="delete-card"
           style={{
             border: '1px solid #ddd',
             borderRadius: 6,
@@ -483,7 +485,7 @@ export default function ImportMissingCardsPage() {
             marginBottom: 20
           }}
         >
-          <h2 style={{ margin: '0 0 10px' }}>Supprimer une carte du set</h2>
+          <h2 style={{ margin: '0 0 10px' }}>Supprimer un print du set</h2>
           <input
             type="search"
             value={cardsFilter}
@@ -500,7 +502,7 @@ export default function ImportMissingCardsPage() {
           <div style={{ marginBottom: 10, fontSize: 13, color: '#334155' }}>
             {cardsLoading
               ? 'Chargement des cartes du set...'
-              : `${filteredCardOptions.length} resultat(s) - ${selectedCards.length} carte(s) selectionnee(s) - page ${cardsPage} / ${cardsPageCount}`}
+              : `${filteredCardOptions.length} resultat(s) - ${selectedCards.length} print(s) selectionne(s) - page ${cardsPage} / ${cardsPageCount}`}
           </div>
         <div
           style={{
@@ -528,21 +530,21 @@ export default function ImportMissingCardsPage() {
               >
                 <input
                   type="checkbox"
-                  checked={Boolean(selectedCardCodes[card.baseCode])}
+                  checked={Boolean(selectedCardCodes[card.printCode])}
                   onChange={(e) =>
                     setSelectedCardCodes((prev) => ({
                       ...prev,
-                      [card.baseCode]: e.target.checked
+                      [card.printCode]: e.target.checked
                     }))
                   }
                 />
                 <div>
                   <div>
-                    <code>{card.baseCode}</code> - {card.name}
+                    <code>{card.printCode}</code> - {card.name}
                   </div>
                   <div style={{ fontSize: 12, color: '#666' }}>
-                    Numero {card.number || '-'} - {card.ownersCount} possesseur(s) -{' '}
-                    {card.printsCount} print(s)
+                    Base {card.baseCode} - Numero {card.number || '-'} - Variante{' '}
+                    {card.variantType || 'normal'} - {card.ownersCount} possesseur(s)
                   </div>
                 </div>
               </label>

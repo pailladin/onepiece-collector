@@ -1,16 +1,21 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabaseClient'
 import { useAuth } from '@/lib/auth'
 import { isAdminEmail, parseAdminEmails } from '@/lib/admin'
 
+type ApiSetRow = {
+  set_id?: string | null
+  set_name?: string | null
+}
+
 export default function AdminPage() {
   const { user, loading: authLoading } = useAuth()
   const adminEmails = parseAdminEmails(process.env.NEXT_PUBLIC_ADMIN_EMAILS)
   const canAccessAdmin = isAdminEmail(user?.email, adminEmails)
-  const [apiSets, setApiSets] = useState<any[]>([])
+  const [apiSets, setApiSets] = useState<ApiSetRow[]>([])
   const [dbSets, setDbSets] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [logs, setLogs] = useState<string[]>([])
@@ -26,11 +31,13 @@ export default function AdminPage() {
     tableCounts?: Record<string, number>
     error?: string
   } | null>(null)
+  const [setActions, setSetActions] = useState<Record<string, string>>({})
   const [deleteDialog, setDeleteDialog] = useState<{
     open: boolean
     code: string
     forceDelete: boolean
     token: string
+    confirmationText: string
     confirmChecked: boolean
     error: string | null
   }>({
@@ -38,19 +45,20 @@ export default function AdminPage() {
     code: '',
     forceDelete: false,
     token: '',
+    confirmationText: '',
     confirmChecked: false,
     error: null
   })
 
-  const getAuthHeader = async () => {
+  const getAuthHeader = useCallback(async () => {
     const { data } = await supabase.auth.getSession()
     const accessToken = data.session?.access_token
     return accessToken
       ? ({ Authorization: `Bearer ${accessToken}` } as Record<string, string>)
       : ({} as Record<string, string>)
-  }
+  }, [])
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     const apiRes = await fetch('https://www.optcgapi.com/api/allSets/')
     const apiData = await apiRes.json()
 
@@ -63,7 +71,7 @@ export default function AdminPage() {
 
     const baseSets = Array.isArray(apiData) ? apiData : []
     const hasPromoSet = baseSets.some(
-      (set: any) => String(set?.set_id || '').replace('-', '').toUpperCase() === 'PROMO'
+      (set: ApiSetRow) => String(set?.set_id || '').replace('-', '').toUpperCase() === 'PROMO'
     )
     const mergedSets = hasPromoSet
       ? baseSets
@@ -75,15 +83,15 @@ export default function AdminPage() {
       Array.isArray(cronData?.rows) ? cronData.rows.some((row: { healthy?: boolean }) => row.healthy === false) : false
     )
     setLoading(false)
-  }
+  }, [getAuthHeader])
 
   useEffect(() => {
     if (!canAccessAdmin) {
       setLoading(false)
       return
     }
-    loadData()
-  }, [canAccessAdmin])
+    void loadData()
+  }, [canAccessAdmin, loadData])
 
   const importSet = async (
     code: string,
@@ -153,7 +161,8 @@ export default function AdminPage() {
   const executeDeleteSet = async (
     code: string,
     forceDelete = false,
-    deleteToken: string
+    deleteToken: string,
+    confirmationText: string
   ) => {
     setLogs([])
     setShowModal(true)
@@ -165,7 +174,7 @@ export default function AdminPage() {
         ...authHeaders,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ forceDelete, deleteToken })
+      body: JSON.stringify({ forceDelete, deleteToken, confirmationText })
     })
 
     const data = await res.json()
@@ -177,6 +186,7 @@ export default function AdminPage() {
         code,
         forceDelete: true,
         token: deleteToken,
+        confirmationText: '',
         confirmChecked: false,
         error:
           'Ce set a des cartes dans des collections. Coche la confirmation pour forcer la suppression.'
@@ -193,6 +203,7 @@ export default function AdminPage() {
       code,
       forceDelete: false,
       token: '',
+      confirmationText: '',
       confirmChecked: false,
       error: null
     })
@@ -213,9 +224,22 @@ export default function AdminPage() {
       setDeleteDialog((prev) => ({ ...prev, error: 'Confirmation requise' }))
       return
     }
+    const expectedConfirmationText = `SUPPRIMER ${deleteDialog.code}`
+    if (deleteDialog.confirmationText.trim().toUpperCase() !== expectedConfirmationText) {
+      setDeleteDialog((prev) => ({
+        ...prev,
+        error: `Saisis exactement "${expectedConfirmationText}" pour confirmer`
+      }))
+      return
+    }
 
     closeDeleteDialog()
-    await executeDeleteSet(deleteDialog.code, deleteDialog.forceDelete, token)
+    await executeDeleteSet(
+      deleteDialog.code,
+      deleteDialog.forceDelete,
+      token,
+      deleteDialog.confirmationText
+    )
   }
 
   const runDatabaseBackup = async () => {
@@ -243,6 +267,47 @@ export default function AdminPage() {
       })
     } finally {
       setBackupLoading(false)
+    }
+  }
+
+  const executeSetAction = (code: string) => {
+    const action = setActions[code]
+    if (!action) return
+
+    if (action === 'reload-no-images') {
+      void importSet(code, { skipImages: true })
+      return
+    }
+    if (action === 'missing-images') {
+      void importSet(code, { missingImagesOnly: true })
+      return
+    }
+    if (action === 'update-with-images') {
+      void importSet(code)
+      return
+    }
+    if (action === 'import-missing') {
+      window.location.href = `/admin/import-missing/${code}`
+      return
+    }
+    if (action === 'delete-card') {
+      window.location.href = `/admin/import-missing/${code}#delete-card`
+      return
+    }
+    if (action === 'edit-card') {
+      window.location.href = `/admin/edit-card/${code}`
+      return
+    }
+    if (action === 'create-card') {
+      window.location.href = `/admin/create-card/${code}`
+      return
+    }
+    if (action === 'languages') {
+      window.location.href = `/admin/set-languages/${code}`
+      return
+    }
+    if (action === 'delete-set') {
+      openDeleteDialog(code)
     }
   }
 
@@ -405,7 +470,7 @@ export default function AdminPage() {
         )}
       </div>
 
-      {apiSets.map((set: any) => {
+      {apiSets.map((set) => {
         const code = String(set?.set_id || '').replace('-', '').toUpperCase()
         const setName = String(set?.set_name || '')
         if (!code) return null
@@ -427,139 +492,47 @@ export default function AdminPage() {
             </div>
 
             {exists ? (
-              <div style={{ display: 'flex', gap: 10 }}>
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                 <span style={{ color: 'green' }}>Deja importe</span>
 
+                <select
+                  value={setActions[code] || ''}
+                  onChange={(event) =>
+                    setSetActions((prev) => ({ ...prev, [code]: event.target.value }))
+                  }
+                  style={{
+                    minWidth: 230,
+                    padding: '6px 8px',
+                    border: '1px solid #cbd5e1',
+                    borderRadius: 6,
+                    background: '#fff'
+                  }}
+                >
+                  <option value="">Choisir une action</option>
+                  <option value="reload-no-images">Recharger sans images</option>
+                  <option value="missing-images">Reimporter images manquantes</option>
+                  <option value="update-with-images">Mise a jour avec images</option>
+                  <option value="import-missing">Importer cartes manquantes</option>
+                  <option value="languages">Langues du set</option>
+                  <option value="delete-card">Supprimer une carte</option>
+                  <option value="edit-card">Modifier une carte</option>
+                  <option value="create-card">Creer une carte</option>
+                  <option value="delete-set">Supprimer le set</option>
+                </select>
                 <button
-                  onClick={() => importSet(code, { skipImages: true })}
+                  onClick={() => executeSetAction(code)}
+                  disabled={!setActions[code]}
                   style={{
-                    background: '#2563eb',
+                    background: '#0f172a',
                     color: '#fff',
                     border: 'none',
-                    padding: '4px 8px',
-                    borderRadius: 4
+                    padding: '6px 10px',
+                    borderRadius: 6,
+                    opacity: setActions[code] ? 1 : 0.5,
+                    cursor: setActions[code] ? 'pointer' : 'not-allowed'
                   }}
                 >
-                  Recharger sans images
-                </button>
-
-                <button
-                  onClick={() => importSet(code, { missingImagesOnly: true })}
-                  style={{
-                    background: '#f59e0b',
-                    color: '#111827',
-                    border: 'none',
-                    padding: '4px 8px',
-                    borderRadius: 4
-                  }}
-                >
-                  Reimporter images manquantes
-                </button>
-
-                <button
-                  onClick={() => importSet(code)}
-                  style={{
-                    background: '#0ea5e9',
-                    color: '#fff',
-                    border: 'none',
-                    padding: '4px 8px',
-                    borderRadius: 4
-                  }}
-                >
-                  Mise a jour (avec images)
-                </button>
-
-                <Link
-                  href={`/admin/import-missing/${code}`}
-                  style={{
-                    background: '#0f766e',
-                    color: '#fff',
-                    border: 'none',
-                    padding: '4px 8px',
-                    borderRadius: 4,
-                    textDecoration: 'none',
-                    display: 'inline-flex',
-                    alignItems: 'center'
-                  }}
-                >
-                  Importer manquantes
-                </Link>
-
-                <Link
-                  href={`/admin/import-missing/${code}`}
-                  style={{
-                    background: '#7c3aed',
-                    color: '#fff',
-                    border: 'none',
-                    padding: '4px 8px',
-                    borderRadius: 4,
-                    textDecoration: 'none',
-                    display: 'inline-flex',
-                    alignItems: 'center'
-                  }}
-                >
-                  Gerer cartes
-                </Link>
-
-                <Link
-                  href={`/admin/edit-card/${code}`}
-                  style={{
-                    background: '#1d4ed8',
-                    color: '#fff',
-                    border: 'none',
-                    padding: '4px 8px',
-                    borderRadius: 4,
-                    textDecoration: 'none',
-                    display: 'inline-flex',
-                    alignItems: 'center'
-                  }}
-                >
-                  Modifier carte
-                </Link>
-
-                <Link
-                  href={`/admin/create-card/${code}`}
-                  style={{
-                    background: '#075985',
-                    color: '#fff',
-                    border: 'none',
-                    padding: '4px 8px',
-                    borderRadius: 4,
-                    textDecoration: 'none',
-                    display: 'inline-flex',
-                    alignItems: 'center'
-                  }}
-                >
-                  Creer carte
-                </Link>
-
-                <Link
-                  href={`/admin/set-languages/${code}`}
-                  style={{
-                    background: '#475569',
-                    color: '#fff',
-                    border: 'none',
-                    padding: '4px 8px',
-                    borderRadius: 4,
-                    textDecoration: 'none',
-                    display: 'inline-flex',
-                    alignItems: 'center'
-                  }}
-                >
-                  Langues
-                </Link>
-
-                <button
-                  onClick={() => openDeleteDialog(code)}
-                  style={{
-                    background: '#d9534f',
-                    color: '#fff',
-                    border: 'none',
-                    padding: '4px 8px',
-                    borderRadius: 4
-                  }}
-                >
-                  Supprimer
+                  Executer
                 </button>
               </div>
             ) : (
@@ -720,6 +693,29 @@ export default function AdminPage() {
                 <strong>{deleteDialog.code}</strong>.
               </span>
             </label>
+
+            <label style={{ display: 'block', marginBottom: 10, fontSize: 13, color: '#334155' }}>
+              Saisis exactement <strong>SUPPRIMER {deleteDialog.code}</strong>
+            </label>
+            <input
+              value={deleteDialog.confirmationText}
+              onChange={(e) =>
+                setDeleteDialog((prev) => ({
+                  ...prev,
+                  confirmationText: e.target.value,
+                  error: null
+                }))
+              }
+              placeholder={`SUPPRIMER ${deleteDialog.code}`}
+              style={{
+                width: '100%',
+                boxSizing: 'border-box',
+                padding: '8px 10px',
+                borderRadius: 6,
+                border: '1px solid #cbd5e1',
+                marginBottom: 12
+              }}
+            />
 
             {deleteDialog.error && (
               <div style={{ marginBottom: 10, color: '#b91c1c', fontSize: 13 }}>{deleteDialog.error}</div>

@@ -41,6 +41,8 @@ type CardRow = {
 type PrintRow = {
   id: string
   card_id: string
+  print_code: string | null
+  variant_type: string | null
 }
 
 type CollectionRow = {
@@ -76,6 +78,24 @@ export async function GET(
     return NextResponse.json({ error: 'Set introuvable' }, { status: 404 })
   }
 
+  const { data: printsData, error: printsError } = await supabase
+    .from('card_prints')
+    .select('id, card_id, print_code, variant_type')
+    .eq('distribution_set_id', setData.id)
+
+  if (printsError) {
+    return NextResponse.json(
+      { error: `Erreur lecture prints: ${printsError.message}` },
+      { status: 500 }
+    )
+  }
+
+  const prints = (printsData as PrintRow[] | null) || []
+  if (prints.length === 0) {
+    return NextResponse.json({ cards: [] })
+  }
+
+  const cardIds = [...new Set(prints.map((print) => print.card_id))]
   const { data: cardsData, error: cardsError } = await supabase
     .from('cards')
     .select(
@@ -89,7 +109,7 @@ export async function GET(
       )
     `
     )
-    .eq('base_set_id', setData.id)
+    .in('id', cardIds)
 
   if (cardsError) {
     return NextResponse.json(
@@ -99,29 +119,8 @@ export async function GET(
   }
 
   const cards = (cardsData as CardRow[] | null) || []
-  if (cards.length === 0) {
-    return NextResponse.json({ cards: [] })
-  }
-
-  const cardIds = cards.map((card) => card.id)
-  const { data: printsData, error: printsError } = await supabase
-    .from('card_prints')
-    .select('id, card_id')
-    .eq('distribution_set_id', setData.id)
-    .in('card_id', cardIds)
-
-  if (printsError) {
-    return NextResponse.json(
-      { error: `Erreur lecture prints: ${printsError.message}` },
-      { status: 500 }
-    )
-  }
-
-  const prints = (printsData as PrintRow[] | null) || []
+  const cardsById = new Map(cards.map((card) => [card.id, card]))
   const printIds = prints.map((print) => print.id)
-  const printToCard = new Map<string, string>(
-    prints.map((print) => [print.id, print.card_id])
-  )
 
   let collections: CollectionRow[] = []
   if (printIds.length > 0) {
@@ -141,32 +140,29 @@ export async function GET(
     collections = (collectionsData as CollectionRow[] | null) || []
   }
 
-  const ownersByCard = new Map<string, Set<string>>()
+  const ownersByPrint = new Map<string, Set<string>>()
   for (const row of collections) {
-    const cardId = printToCard.get(row.card_print_id)
-    if (!cardId) continue
-    if (!ownersByCard.has(cardId)) ownersByCard.set(cardId, new Set<string>())
-    ownersByCard.get(cardId)?.add(row.user_id)
+    if (!ownersByPrint.has(row.card_print_id)) ownersByPrint.set(row.card_print_id, new Set<string>())
+    ownersByPrint.get(row.card_print_id)?.add(row.user_id)
   }
 
-  const printCountByCard = new Map<string, number>()
-  for (const print of prints) {
-    printCountByCard.set(print.card_id, (printCountByCard.get(print.card_id) || 0) + 1)
-  }
-
-  const payload = cards
-    .map((card) => {
+  const payload = prints
+    .map((print) => {
+      const card = cardsById.get(print.card_id)
       const translation =
-        card.card_translations?.find((t) => t.locale === DEFAULT_LOCALE)?.name ||
-        card.card_translations?.[0]?.name ||
-        card.base_code
+        card?.card_translations?.find((t) => t.locale === DEFAULT_LOCALE)?.name ||
+        card?.card_translations?.[0]?.name ||
+        card?.base_code ||
+        print.print_code ||
+        'Carte'
       return {
-        id: card.id,
-        baseCode: card.base_code,
-        number: card.number,
+        id: print.id,
+        printCode: print.print_code || '',
+        baseCode: card?.base_code || print.print_code || '',
+        number: card?.number || null,
         name: cleanCardName(translation),
-        ownersCount: ownersByCard.get(card.id)?.size || 0,
-        printsCount: printCountByCard.get(card.id) || 0
+        variantType: print.variant_type || 'normal',
+        ownersCount: ownersByPrint.get(print.id)?.size || 0
       }
     })
     .sort((a, b) => {

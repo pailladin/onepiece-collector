@@ -35,6 +35,7 @@ type PayloadOverrides = {
   baseCode?: string
   currentPrintCode?: string
   printCode?: string
+  allowPrintCodeChange?: boolean
   name?: string
   rarity?: string
   type?: string
@@ -316,7 +317,8 @@ export default function AdminCommunityPage() {
             nextSetCode: String(row.payload?.nextSetCode || row.payload?.setCode || ''),
             baseCode: String(row.payload?.baseCode || ''),
             currentPrintCode: String(row.payload?.currentPrintCode || ''),
-            printCode: String(row.payload?.printCode || ''),
+            printCode: row.submission_type === 'card_edit' ? '' : String(row.payload?.printCode || ''),
+            allowPrintCodeChange: false,
             name: String(row.payload?.name || ''),
             rarity: String(row.payload?.rarity || ''),
             type: String(row.payload?.type || ''),
@@ -356,7 +358,10 @@ export default function AdminCommunityPage() {
     void loadRows()
   }, [canAccessAdmin, loadRows])
 
-  const reviewSubmission = async (submissionId: string, action: 'approve' | 'reject') => {
+  const reviewSubmission = async (
+    submissionId: string,
+    action: 'approve' | 'reject' | 'neutral' | 'apply_media'
+  ) => {
     setBusyId(submissionId)
     setMessage('')
 
@@ -381,7 +386,15 @@ export default function AdminCommunityPage() {
         throw new Error(data?.error || 'Erreur moderation')
       }
 
-      setMessage(action === 'approve' ? 'Proposition validee.' : 'Proposition refusee.')
+      setMessage(
+        action === 'approve'
+          ? 'Proposition validee.'
+          : action === 'neutral'
+            ? 'Proposition validee sans modification du site.'
+            : action === 'apply_media'
+              ? 'Image et langues reappliquees.'
+              : 'Proposition refusee.'
+      )
       await loadRows()
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Erreur moderation')
@@ -808,7 +821,8 @@ export default function AdminCommunityPage() {
                               ...prev,
                               [row.id]: {
                                 ...prev[row.id],
-                                printCode: e.target.value.toUpperCase()
+                                printCode: e.target.value.toUpperCase(),
+                                allowPrintCodeChange: row.submission_type === 'card_edit' ? true : prev[row.id]?.allowPrintCodeChange
                               }
                             }))
                           }
@@ -1110,6 +1124,21 @@ export default function AdminCommunityPage() {
                         Approuver et appliquer
                       </button>
                       <button
+                        onClick={() => void reviewSubmission(row.id, 'neutral')}
+                        disabled={busyId === row.id}
+                        title="Attribue 1 point de validation sans appliquer la proposition"
+                        style={{
+                          background: '#fff',
+                          color: '#334155',
+                          border: '1px solid #cbd5e1',
+                          borderRadius: 10,
+                          padding: '9px 14px',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Neutre (+1)
+                      </button>
+                      <button
                         onClick={() => void reviewSubmission(row.id, 'reject')}
                         disabled={busyId === row.id}
                         style={{
@@ -1147,6 +1176,10 @@ export default function AdminCommunityPage() {
             const isExpanded = expandedRows[row.id] ?? false
             const diffFields = buildSubmissionDiff(row, payloadOverrides[row.id]).filter((field) => field.changed)
             const statusColors = getStatusColors(row.status)
+            const canReapplyMedia =
+              row.status === 'approved' &&
+              (Boolean(payloadOverrides[row.id]?.imageUrl) ||
+                Boolean(payloadOverrides[row.id]?.availableLanguages?.length))
 
             return (
               <article
@@ -1216,6 +1249,25 @@ export default function AdminCommunityPage() {
                   >
                     {isExpanded ? 'Masquer diff' : 'Voir diff'}
                   </button>
+                  {canReapplyMedia && (
+                    <button
+                      onClick={() => void reviewSubmission(row.id, 'apply_media')}
+                      disabled={busyId === row.id}
+                      title="Reapplique seulement l'image et les langues, sans points supplementaires"
+                      style={{
+                        padding: '8px 12px',
+                        borderRadius: 10,
+                        border: '1px solid #0f766e',
+                        background: '#ecfdf5',
+                        color: '#0f766e',
+                        cursor: 'pointer',
+                        height: 'fit-content',
+                        fontWeight: 700
+                      }}
+                    >
+                      Reappliquer image/langues
+                    </button>
+                  )}
                 </div>
 
                 {isExpanded && (

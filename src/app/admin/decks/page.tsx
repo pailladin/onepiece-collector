@@ -24,11 +24,13 @@ export default function AdminDecksPage() {
   const [loading, setLoading] = useState(true)
   const [logs, setLogs] = useState<string[]>([])
   const [showModal, setShowModal] = useState(false)
+  const [deckActions, setDeckActions] = useState<Record<string, string>>({})
   const [deleteDialog, setDeleteDialog] = useState<{
     open: boolean
     code: string
     forceDelete: boolean
     token: string
+    confirmationText: string
     confirmChecked: boolean
     error: string | null
   }>({
@@ -36,6 +38,7 @@ export default function AdminDecksPage() {
     code: '',
     forceDelete: false,
     token: '',
+    confirmationText: '',
     confirmChecked: false,
     error: null
   })
@@ -63,10 +66,9 @@ export default function AdminDecksPage() {
 
   useEffect(() => {
     if (!canAccessAdmin) {
-      setLoading(false)
       return
     }
-    loadData()
+    void Promise.resolve().then(loadData)
   }, [canAccessAdmin])
 
   const importDeck = async (
@@ -137,7 +139,8 @@ export default function AdminDecksPage() {
   const executeDeleteDeck = async (
     code: string,
     forceDelete = false,
-    deleteToken: string
+    deleteToken: string,
+    confirmationText: string
   ) => {
     setLogs([])
     setShowModal(true)
@@ -149,7 +152,11 @@ export default function AdminDecksPage() {
         ...authHeaders,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ forceDelete, deleteToken })
+      body: JSON.stringify({
+        forceDelete,
+        deleteToken,
+        confirmationText
+      })
     })
 
     const data = await res.json()
@@ -161,6 +168,7 @@ export default function AdminDecksPage() {
         code,
         forceDelete: true,
         token: deleteToken,
+        confirmationText: '',
         confirmChecked: false,
         error:
           'Ce deck a des cartes dans des collections. Coche la confirmation pour forcer la suppression.'
@@ -177,6 +185,7 @@ export default function AdminDecksPage() {
       code,
       forceDelete: false,
       token: '',
+      confirmationText: '',
       confirmChecked: false,
       error: null
     })
@@ -197,13 +206,64 @@ export default function AdminDecksPage() {
       setDeleteDialog((prev) => ({ ...prev, error: 'Confirmation requise' }))
       return
     }
+    const expectedConfirmationText = `SUPPRIMER ${deleteDialog.code}`
+    if (deleteDialog.confirmationText.trim().toUpperCase() !== expectedConfirmationText) {
+      setDeleteDialog((prev) => ({
+        ...prev,
+        error: `Saisis exactement "${expectedConfirmationText}" pour confirmer`
+      }))
+      return
+    }
 
     closeDeleteDialog()
-    await executeDeleteDeck(deleteDialog.code, deleteDialog.forceDelete, token)
+    await executeDeleteDeck(
+      deleteDialog.code,
+      deleteDialog.forceDelete,
+      token,
+      deleteDialog.confirmationText
+    )
   }
 
-  if (authLoading || loading) return <div style={{ padding: 40 }}>Chargement...</div>
+  const executeDeckAction = (code: string) => {
+    const action = deckActions[code]
+    if (!action) return
+
+    if (action === 'reload-no-images') {
+      void importDeck(code, { skipImages: true })
+      return
+    }
+    if (action === 'missing-images') {
+      void importDeck(code, { missingImagesOnly: true })
+      return
+    }
+    if (action === 'update-with-images') {
+      void importDeck(code)
+      return
+    }
+    if (action === 'import-missing') {
+      window.location.href = `/admin/import-missing/${code}`
+      return
+    }
+    if (action === 'delete-card') {
+      window.location.href = `/admin/import-missing/${code}#delete-card`
+      return
+    }
+    if (action === 'edit-card') {
+      window.location.href = `/admin/edit-card/${code}`
+      return
+    }
+    if (action === 'create-card') {
+      window.location.href = `/admin/create-card/${code}`
+      return
+    }
+    if (action === 'delete-set') {
+      openDeleteDialog(code)
+    }
+  }
+
+  if (authLoading) return <div style={{ padding: 40 }}>Chargement...</div>
   if (!canAccessAdmin) return <div style={{ padding: 40 }}>Acces refuse.</div>
+  if (loading) return <div style={{ padding: 40 }}>Chargement...</div>
 
   return (
     <div style={{ padding: 40 }}>
@@ -292,120 +352,43 @@ export default function AdminDecksPage() {
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                 <span style={{ color: 'green' }}>Deja importe</span>
 
+                <select
+                  value={deckActions[code] || ''}
+                  onChange={(event) =>
+                    setDeckActions((prev) => ({ ...prev, [code]: event.target.value }))
+                  }
+                  style={{
+                    minWidth: 230,
+                    padding: '6px 8px',
+                    border: '1px solid #cbd5e1',
+                    borderRadius: 6,
+                    background: '#fff'
+                  }}
+                >
+                  <option value="">Choisir une action</option>
+                  <option value="reload-no-images">Recharger sans images</option>
+                  <option value="missing-images">Reimporter images manquantes</option>
+                  <option value="update-with-images">Mise a jour avec images</option>
+                  <option value="import-missing">Importer cartes manquantes</option>
+                  <option value="delete-card">Supprimer une carte</option>
+                  <option value="edit-card">Modifier une carte</option>
+                  <option value="create-card">Creer une carte</option>
+                  <option value="delete-set">Supprimer le deck</option>
+                </select>
                 <button
-                  onClick={() => importDeck(code, { skipImages: true })}
+                  onClick={() => executeDeckAction(code)}
+                  disabled={!deckActions[code]}
                   style={{
-                    background: '#2563eb',
+                    background: '#0f172a',
                     color: '#fff',
                     border: 'none',
-                    padding: '4px 8px',
-                    borderRadius: 4
+                    padding: '6px 10px',
+                    borderRadius: 6,
+                    opacity: deckActions[code] ? 1 : 0.5,
+                    cursor: deckActions[code] ? 'pointer' : 'not-allowed'
                   }}
                 >
-                  Recharger sans images
-                </button>
-
-                <button
-                  onClick={() => importDeck(code, { missingImagesOnly: true })}
-                  style={{
-                    background: '#f59e0b',
-                    color: '#111827',
-                    border: 'none',
-                    padding: '4px 8px',
-                    borderRadius: 4
-                  }}
-                >
-                  Reimporter images manquantes
-                </button>
-
-                <button
-                  onClick={() => importDeck(code)}
-                  style={{
-                    background: '#0ea5e9',
-                    color: '#fff',
-                    border: 'none',
-                    padding: '4px 8px',
-                    borderRadius: 4
-                  }}
-                >
-                  Mise a jour (avec images)
-                </button>
-
-                <Link
-                  href={`/admin/import-missing/${code}`}
-                  style={{
-                    background: '#0f766e',
-                    color: '#fff',
-                    border: 'none',
-                    padding: '4px 8px',
-                    borderRadius: 4,
-                    textDecoration: 'none',
-                    display: 'inline-flex',
-                    alignItems: 'center'
-                  }}
-                >
-                  Importer manquantes
-                </Link>
-
-                <Link
-                  href={`/admin/import-missing/${code}`}
-                  style={{
-                    background: '#7c3aed',
-                    color: '#fff',
-                    border: 'none',
-                    padding: '4px 8px',
-                    borderRadius: 4,
-                    textDecoration: 'none',
-                    display: 'inline-flex',
-                    alignItems: 'center'
-                  }}
-                >
-                  Gerer cartes
-                </Link>
-
-                <Link
-                  href={`/admin/edit-card/${code}`}
-                  style={{
-                    background: '#1d4ed8',
-                    color: '#fff',
-                    border: 'none',
-                    padding: '4px 8px',
-                    borderRadius: 4,
-                    textDecoration: 'none',
-                    display: 'inline-flex',
-                    alignItems: 'center'
-                  }}
-                >
-                  Modifier carte
-                </Link>
-
-                <Link
-                  href={`/admin/create-card/${code}`}
-                  style={{
-                    background: '#075985',
-                    color: '#fff',
-                    border: 'none',
-                    padding: '4px 8px',
-                    borderRadius: 4,
-                    textDecoration: 'none',
-                    display: 'inline-flex',
-                    alignItems: 'center'
-                  }}
-                >
-                  Creer carte
-                </Link>
-
-                <button
-                  onClick={() => openDeleteDialog(code)}
-                  style={{
-                    background: '#d9534f',
-                    color: '#fff',
-                    border: 'none',
-                    padding: '4px 8px',
-                    borderRadius: 4
-                  }}
-                >
-                  Supprimer
+                  Executer
                 </button>
               </div>
             ) : (
@@ -548,6 +531,29 @@ export default function AdminDecksPage() {
                 <strong>{deleteDialog.code}</strong>.
               </span>
             </label>
+
+            <label style={{ display: 'block', marginBottom: 10, fontSize: 13, color: '#334155' }}>
+              Saisis exactement <strong>SUPPRIMER {deleteDialog.code}</strong>
+            </label>
+            <input
+              value={deleteDialog.confirmationText}
+              onChange={(e) =>
+                setDeleteDialog((prev) => ({
+                  ...prev,
+                  confirmationText: e.target.value,
+                  error: null
+                }))
+              }
+              placeholder={`SUPPRIMER ${deleteDialog.code}`}
+              style={{
+                width: '100%',
+                boxSizing: 'border-box',
+                padding: '8px 10px',
+                borderRadius: 6,
+                border: '1px solid #cbd5e1',
+                marginBottom: 12
+              }}
+            />
 
             {deleteDialog.error && (
               <div style={{ marginBottom: 10, color: '#b91c1c', fontSize: 13 }}>{deleteDialog.error}</div>

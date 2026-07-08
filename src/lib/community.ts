@@ -107,6 +107,7 @@ export function sanitizeSubmissionPayload(
     nextSetCode: normalizeCode(String(rawPayload.nextSetCode || rawPayload.setCode || '')),
     baseCode: normalizeCode(String(rawPayload.baseCode || '')),
     printCode: normalizeCode(String(rawPayload.printCode || '')),
+    allowPrintCodeChange: Boolean(rawPayload.allowPrintCodeChange),
     name: String(rawPayload.name || '').trim(),
     rarity: String(rawPayload.rarity || '').trim(),
     type: String(rawPayload.type || '').trim(),
@@ -492,6 +493,7 @@ export async function applyApprovedSubmission(submission: CommunitySubmissionRow
   const imageUrl = String(payload.imageUrl || '')
   const cardmarketProductId = String(payload.cardmarketProductId || '')
   const setMissingImage = Boolean(payload.setMissingImage)
+  const allowPrintCodeChange = Boolean(payload.allowPrintCodeChange)
   const availableLanguages = Array.isArray(payload.availableLanguages)
     ? (payload.availableLanguages as string[])
     : []
@@ -574,8 +576,8 @@ export async function applyApprovedSubmission(submission: CommunitySubmissionRow
 
   const printUpdate: Record<string, unknown> = {}
   if (variantType) printUpdate.variant_type = variantType
-  if (availableLanguages.length > 0) printUpdate.available_languages = availableLanguages
-  if (nextPrintCode && nextPrintCode !== normalizeCode(printData.print_code)) {
+  printUpdate.available_languages = availableLanguages
+  if (allowPrintCodeChange && nextPrintCode && nextPrintCode !== normalizeCode(printData.print_code)) {
     printUpdate.print_code = nextPrintCode
   }
   if (targetSetData.id !== setData.id) printUpdate.distribution_set_id = targetSetData.id
@@ -617,5 +619,75 @@ export async function applyApprovedSubmission(submission: CommunitySubmissionRow
   return {
     setCode: targetSetCode,
     printCode: String(printUpdate.print_code || printData.print_code)
+  }
+}
+
+export async function applySubmissionMediaFields(submission: CommunitySubmissionRow) {
+  const payload = sanitizeSubmissionPayload(submission.submission_type, submission.payload)
+
+  if (submission.submission_type === 'place_add') {
+    const slug = normalizePlaceSlug(String(payload.slug || ''))
+    if (!slug) throw new Error('Lieu introuvable: slug manquant')
+
+    const { error } = await supabaseServiceServer
+      .from('places')
+      .update({ image_url: String(payload.imageUrl || '').trim() || null })
+      .eq('slug', slug)
+
+    if (error) throw new Error(`Erreur update image lieu: ${error.message}`)
+    return { slug }
+  }
+
+  const setCode = String(payload.setCode || '')
+  const printCode =
+    submission.submission_type === 'card_add'
+      ? String(payload.printCode || '')
+      : String(payload.currentPrintCode || '')
+  const imageUrl = String(payload.imageUrl || '')
+  const availableLanguages = Array.isArray(payload.availableLanguages)
+    ? (payload.availableLanguages as string[])
+    : []
+
+  if (!setCode || !printCode) {
+    throw new Error('Impossible de reappliquer image/langues: set ou print code manquant')
+  }
+
+  const { data: setData, error: setError } = await supabaseServiceServer
+    .from('sets')
+    .select('id')
+    .eq('code', setCode)
+    .single()
+
+  if (setError || !setData) throw new Error('Set introuvable')
+
+  const { data: printData, error: printError } = await supabaseServiceServer
+    .from('card_prints')
+    .select('id, print_code')
+    .eq('distribution_set_id', setData.id)
+    .eq('print_code', printCode)
+    .single()
+
+  if (printError || !printData) throw new Error('Print introuvable')
+
+  const printUpdate: Record<string, unknown> = {
+    available_languages: availableLanguages
+  }
+
+  if (imageUrl) {
+    const nextImagePath = `${printData.print_code}.jpg`
+    const uploaded = await uploadImageToSupabase(imageUrl, `${setCode}/${nextImagePath}`)
+    printUpdate.image_path = uploaded.split('/').pop() || nextImagePath
+  }
+
+  const { error: updateError } = await supabaseServiceServer
+    .from('card_prints')
+    .update(printUpdate)
+    .eq('id', printData.id)
+
+  if (updateError) throw new Error(`Erreur update image/langues: ${updateError.message}`)
+
+  return {
+    setCode,
+    printCode: printData.print_code
   }
 }

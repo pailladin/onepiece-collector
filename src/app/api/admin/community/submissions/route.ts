@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { isAdminEmail, parseAdminEmails } from '@/lib/admin'
 import {
   applyApprovedSubmission,
+  applySubmissionMediaFields,
   CommunitySubmissionRow,
   getSubmissionPoints,
   normalizeCode,
@@ -166,7 +167,7 @@ export async function POST(request: Request) {
   const payloadPatch =
     typeof body?.payloadPatch === 'object' && body?.payloadPatch ? (body.payloadPatch as Record<string, unknown>) : {}
 
-  if (!submissionId || !['approve', 'reject'].includes(action)) {
+  if (!submissionId || !['approve', 'reject', 'neutral', 'apply_media'].includes(action)) {
     return NextResponse.json({ error: 'Requete invalide' }, { status: 400 })
   }
 
@@ -181,7 +182,7 @@ export async function POST(request: Request) {
   }
 
   const submission = submissionData as CommunitySubmissionRow
-  if (submission.status !== 'pending') {
+  if (action !== 'apply_media' && submission.status !== 'pending') {
     return NextResponse.json({ error: 'Cette proposition a deja ete traitee' }, { status: 409 })
   }
 
@@ -189,6 +190,27 @@ export async function POST(request: Request) {
     ...(submission.payload || {}),
     ...payloadPatch
   })
+
+  if (action === 'apply_media') {
+    if (submission.status !== 'approved') {
+      return NextResponse.json(
+        { error: 'La reapplication image/langues est reservee aux propositions validees' },
+        { status: 409 }
+      )
+    }
+
+    try {
+      const result = await applySubmissionMediaFields({
+        ...submission,
+        payload: mergedPayload
+      })
+
+      return NextResponse.json({ ok: true, status: submission.status, result })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Erreur reapplication image/langues'
+      return NextResponse.json({ error: message }, { status: 500 })
+    }
+  }
 
   if (action === 'approve') {
     try {
@@ -211,13 +233,13 @@ export async function POST(request: Request) {
     }
   }
 
-  const nextStatus = action === 'approve' ? 'approved' : 'rejected'
+  const nextStatus = action === 'reject' ? 'rejected' : 'approved'
   const reviewedAt = new Date().toISOString()
   const { error: updateError } = await supabaseServiceServer
     .from('community_submissions')
     .update({
       status: nextStatus,
-      admin_comment: adminComment || null,
+      admin_comment: adminComment || (action === 'neutral' ? 'Validation neutre: point attribue sans modification du site.' : null),
       payload: mergedPayload,
       reviewed_by: userResult.user.id,
       reviewed_at: reviewedAt
@@ -229,7 +251,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: updateError.message }, { status: 500 })
   }
 
-  const scorePoints = action === 'approve' ? getSubmissionPoints(submission.submission_type) : 0
+  const scorePoints =
+    action === 'approve' ? getSubmissionPoints(submission.submission_type) : action === 'neutral' ? 1 : 0
   const { data: existingScore } = await supabaseServiceServer
     .from('contributor_scores')
     .select('user_id, points, approved_count, rejected_count')
@@ -239,7 +262,7 @@ export async function POST(request: Request) {
   const nextScore = {
     user_id: submission.user_id,
     points: Number(existingScore?.points || 0) + scorePoints,
-    approved_count: Number(existingScore?.approved_count || 0) + (action === 'approve' ? 1 : 0),
+    approved_count: Number(existingScore?.approved_count || 0) + (action === 'approve' || action === 'neutral' ? 1 : 0),
     rejected_count: Number(existingScore?.rejected_count || 0) + (action === 'reject' ? 1 : 0)
   }
 
