@@ -8,8 +8,8 @@ import { useAuth } from '@/lib/auth'
 import { isAdminEmail, parseAdminEmails } from '@/lib/admin'
 import { SET_LANGUAGE_CODES, getCollectionLanguageShortLabel } from '@/lib/collections/languages'
 
-const CARD_TYPE_OPTIONS = ['Character', 'Event', 'Leader', 'Stage'] as const
-const VARIANT_TYPE_OPTIONS = ['Normal', 'Parallel', 'Foil', 'SP', 'Manga', 'Wanted Poster'] as const
+const CARD_TYPE_OPTIONS = ['Character', 'DON!!', 'Event', 'Leader', 'Stage'] as const
+const VARIANT_TYPE_OPTIONS = ['Normal', 'Parallel', 'Foil', 'Gold', 'SP', 'Manga', 'Wanted Poster'] as const
 
 function normalizeVariantTypeOption(value: string) {
   const normalized = value.trim().toLowerCase()
@@ -17,6 +17,7 @@ function normalizeVariantTypeOption(value: string) {
   if (normalized === 'normal') return 'Normal'
   if (normalized === 'parallel') return 'Parallel'
   if (normalized === 'foil') return 'Foil'
+  if (normalized === 'gold') return 'Gold'
   if (normalized === 'sp') return 'SP'
   if (normalized === 'manga') return 'Manga'
   if (normalized === 'wanted poster') return 'Wanted Poster'

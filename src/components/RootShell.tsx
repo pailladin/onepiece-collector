@@ -7,6 +7,45 @@ import { isAdminEmail, parseAdminEmails } from '@/lib/admin'
 import { useAuth } from '@/lib/auth'
 import { supabase } from '@/lib/supabaseClient'
 
+const DISCORD_INVITE_URL = 'https://discord.gg/sbAx5KWe6'
+
+function DiscordInviteLink() {
+  return (
+    <a
+      href={DISCORD_INVITE_URL}
+      target="_blank"
+      rel="noreferrer"
+      aria-label="Rejoindre le Discord"
+      title="Rejoindre le Discord"
+      className="root-shell-discord-link"
+      style={{
+        width: 30,
+        height: 30,
+        borderRadius: 999,
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        flex: '0 0 auto',
+        background: '#5865f2',
+        border: '1px solid rgba(255,255,255,0.45)',
+        color: '#fff',
+        boxShadow: '0 8px 18px rgba(15, 23, 42, 0.24)'
+      }}
+    >
+      <svg
+        aria-hidden="true"
+        viewBox="0 0 24 24"
+        width="19"
+        height="19"
+        fill="currentColor"
+        focusable="false"
+      >
+        <path d="M19.3 5.2A16.4 16.4 0 0 0 15.2 4l-.2.4c-.2.4-.4.8-.5 1.2a15 15 0 0 0-5 0c-.2-.4-.3-.8-.6-1.2L8.7 4a16.4 16.4 0 0 0-4 1.2C2.1 9 1.5 12.7 1.9 16.4A16.6 16.6 0 0 0 6.8 19c.4-.5.7-1.1 1-1.7-.6-.2-1.2-.5-1.7-.8l.4-.3c3.3 1.5 7.1 1.5 10.2 0l.4.3c-.5.3-1.1.6-1.7.8.3.6.6 1.2 1 1.7a16.6 16.6 0 0 0 4.9-2.6c.5-4.2-.6-7.9-2-11.2ZM8.7 14.2c-1 0-1.8-.9-1.8-2s.8-2 1.8-2 1.8.9 1.8 2-.8 2-1.8 2Zm6.6 0c-1 0-1.8-.9-1.8-2s.8-2 1.8-2 1.8.9 1.8 2-.8 2-1.8 2Z" />
+      </svg>
+    </a>
+  )
+}
+
 export function RootShell({
   children
 }: {
@@ -165,6 +204,7 @@ export function RootShell({
     : 'Aucune contribution en attente'
   const accountBadgeContent = user ? (
     <>
+      <DiscordInviteLink />
       <Link
         href="/account"
         className="root-shell-account-link"
@@ -213,16 +253,19 @@ export function RootShell({
       </button>
     </>
   ) : (
-    <Link
-      href="/auth"
-      style={{
-        color: 'white',
-        textDecoration: 'none',
-        fontWeight: 700
-      }}
-    >
-      Connexion
-    </Link>
+    <>
+      <DiscordInviteLink />
+      <Link
+        href="/auth"
+        style={{
+          color: 'white',
+          textDecoration: 'none',
+          fontWeight: 700
+        }}
+      >
+        Connexion
+      </Link>
+    </>
   )
 
   return (
@@ -578,6 +621,7 @@ export function RootShell({
             >
               {user ? (
                 <>
+                  <DiscordInviteLink />
                   <Link
                     href="/account"
                     className="root-shell-account-link"
@@ -626,16 +670,19 @@ export function RootShell({
                   </button>
                 </>
               ) : (
-                <Link
-                  href="/auth"
-                  style={{
-                    color: 'white',
-                    textDecoration: 'none',
-                    fontWeight: 700
-                  }}
-                >
-                  Connexion
-                </Link>
+                <>
+                  <DiscordInviteLink />
+                  <Link
+                    href="/auth"
+                    style={{
+                      color: 'white',
+                      textDecoration: 'none',
+                      fontWeight: 700
+                    }}
+                  >
+                    Connexion
+                  </Link>
+                </>
               )}
             </div>
             )}

@@ -68,9 +68,19 @@ export function useAuth() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    const setUserIfChanged = (nextUser: User | null) => {
+      setUser((currentUser) => {
+        if (!currentUser && !nextUser) return currentUser
+        if (currentUser?.id === nextUser?.id && currentUser?.email === nextUser?.email) {
+          return currentUser
+        }
+        return nextUser
+      })
+    }
+
     const getUser = async () => {
       const { data } = await supabase.auth.getUser()
-      setUser(data.user)
+      setUserIfChanged(data.user)
       void syncDiscordUsername(data.user)
       setLoading(false)
     }
@@ -79,7 +89,7 @@ export function useAuth() {
 
     const { data: listener } = supabase.auth.onAuthStateChange(
       (_event, session) => {
-        setUser(session?.user ?? null)
+        setUserIfChanged(session?.user ?? null)
         void syncDiscordUsername(session?.user ?? null)
       }
     )

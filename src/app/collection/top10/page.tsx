@@ -55,6 +55,8 @@ type TopRow = {
   imageUrl: string
 }
 
+const top10RowsCache = new Map<string, TopRow[]>()
+
 function chunkArray<T>(items: T[], size: number) {
   const chunks: T[][] = []
   for (let i = 0; i < items.length; i += size) {
@@ -76,6 +78,7 @@ function formatCurrency(value: number) {
 
 export default function CollectionTop10Page() {
   const { user } = useAuth()
+  const userId = user?.id ?? null
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [rows, setRows] = useState<TopRow[]>([])
@@ -94,8 +97,15 @@ export default function CollectionTop10Page() {
 
   useEffect(() => {
     const run = async () => {
-      if (!user) {
+      if (!userId) {
         setRows([])
+        setLoading(false)
+        return
+      }
+
+      const cachedRows = top10RowsCache.get(userId)
+      if (cachedRows) {
+        setRows(cachedRows)
         setLoading(false)
         return
       }
@@ -106,10 +116,11 @@ export default function CollectionTop10Page() {
       try {
         const ownedRows = await fetchAllUserCollectionRows({
           supabase,
-          userId: user.id
+          userId
         })
         if (ownedRows.length === 0) {
           setRows([])
+          top10RowsCache.set(userId, [])
           setLoading(false)
           return
         }
@@ -238,7 +249,9 @@ export default function CollectionTop10Page() {
         }
 
         nextRows.sort((a, b) => b.totalPrice - a.totalPrice || b.unitPrice - a.unitPrice)
-        setRows(nextRows.slice(0, 10))
+        const nextTopRows = nextRows.slice(0, 10)
+        top10RowsCache.set(userId, nextTopRows)
+        setRows(nextTopRows)
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Erreur inconnue')
       } finally {
@@ -247,7 +260,7 @@ export default function CollectionTop10Page() {
     }
 
     void run()
-  }, [user])
+  }, [userId])
 
   if (loading) {
     return <div style={{ padding: 40 }}>Chargement TOP10...</div>
