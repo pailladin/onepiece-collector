@@ -10,7 +10,7 @@ import {
   getPrintVariantTypeBadgeLabel,
   getPrintVariantTypeBorderColor
 } from '@/lib/cards/printDisplay'
-import { parseCardCode } from '@/lib/sorting/parseCardCode'
+import { compareCardPrintNumberSort } from '@/lib/sorting/compareCardPrints'
 import {
   filterCardPrints,
   getFilterOptions,
@@ -261,26 +261,14 @@ export function CatalogueSetPageClient() {
         b.card?.card_translations?.find((t) => t.locale === DEFAULT_LOCALE)?.name || ''
 
       switch (sortKey) {
-        case 'number': {
-          const parsedA = parseCardCode(a.print_code || `${code}-0`)
-          const parsedB = parseCardCode(b.print_code || `${code}-0`)
-
-          if (parsedA.set !== parsedB.set) {
-            return parsedA.set.localeCompare(parsedB.set) * multiplier
-          }
-
-          if (parsedA.number !== parsedB.number) {
-            return (parsedA.number - parsedB.number) * multiplier
-          }
-
-          if (parsedA.variant !== parsedB.variant) {
-            return (parsedA.variant - parsedB.variant) * multiplier
-          }
-
-          const varA = VARIANT_PRIORITY[a.variant_type ?? ''] ?? 99
-          const varB = VARIANT_PRIORITY[b.variant_type ?? ''] ?? 99
-          return (varA - varB) * multiplier
-        }
+        case 'number':
+          return compareCardPrintNumberSort(a, b, {
+            fallbackSetCode: code,
+            directionMultiplier: multiplier,
+            nameA,
+            nameB,
+            variantPriority: VARIANT_PRIORITY
+          })
 
         case 'name':
           return nameA.localeCompare(nameB) * multiplier
@@ -704,9 +692,11 @@ export function CatalogueSetPageClient() {
                 }}
               />
 
-              <div style={{ fontWeight: 'bold', fontSize: isCompactView ? 12 : 16 }}>
-                {getDisplayPrintCode(item)}
-              </div>
+              {getDisplayPrintCode(item) && (
+                <div style={{ fontWeight: 'bold', fontSize: isCompactView ? 12 : 16 }}>
+                  {getDisplayPrintCode(item)}
+                </div>
+              )}
               <div
                 style={{
                   fontSize: isCompactView ? 11 : 14,

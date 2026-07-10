@@ -61,7 +61,13 @@ export function getPrintVariantTypeBorderColor(print: {
 export function getDisplayPrintCode(print: {
   print_code?: string | null
   variant_type?: string | null
+  card?: {
+    type?: string | null
+  } | null
 }): string {
+  const cardType = (print.card?.type || '').trim().toUpperCase()
+  if (cardType === 'DON' || cardType === 'DON!!') return ''
+
   const base = getPrintBaseCode(print.print_code)
   const label = getPrintVariantLabel(print)
 
