@@ -263,7 +263,7 @@ export function CatalogueSetPageClient() {
       switch (sortKey) {
         case 'number':
           return compareCardPrintNumberSort(a, b, {
-            fallbackSetCode: code,
+            fallbackSetCode: normalizedSetCode,
             directionMultiplier: multiplier,
             nameA,
             nameB,
@@ -286,7 +286,7 @@ export function CatalogueSetPageClient() {
           return 0
       }
     })
-  }, [filteredItems, sortKey, sortDirection, code])
+  }, [filteredItems, sortKey, sortDirection, normalizedSetCode])
 
   const updateQuantity = async (printId: string, languageCode: string, delta: number) => {
     if (!user) return
