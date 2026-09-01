@@ -15,7 +15,8 @@ export async function GET(
         'Cache-Control': CACHE_CONTROL
       }
     })
-  } catch {
+  } catch (error) {
+    console.error('Erreur de calcul des prix du set:', error)
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 })
   }
 }

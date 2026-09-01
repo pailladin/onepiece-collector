@@ -12,6 +12,7 @@
     "mobile:ios": "npm --prefix mobile run ios",
     "cardmarket:extract-local": "node scripts/cardmarket-extract-local.mjs",
     "cardmarket:extract-list-local": "node scripts/cardmarket-extract-list-local.mjs",
+    "backup:images:supabase": "node scripts/backup-supabase-images-local.mjs",
     "migrate:images:r2": "node scripts/migrate-images-to-r2.mjs"
   },
   "dependencies": {

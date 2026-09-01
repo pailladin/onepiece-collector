@@ -39,10 +39,14 @@ const MISSING_IMAGE_PATH = '__missing__'
 const CARD_PLACEHOLDER_IMAGE =
   "data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 360 500'%3E%3Crect width='360' height='500' fill='%23e2e8f0'/%3E%3Crect x='16' y='16' width='328' height='468' rx='16' fill='%23f8fafc' stroke='%23cbd5e1' stroke-width='2'/%3E%3Ctext x='180' y='235' text-anchor='middle' font-family='Arial' font-size='24' fill='%23475569'%3EPhoto a venir%3C/text%3E%3C/svg%3E"
 
-type SortKey = 'number' | 'name' | 'rarity' | 'type'
+type SortKey = 'number' | 'name' | 'rarity' | 'type' | 'value'
 type SortDirection = 'asc' | 'desc'
 type PriceSource = 'cardmarket' | 'us'
 type TrendDirection = 'up' | 'down' | 'flat' | 'unknown'
+type CardTilePricing = {
+  unitPrice: number | null
+  cardmarketProductId: string
+}
 type PriceDetail = {
   id: string
   printCode: string
@@ -126,7 +130,9 @@ function normalizeSetCode(value: string) {
 }
 
 function parseSortKey(value: string | null): SortKey {
-  if (value === 'name' || value === 'rarity' || value === 'type') return value
+  if (value === 'name' || value === 'rarity' || value === 'type' || value === 'value') {
+    return value
+  }
   return 'number'
 }
 
@@ -233,6 +239,9 @@ export function CollectionSetView({
   const [priceModalTitle, setPriceModalTitle] = useState('Detail des prix')
   const [priceDetails, setPriceDetails] = useState<PriceDetail[]>([])
   const [showPriceDetails, setShowPriceDetails] = useState(false)
+  const [cardTilePricingByPrintId, setCardTilePricingByPrintId] = useState<
+    Record<string, CardTilePricing>
+  >({})
   const [shareMessage, setShareMessage] = useState<string | null>(null)
   const [collectionMutationError, setCollectionMutationError] = useState<string | null>(null)
   const [showDoublesModal, setShowDoublesModal] = useState(false)
@@ -384,6 +393,51 @@ export function CollectionSetView({
   }, [code, isFriendReadOnlyView, ownerUserId, resolvedOwnerId, shareToken, supportMode])
 
   useEffect(() => {
+    let cancelled = false
+
+    if (!userId || !code) {
+      setCardTilePricingByPrintId({})
+      return
+    }
+
+    setCardTilePricingByPrintId({})
+
+    const fetchCardTilePricing = async () => {
+      try {
+        const res = await fetch(`/api/optcg/prices/${encodeURIComponent(code)}`, {
+          cache: 'no-store'
+        })
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok || cancelled) return
+
+        const pricesByPrintId: Record<string, number> = data?.pricesByPrintId || {}
+        const productIdsByPrintId: Record<string, string> =
+          data?.cardmarketProductIdsByPrintId || {}
+        const nextPricing: Record<string, CardTilePricing> = {}
+
+        for (const [printId, productId] of Object.entries(productIdsByPrintId)) {
+          if (!productId) continue
+          const rawUnitPrice = pricesByPrintId[printId]
+          nextPricing[printId] = {
+            unitPrice: Number.isFinite(rawUnitPrice) ? Number(rawUnitPrice) : null,
+            cardmarketProductId: productId
+          }
+        }
+
+        if (!cancelled) setCardTilePricingByPrintId(nextPricing)
+      } catch {
+        if (!cancelled) setCardTilePricingByPrintId({})
+      }
+    }
+
+    void fetchCardTilePricing()
+
+    return () => {
+      cancelled = true
+    }
+  }, [code, userId])
+
+  useEffect(() => {
     const syncMobileView = () => {
       if (typeof window === 'undefined') return
       setIsMobileView(window.innerWidth <= 1024)
@@ -444,11 +498,41 @@ export function CollectionSetView({
             (a.card?.type || '').localeCompare(b.card?.type || '') * multiplier
           )
 
+        case 'value': {
+          const priceA = cardTilePricingByPrintId[a.id]?.unitPrice
+          const priceB = cardTilePricingByPrintId[b.id]?.unitPrice
+          const hasPriceA = priceA != null && Number.isFinite(priceA)
+          const hasPriceB = priceB != null && Number.isFinite(priceB)
+
+          if (!hasPriceA && !hasPriceB) {
+            return compareCardPrintNumberSort(a, b, {
+              fallbackSetCode: code,
+              directionMultiplier: 1,
+              nameA,
+              nameB,
+              variantPriority: VARIANT_PRIORITY
+            })
+          }
+          if (!hasPriceA) return 1
+          if (!hasPriceB) return -1
+
+          const priceDifference = (priceA - priceB) * multiplier
+          if (priceDifference !== 0) return priceDifference
+
+          return compareCardPrintNumberSort(a, b, {
+            fallbackSetCode: code,
+            directionMultiplier: 1,
+            nameA,
+            nameB,
+            variantPriority: VARIANT_PRIORITY
+          })
+        }
+
         default:
           return 0
       }
     })
-  }, [filteredItems, sortKey, sortDirection, code])
+  }, [cardTilePricingByPrintId, code, filteredItems, sortDirection, sortKey])
 
   const ownedItems = useMemo(
     () => sortedItems.filter((item) => (item.quantity || 0) > 0),
@@ -938,6 +1022,13 @@ export function CollectionSetView({
           background: 'linear-gradient(145deg, #f3f4f6, #e5e7eb)',
           border: '#9ca3af'
         }
+        const cardTilePricing = user ? cardTilePricingByPrintId[item.id] : undefined
+        const cardmarketUrl = cardTilePricing
+          ? buildCardmarketProductOrSearchUrl({
+              productId: cardTilePricing.cardmarketProductId,
+              search: item.print_code || ''
+            })
+          : null
 
               return (
             <div
@@ -1011,6 +1102,28 @@ export function CollectionSetView({
             <div style={{ fontSize: isMobileView ? 11 : 12 }}>
               <strong>{item.card?.rarity}</strong> - {item.card?.type}
             </div>
+
+            {cardTilePricing && cardmarketUrl && (
+              <a
+                href={cardmarketUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={`Voir ${getDisplayPrintCode(item)} sur Cardmarket`}
+                title="Ouvrir la fiche Cardmarket dans un nouvel onglet"
+                style={{
+                  display: 'inline-block',
+                  marginTop: 6,
+                  color: '#0369a1',
+                  fontSize: isMobileView ? 11 : 12,
+                  fontWeight: 600,
+                  textDecoration: 'none'
+                }}
+              >
+                {cardTilePricing.unitPrice == null
+                  ? 'Voir sur Cardmarket ↗'
+                  : `Valeur CM : ${formatCurrency(cardTilePricing.unitPrice)} ↗`}
+              </a>
+            )}
 
             {item.quantity > 0 && (
               <div
@@ -1318,6 +1431,9 @@ export function CollectionSetView({
                 <option value="name">Nom</option>
                 <option value="rarity">Rarete</option>
                 <option value="type">Type</option>
+                <option value="value" disabled={!user}>
+                  Valeur
+                </option>
               </select>
 
               <select

@@ -6,6 +6,7 @@ import {
   fetchAllUserCollectionRows
 } from '@/lib/collections/quantities'
 import { filterCardPrints, getFilterOptions, type AltFilter } from '@/lib/filtering/filterCardPrints'
+import { getSetPricing } from '@/lib/server/setPricing'
 
 type SetRow = {
   id: string
@@ -40,6 +41,8 @@ type CardRow = {
 type CollectionSearchItem = PrintRow & {
   quantity: number
   languageBreakdown: Array<{ languageCode: string; quantity: number }>
+  cardmarketProductId: string | null
+  cardmarketPrice: number | null
   set: {
     code: string
     name: string | null
@@ -197,6 +200,8 @@ export async function GET(request: Request) {
           ...print,
           quantity: totalByPrintId.get(print.id) || 0,
           languageBreakdown: serializeLanguageBreakdown(byPrintIdLanguage.get(print.id)),
+          cardmarketProductId: null as string | null,
+          cardmarketPrice: null as number | null,
           set: {
             code: set.code,
             name: set.name,
@@ -219,7 +224,29 @@ export async function GET(request: Request) {
 
     const totalItems = matchedItems.length
     const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE))
-    const items = matchedItems.slice(startIndex, startIndex + PAGE_SIZE)
+    const pageItems = matchedItems.slice(startIndex, startIndex + PAGE_SIZE)
+    const pageSetCodes = [...new Set(pageItems.map((item) => item.set.code))]
+    const pricingBySetCode = new Map(
+      await Promise.all(
+        pageSetCodes.map(async (setCode) => {
+          try {
+            return [setCode, await getSetPricing(setCode)] as const
+          } catch {
+            return [setCode, null] as const
+          }
+        })
+      )
+    )
+    const items = pageItems.map((item) => {
+      const pricing = pricingBySetCode.get(item.set.code)
+      const rawPrice = pricing?.pricesByPrintId[item.id]
+
+      return {
+        ...item,
+        cardmarketProductId: pricing?.cardmarketProductIdsByPrintId[item.id] || null,
+        cardmarketPrice: Number.isFinite(rawPrice) ? Number(rawPrice) : null
+      }
+    })
 
     return NextResponse.json({
       items,

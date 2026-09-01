@@ -142,11 +142,15 @@ async function computeSetPricing(setCode: string): Promise<SetPricingResult> {
   const cardmarketTrendsByPrintId: Record<string, CardmarketTrend> = {}
   const warnings: string[] = []
 
-  const { data: setData } = await supabaseServiceServer
+  const { data: setData, error: setError } = await supabaseServiceServer
     .from('sets')
     .select('id')
     .eq('code', normalizedSetCode)
     .maybeSingle()
+
+  if (setError) {
+    throw new Error(`Lecture du set ${normalizedSetCode} impossible: ${setError.message}`)
+  }
 
   if (!setData?.id) {
     return buildResult({
@@ -164,10 +168,14 @@ async function computeSetPricing(setCode: string): Promise<SetPricingResult> {
     })
   }
 
-  const { data: printsData } = await supabaseServiceServer
+  const { data: printsData, error: printsError } = await supabaseServiceServer
     .from('card_prints')
     .select('id, print_code')
     .eq('distribution_set_id', setData.id)
+
+  if (printsError) {
+    throw new Error(`Lecture des impressions ${normalizedSetCode} impossible: ${printsError.message}`)
+  }
 
   const prints =
     ((printsData as Array<{ id: string; print_code: string | null }> | null) || []).filter((row) =>
@@ -200,10 +208,16 @@ async function computeSetPricing(setCode: string): Promise<SetPricingResult> {
   const printIds = [...printCodeById.keys()]
   const links: Array<{ card_print_id: string; cardmarket_product_id: string }> = []
   for (const idsChunk of chunkArray(printIds, IN_CHUNK_SIZE)) {
-    const { data: linksData } = await supabaseServiceServer
+    const { data: linksData, error: linksError } = await supabaseServiceServer
       .from('cardmarket_print_links')
       .select('card_print_id, cardmarket_product_id')
       .in('card_print_id', idsChunk)
+
+    if (linksError) {
+      throw new Error(
+        `Lecture des liaisons Cardmarket ${normalizedSetCode} impossible: ${linksError.message}`
+      )
+    }
 
     links.push(
       ...(((linksData as Array<{ card_print_id: string; cardmarket_product_id: string }> | null) ||

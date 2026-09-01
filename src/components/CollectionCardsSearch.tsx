@@ -16,6 +16,7 @@ import {
 } from '@/lib/filtering/filterCardPrints'
 import { getCollectionLanguageShortLabel } from '@/lib/collections/languages'
 import { supabase } from '@/lib/supabaseClient'
+import { buildCardmarketProductOrSearchUrl } from '@/lib/cardmarketUrls'
 
 const STORAGE_BASE_URL = (process.env.NEXT_PUBLIC_IMAGES_BASE_URL ||
   `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/cards-images`).replace(/\/$/, '')
@@ -30,6 +31,8 @@ type CollectionSearchItem = {
   available_languages?: string[] | null
   quantity: number
   languageBreakdown: Array<{ languageCode: string; quantity: number }>
+  cardmarketProductId: string | null
+  cardmarketPrice: number | null
   set: {
     code: string
     name?: string | null
@@ -67,6 +70,13 @@ function getPanelStyle() {
     padding: 12,
     background: '#ffffffd1'
   } as const
+}
+
+function formatCurrency(value: number) {
+  return new Intl.NumberFormat('fr-FR', {
+    style: 'currency',
+    currency: 'EUR'
+  }).format(value)
 }
 
 export function CollectionCardsSearch() {
@@ -129,6 +139,7 @@ export function CollectionCardsSearch() {
         params.set('page', String(page))
 
         const res = await fetch(`/api/collection/search?${params.toString()}`, {
+          cache: 'no-store',
           headers: token ? { Authorization: `Bearer ${token}` } : {}
         })
         const payload = await res.json().catch(() => ({}))
@@ -441,6 +452,12 @@ export function CollectionCardsSearch() {
               background: 'linear-gradient(145deg, #f3f4f6, #e5e7eb)',
               border: '#9ca3af'
             }
+            const cardmarketUrl = item.cardmarketProductId
+              ? buildCardmarketProductOrSearchUrl({
+                  productId: item.cardmarketProductId,
+                  search: item.print_code || ''
+                })
+              : null
 
             return (
               <div
@@ -528,6 +545,28 @@ export function CollectionCardsSearch() {
                     {item.set.code} - {item.set.name || item.set.code}
                   </Link>
                 </div>
+
+                {cardmarketUrl && (
+                  <a
+                    href={cardmarketUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label={`Voir ${getDisplayPrintCode(item)} sur Cardmarket`}
+                    title="Ouvrir la fiche Cardmarket dans un nouvel onglet"
+                    style={{
+                      display: 'inline-block',
+                      marginTop: 6,
+                      color: '#0369a1',
+                      fontSize: isMobileView ? 10 : 12,
+                      fontWeight: 600,
+                      textDecoration: 'none'
+                    }}
+                  >
+                    {item.cardmarketPrice == null
+                      ? 'Voir sur Cardmarket ↗'
+                      : `Valeur CM : ${formatCurrency(item.cardmarketPrice)} ↗`}
+                  </a>
+                )}
 
                 <div
                   style={{
