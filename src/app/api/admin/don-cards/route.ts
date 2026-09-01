@@ -7,6 +7,7 @@ import {
   normalizeImportSetCode,
   resolveDonTargetSetCode
 } from '@/lib/server/donCards'
+import { putCardImage } from '@/lib/server/imageStorage'
 
 export const runtime = 'nodejs'
 
@@ -14,7 +15,6 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
-const BUCKET = 'cards-images'
 const MISSING_IMAGE_PATH = '__missing__'
 
 type ExternalSetOption = {
@@ -31,14 +31,7 @@ async function uploadImageToSupabase(imageUrl: string, fileName: string) {
   const arrayBuffer = await imageResponse.arrayBuffer()
   const buffer = Buffer.from(arrayBuffer)
 
-  const { error } = await supabase.storage.from(BUCKET).upload(fileName, buffer, {
-    contentType: 'image/jpeg',
-    upsert: true
-  })
-
-  if (error) {
-    throw new Error(error.message)
-  }
+  await putCardImage(fileName, buffer, 'image/jpeg')
 }
 
 async function importValidatedDonCard(params: {

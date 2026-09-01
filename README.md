@@ -84,3 +84,34 @@ Database refresh:
 Admin mapping UI:
 - `/admin/cardmarket-links`
 - Workflow: choose a set, load unlinked prints, click "Charger suggestions" to use catalog candidates, click one image/candidate to fill `idProduct`, then validate manually with "Associer"
+
+## Card images on Cloudflare R2
+
+Card images can be served from and uploaded to an S3-compatible Cloudflare R2 bucket while Supabase remains the database and authentication provider.
+
+Required environment variables:
+
+```bash
+R2_ACCOUNT_ID=<cloudflare-account-id>
+R2_ACCESS_KEY_ID=<r2-access-key-id>
+R2_SECRET_ACCESS_KEY=<r2-secret-access-key>
+R2_BUCKET=cards-images
+NEXT_PUBLIC_IMAGES_BASE_URL=https://images.onepiece-collector.com
+EXPO_PUBLIC_IMAGES_BASE_URL=https://images.onepiece-collector.com
+```
+
+Until `NEXT_PUBLIC_IMAGES_BASE_URL` is set, the web application continues to use the existing public Supabase bucket URL.
+
+Preview the Supabase inventory without copying anything:
+
+```bash
+npm run migrate:images:r2
+```
+
+Copy all objects to R2 while preserving their paths:
+
+```bash
+npm run migrate:images:r2 -- --execute
+```
+
+The migration never removes the source objects from Supabase. Keep them until the R2 URLs and all upload workflows have been verified in production.

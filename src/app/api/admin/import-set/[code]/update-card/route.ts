@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { getRequestUser } from '@/lib/server/authUser'
 import { isAdminEmail, parseAdminEmails } from '@/lib/admin'
 import { normalizeSetLanguages } from '@/lib/collections/languages'
+import { copyCardImage, putCardImage } from '@/lib/server/imageStorage'
 
 export const runtime = 'nodejs'
 
@@ -11,7 +12,6 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-const BUCKET = 'cards-images'
 const MISSING_IMAGE_PATH = '__missing__'
 
 function normalizeCode(value: string | null | undefined) {
@@ -90,12 +90,7 @@ async function uploadImageToSupabase(imageUrl: string, fileName: string) {
   const buffer = Buffer.from(arrayBuffer)
   const finalFileName = fileName.replace(/\.jpg$/i, `.${extension}`)
 
-  const { error } = await supabase.storage.from(BUCKET).upload(finalFileName, buffer, {
-    contentType: uploadContentType,
-    upsert: true
-  })
-
-  if (error) throw new Error(error.message)
+  await putCardImage(finalFileName, buffer, uploadContentType)
   return finalFileName
 }
 
@@ -274,13 +269,15 @@ export async function POST(
     const targetPath = `${targetSetCode}/${printData.image_path}`
 
     if (sourcePath !== targetPath) {
-      const { error: copyError } = await supabase.storage
-        .from(BUCKET)
-        .copy(sourcePath, targetPath)
-
-      if (copyError && !/already exists/i.test(copyError.message || '')) {
+      try {
+        await copyCardImage(sourcePath, targetPath)
+      } catch (copyError: unknown) {
         return NextResponse.json(
-          { error: `Erreur copie image vers le nouveau set: ${copyError.message}` },
+          {
+            error: `Erreur copie image vers le nouveau set: ${
+              copyError instanceof Error ? copyError.message : 'inconnue'
+            }`
+          },
           { status: 500 }
         )
       }

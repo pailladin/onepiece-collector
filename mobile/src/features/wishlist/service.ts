@@ -2,7 +2,7 @@ import { fetchJsonWithAuth } from '../../lib/api'
 import { supabase } from '../../lib/supabase'
 import type { WishlistItem } from './types'
 
-const STORAGE_BASE_URL = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/storage/v1/object/public/cards-images`
+const STORAGE_BASE_URL = (process.env.EXPO_PUBLIC_IMAGES_BASE_URL || `${process.env.EXPO_PUBLIC_SUPABASE_URL}/storage/v1/object/public/cards-images`).replace(/\/$/, '')
 const MISSING_IMAGE_PATH = '__missing__'
 
 function normalizeVariantType(value: string | null | undefined): string {

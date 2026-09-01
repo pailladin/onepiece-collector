@@ -337,7 +337,7 @@ export default function AdminCardmarketLinksPage() {
     return null
   }
 
-  const localStorageBaseUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/cards-images`
+  const localStorageBaseUrl = (process.env.NEXT_PUBLIC_IMAGES_BASE_URL || `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/cards-images`).replace(/\/$/, '')
   const getLocalImageUrl = (row: PrintRow): string | null =>
     row.imagePath && row.imagePath !== MISSING_IMAGE_PATH
       ? `${localStorageBaseUrl}/${selectedSetCode}/${row.imagePath}`

@@ -21,7 +21,7 @@ type CardPrintSetRow = {
   variant_type: string | null
 }
 
-const STORAGE_BASE_URL = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/storage/v1/object/public/cards-images`
+const STORAGE_BASE_URL = (process.env.EXPO_PUBLIC_IMAGES_BASE_URL || `${process.env.EXPO_PUBLIC_SUPABASE_URL}/storage/v1/object/public/cards-images`).replace(/\/$/, '')
 const MISSING_IMAGE_PATH = '__missing__'
 const UNKNOWN_LANGUAGE = 'unknown'
 

@@ -44,7 +44,7 @@ type SetOption = {
   name: string | null
 }
 
-const STORAGE_BASE_URL = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/cards-images`
+const STORAGE_BASE_URL = (process.env.NEXT_PUBLIC_IMAGES_BASE_URL || `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/cards-images`).replace(/\/$/, '')
 
 export default function AdminEditCardPage() {
   const { user, loading: authLoading } = useAuth()

@@ -7,8 +7,8 @@ import {
   normalizePlaceSlug
 } from '@/lib/places'
 import { supabaseServiceServer } from '@/lib/server/supabaseServer'
+import { putCardImage } from '@/lib/server/imageStorage'
 
-const BUCKET = 'cards-images'
 const MISSING_IMAGE_PATH = '__missing__'
 
 export const COMMUNITY_SUBMISSION_TYPES = ['card_edit', 'card_add', 'place_add'] as const
@@ -170,12 +170,7 @@ async function uploadImageToSupabase(imageUrl: string, fileName: string) {
   const buffer = Buffer.from(arrayBuffer)
   const finalFileName = fileName.replace(/\.jpg$/i, `.${extension}`)
 
-  const { error } = await supabaseServiceServer.storage.from(BUCKET).upload(finalFileName, buffer, {
-    contentType: uploadContentType,
-    upsert: true
-  })
-
-  if (error) throw new Error(error.message)
+  await putCardImage(finalFileName, buffer, uploadContentType)
   return finalFileName
 }
 

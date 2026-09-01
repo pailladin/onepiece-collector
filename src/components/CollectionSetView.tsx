@@ -34,7 +34,7 @@ import { WishlistHeartButton } from '@/components/WishlistHeartButton'
 import { useWishlist } from '@/lib/useWishlist'
 import { buildCardmarketProductOrSearchUrl } from '@/lib/cardmarketUrls'
 
-const STORAGE_BASE_URL = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/cards-images`
+const STORAGE_BASE_URL = (process.env.NEXT_PUBLIC_IMAGES_BASE_URL || `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/cards-images`).replace(/\/$/, '')
 const MISSING_IMAGE_PATH = '__missing__'
 const CARD_PLACEHOLDER_IMAGE =
   "data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 360 500'%3E%3Crect width='360' height='500' fill='%23e2e8f0'/%3E%3Crect x='16' y='16' width='328' height='468' rx='16' fill='%23f8fafc' stroke='%23cbd5e1' stroke-width='2'/%3E%3Ctext x='180' y='235' text-anchor='middle' font-family='Arial' font-size='24' fill='%23475569'%3EPhoto a venir%3C/text%3E%3C/svg%3E"

@@ -5,8 +5,8 @@ import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { SetRow, SetStats } from '@/lib/collections/fetchUserSetStats'
 
-const STORAGE_BASE_URL =
-  `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/cards-images`
+const STORAGE_BASE_URL = (process.env.NEXT_PUBLIC_IMAGES_BASE_URL ||
+  `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/cards-images`).replace(/\/$/, '')
 
 type Props = {
   title: string
