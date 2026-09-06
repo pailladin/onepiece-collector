@@ -26,6 +26,9 @@ type SetCardOption = {
 }
 
 const PAGE_SIZE = 50
+const PROMO_IMPORT_BATCH_SIZE = 8
+const LIST_TIMEOUT_MS = 45_000
+const IMPORT_BATCH_TIMEOUT_MS = 180_000
 
 export default function ImportMissingCardsPage() {
   const { user, loading: authLoading } = useAuth()
@@ -112,29 +115,45 @@ export default function ImportMissingCardsPage() {
       setLogs([])
     }
 
-    const authHeaders = await getAuthHeader()
-    const res = await fetch(`/api/admin/import-set/${code}/missing`, {
-      headers: authHeaders
-    })
-    const data = await res.json()
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), LIST_TIMEOUT_MS)
 
-    if (!res.ok) {
-      setError(data?.error || 'Erreur lors du chargement des cartes manquantes')
+    try {
+      const authHeaders = await getAuthHeader()
+      const res = await fetch(`/api/admin/import-set/${code}/missing`, {
+        headers: authHeaders,
+        signal: controller.signal
+      })
+      const data = await res.json().catch(() => ({}))
+
+      if (!res.ok) {
+        throw new Error(
+          data?.error || 'Erreur lors du chargement des cartes manquantes'
+        )
+      }
+
+      const list: MissingCard[] = data.missing || []
+      setSetName(data?.set?.name || code)
+      setMissingCards(list)
+      setMissingPage(1)
+      setSelected(
+        Object.fromEntries(list.map((card) => [card.printCode, false])) as Record<
+          string,
+          boolean
+        >
+      )
+    } catch (loadError: unknown) {
+      setError(
+        controller.signal.aborted
+          ? 'Le chargement des promos a depasse 45 secondes. Reessaie dans un instant.'
+          : loadError instanceof Error
+            ? loadError.message
+            : 'Erreur lors du chargement des cartes manquantes'
+      )
+    } finally {
+      clearTimeout(timeoutId)
       setLoading(false)
-      return
     }
-
-    const list: MissingCard[] = data.missing || []
-    setSetName(data?.set?.name || code)
-    setMissingCards(list)
-    setMissingPage(1)
-    setSelected(
-      Object.fromEntries(list.map((card) => [card.printCode, false])) as Record<
-        string,
-        boolean
-      >
-    )
-    setLoading(false)
   }, [code, getAuthHeader])
 
   const loadSetCards = useCallback(async (options?: { force?: boolean }) => {
@@ -208,59 +227,101 @@ export default function ImportMissingCardsPage() {
     if (selectedPrintCodes.length === 0 || isImporting) return
 
     setIsImporting(true)
-    setLogs([])
+    setLogs([`Preparation de ${selectedPrintCodes.length} import(s)...`])
 
     try {
       const authHeaders = await getAuthHeader()
-      const res = await fetch(`/api/admin/import-set/${code}`, {
-        method: 'POST',
-        headers: {
-          ...authHeaders,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          onlyPrintCodes: selectedPrintCodes
-        })
-      })
+      const batches =
+        code === 'PROMO'
+          ? Array.from(
+              { length: Math.ceil(selectedPrintCodes.length / PROMO_IMPORT_BATCH_SIZE) },
+              (_, index) =>
+                selectedPrintCodes.slice(
+                  index * PROMO_IMPORT_BATCH_SIZE,
+                  (index + 1) * PROMO_IMPORT_BATCH_SIZE
+                )
+            )
+          : [selectedPrintCodes]
 
-      if (!res.body) {
-        setLogs(['Erreur: flux de logs indisponible'])
-        return
-      }
+      for (const [batchIndex, printCodes] of batches.entries()) {
+        const controller = new AbortController()
+        const timeoutId = setTimeout(
+          () => controller.abort(),
+          IMPORT_BATCH_TIMEOUT_MS
+        )
+        setLogs((prev) => [
+          ...prev,
+          `--- Lot ${batchIndex + 1}/${batches.length} (${printCodes.length} promo(s)) ---`
+        ])
 
-      const reader = res.body.getReader()
-      const decoder = new TextDecoder()
-      let buffer = ''
-
-      while (true) {
-        const { value, done } = await reader.read()
-        if (done) break
-
-        buffer += decoder.decode(value, { stream: true })
-        const lines = buffer.split('\n')
-        buffer = lines.pop() || ''
-
-        for (const line of lines) {
-          if (!line.trim()) continue
-          try {
-            const parsed = JSON.parse(line)
-            if (parsed.log) setLogs((prev) => [...prev, parsed.log])
-          } catch {
-            setLogs((prev) => [...prev, line])
-          }
-        }
-      }
-
-      if (buffer.trim()) {
         try {
-          const parsed = JSON.parse(buffer)
-          if (parsed.log) setLogs((prev) => [...prev, parsed.log])
-        } catch {
-          setLogs((prev) => [...prev, buffer])
+          const res = await fetch(`/api/admin/import-set/${code}`, {
+            method: 'POST',
+            headers: {
+              ...authHeaders,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ onlyPrintCodes: printCodes }),
+            signal: controller.signal
+          })
+
+          if (!res.ok || !res.body) {
+            const data = await res.json().catch(() => ({}))
+            throw new Error(data?.error || `Erreur serveur (${res.status})`)
+          }
+
+          const reader = res.body.getReader()
+          const decoder = new TextDecoder()
+          let buffer = ''
+
+          while (true) {
+            const { value, done } = await reader.read()
+            if (done) break
+
+            buffer += decoder.decode(value, { stream: true })
+            const lines = buffer.split('\n')
+            buffer = lines.pop() || ''
+
+            for (const line of lines) {
+              if (!line.trim()) continue
+              try {
+                const parsed = JSON.parse(line)
+                if (parsed.log) setLogs((prev) => [...prev, parsed.log])
+              } catch {
+                setLogs((prev) => [...prev, line])
+              }
+            }
+          }
+
+          if (buffer.trim()) {
+            try {
+              const parsed = JSON.parse(buffer)
+              if (parsed.log) setLogs((prev) => [...prev, parsed.log])
+            } catch {
+              setLogs((prev) => [...prev, buffer])
+            }
+          }
+        } catch (batchError: unknown) {
+          throw new Error(
+            controller.signal.aborted
+              ? `Le lot ${batchIndex + 1} a depasse 3 minutes et a ete arrete.`
+              : batchError instanceof Error
+                ? batchError.message
+                : `Echec du lot ${batchIndex + 1}`
+          )
+        } finally {
+          clearTimeout(timeoutId)
         }
       }
 
-      await loadMissingCards()
+      await loadMissingCards({ keepLogs: true })
+    } catch (importError: unknown) {
+      setLogs((prev) => [
+        ...prev,
+        `Erreur: ${
+          importError instanceof Error ? importError.message : 'Import interrompu'
+        }`
+      ])
     } finally {
       setIsImporting(false)
     }
@@ -321,7 +382,14 @@ export default function ImportMissingCardsPage() {
 
   if (authLoading || loading) return <div style={{ padding: 40 }}>Chargement...</div>
   if (!canAccessAdmin) return <div style={{ padding: 40 }}>Acces refuse.</div>
-  if (error) return <div style={{ padding: 40 }}>{error}</div>
+  if (error) {
+    return (
+      <div style={{ padding: 40 }}>
+        <div style={{ marginBottom: 12 }}>{error}</div>
+        <button onClick={() => void loadMissingCards()}>Reessayer</button>
+      </div>
+    )
+  }
 
   return (
     <div style={{ padding: 40 }}>

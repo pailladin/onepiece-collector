@@ -15,6 +15,7 @@ const supabase = createClient(
 type ProfileRow = {
   id: string
   username: string | null
+  last_card_added_at?: string | null
 }
 
 type CollectionRow = {
@@ -98,18 +99,37 @@ export async function GET(request: Request) {
   const userIds = users.map((u) => u.id)
 
   let profileById = new Map<string, string | null>()
+  const lastCardAddedAtByUserId = new Map<string, string | null>()
   const cardsCountByUserId = new Map<string, number>()
   const startedSetsByUserId = new Map<string, Set<string>>()
   if (userIds.length > 0) {
     try {
-      const { data: profilesData, error: profilesError } = await supabase
+      const profilesWithActivity = await supabase
         .from('profiles')
-        .select('id, username')
+        .select('id, username, last_card_added_at')
         .in('id', userIds)
+      let profilesData = profilesWithActivity.data as ProfileRow[] | null
+      let profilesError = profilesWithActivity.error
+
+      // La liste reste accessible si le code est deploye avant la migration SQL.
+      if (profilesError) {
+        const fallback = await supabase
+          .from('profiles')
+          .select('id, username')
+          .in('id', userIds)
+        profilesData = fallback.data as ProfileRow[] | null
+        profilesError = fallback.error
+      }
 
       if (!profilesError) {
         const profiles = (profilesData as ProfileRow[] | null) || []
         profileById = new Map(profiles.map((row) => [row.id, row.username]))
+        for (const profile of profiles) {
+          lastCardAddedAtByUserId.set(
+            profile.id,
+            profile.last_card_added_at || null
+          )
+        }
       }
 
       const collectionRows = await fetchCollectionRowsForUsers(userIds)
@@ -158,6 +178,7 @@ export async function GET(request: Request) {
           : ''),
       startedSetsCount: startedSetsByUserId.get(row.id)?.size || 0,
       cardsCount: cardsCountByUserId.get(row.id) || 0,
+      lastCardAddedAt: lastCardAddedAtByUserId.get(row.id) || null,
       createdAt: row.created_at || null,
       lastSignInAt: row.last_sign_in_at || null,
       emailConfirmedAt: row.email_confirmed_at || null

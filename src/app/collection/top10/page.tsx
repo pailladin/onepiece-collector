@@ -3,43 +3,13 @@
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { useAuth } from '@/lib/auth'
-import { DEFAULT_LOCALE } from '@/lib/locale'
 import { supabase } from '@/lib/supabaseClient'
-import { getDisplayPrintCode } from '@/lib/cards/printDisplay'
-import { aggregateCollectionRows, fetchAllUserCollectionRows } from '@/lib/collections/quantities'
 import { buildCardmarketProductOrSearchUrl } from '@/lib/cardmarketUrls'
 
-const STORAGE_BASE_URL = (process.env.NEXT_PUBLIC_IMAGES_BASE_URL || `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/cards-images`).replace(/\/$/, '')
-const MISSING_IMAGE_PATH = '__missing__'
 const CARD_PLACEHOLDER_IMAGE =
   "data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 360 500'%3E%3Crect width='360' height='500' fill='%23e2e8f0'/%3E%3Crect x='16' y='16' width='328' height='468' rx='16' fill='%23f8fafc' stroke='%23cbd5e1' stroke-width='2'/%3E%3Ctext x='180' y='235' text-anchor='middle' font-family='Arial' font-size='24' fill='%23475569'%3EPhoto a venir%3C/text%3E%3C/svg%3E"
 
 type PriceSource = 'cardmarket' | 'us'
-
-type PrintRow = {
-  id: string
-  print_code: string | null
-  distribution_set_id: string
-  card_id: string
-  image_path: string | null
-  variant_type: string | null
-}
-
-type SetRow = {
-  id: string
-  code: string
-  name: string | null
-}
-
-type CardRow = {
-  id: string
-  base_code: string
-  rarity: string | null
-  card_translations?: Array<{
-    name: string
-    locale: string
-  }> | null
-}
 
 type TopRow = {
   printId: string
@@ -55,19 +25,8 @@ type TopRow = {
   imageUrl: string
 }
 
-const top10RowsCache = new Map<string, TopRow[]>()
-
-function chunkArray<T>(items: T[], size: number) {
-  const chunks: T[][] = []
-  for (let i = 0; i < items.length; i += size) {
-    chunks.push(items.slice(i, i + size))
-  }
-  return chunks
-}
-
-function normalizePrintCode(value: string | null | undefined) {
-  return (value || '').trim().toUpperCase()
-}
+const TOP10_CLIENT_CACHE_MS = 30_000
+const top10RowsCache = new Map<string, { expiresAt: number; rows: TopRow[] }>()
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat('fr-FR', {
@@ -77,7 +36,7 @@ function formatCurrency(value: number) {
 }
 
 export default function CollectionTop10Page() {
-  const { user } = useAuth()
+  const { user, loading: authLoading } = useAuth()
   const userId = user?.id ?? null
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -96,16 +55,19 @@ export default function CollectionTop10Page() {
   }, [])
 
   useEffect(() => {
+    let cancelled = false
+
     const run = async () => {
+      if (authLoading) return
       if (!userId) {
         setRows([])
         setLoading(false)
         return
       }
 
-      const cachedRows = top10RowsCache.get(userId)
-      if (cachedRows) {
-        setRows(cachedRows)
+      const cached = top10RowsCache.get(userId)
+      if (cached && cached.expiresAt > Date.now()) {
+        setRows(cached.rows)
         setLoading(false)
         return
       }
@@ -114,155 +76,43 @@ export default function CollectionTop10Page() {
       setError(null)
 
       try {
-        const ownedRows = await fetchAllUserCollectionRows({
-          supabase,
-          userId
+        const { data: sessionData } = await supabase.auth.getSession()
+        const accessToken = sessionData.session?.access_token
+        if (!accessToken) throw new Error('Session invalide. Reconnecte-toi.')
+
+        const response = await fetch('/api/collection/top10', {
+          cache: 'no-store',
+          headers: { Authorization: `Bearer ${accessToken}` }
         })
-        if (ownedRows.length === 0) {
-          setRows([])
-          top10RowsCache.set(userId, [])
-          setLoading(false)
-          return
+        const payload = (await response.json().catch(() => ({}))) as {
+          rows?: Array<Omit<TopRow, 'imageUrl'> & { imageUrl: string | null }>
+          error?: string
         }
+        if (!response.ok) throw new Error(payload.error || 'Erreur chargement TOP10')
 
-        const { totalByPrintId } = aggregateCollectionRows(ownedRows)
-        const printIds = [...new Set([...totalByPrintId.keys()])]
-        const prints: PrintRow[] = []
-        for (const idsChunk of chunkArray(printIds, 500)) {
-          const { data, error: printsError } = await supabase
-            .from('card_prints')
-            .select('id, print_code, distribution_set_id, card_id, image_path, variant_type')
-            .in('id', idsChunk)
-          if (printsError) throw new Error(`Erreur prints: ${printsError.message}`)
-          prints.push(...(((data as PrintRow[] | null) || []) as PrintRow[]))
-        }
-
-        const setIds = [...new Set(prints.map((row) => row.distribution_set_id))]
-        const sets: SetRow[] = []
-        for (const idsChunk of chunkArray(setIds, 200)) {
-          const { data, error: setsError } = await supabase
-            .from('sets')
-            .select('id, code, name')
-            .in('id', idsChunk)
-          if (setsError) throw new Error(`Erreur sets: ${setsError.message}`)
-          sets.push(...(((data as SetRow[] | null) || []) as SetRow[]))
-        }
-
-        const cardIds = [...new Set(prints.map((row) => row.card_id))]
-        const cards: CardRow[] = []
-        for (const idsChunk of chunkArray(cardIds, 200)) {
-          const { data, error: cardsError } = await supabase
-            .from('cards')
-            .select(
-              `
-              id,
-              base_code,
-              rarity,
-              card_translations (
-                name,
-                locale
-              )
-            `
-            )
-            .in('id', idsChunk)
-          if (cardsError) throw new Error(`Erreur cards: ${cardsError.message}`)
-          cards.push(...(((data as CardRow[] | null) || []) as CardRow[]))
-        }
-
-        const setById = new Map(sets.map((row) => [row.id, row]))
-        const printById = new Map(prints.map((row) => [row.id, row]))
-        const cardById = new Map(cards.map((row) => [row.id, row]))
-        const pricesByPrintId = new Map<string, number>()
-        const sourceByPrintId = new Map<string, PriceSource>()
-        const productIdByPrintId = new Map<string, string>()
-
-        const setCodes = [...new Set(sets.map((set) => set.code))]
-        await Promise.all(
-          setCodes.map(async (setCode) => {
-            const res = await fetch(`/api/optcg/prices/${encodeURIComponent(setCode)}`)
-            const data = await res.json().catch(() => ({}))
-            if (!res.ok) return
-
-            const prices: Record<string, number> = data?.pricesByPrintId || {}
-            const sources: Record<string, PriceSource> = data?.sourcesByPrintId || {}
-            const cardmarketProductIds: Record<string, string> = data?.cardmarketProductIdsByPrintId || {}
-
-            for (const [printId, value] of Object.entries(prices)) {
-              if (!Number.isFinite(value)) continue
-              pricesByPrintId.set(printId, value)
-              sourceByPrintId.set(printId, sources[printId] === 'cardmarket' ? 'cardmarket' : 'us')
-            }
-
-            for (const [printId, productId] of Object.entries(cardmarketProductIds)) {
-              if (!productId) continue
-              productIdByPrintId.set(printId, String(productId))
-            }
-          })
-        )
-
-        const nextRows: TopRow[] = []
-        for (const [printId, quantity] of totalByPrintId.entries()) {
-          const print = printById.get(printId)
-          if (!print) continue
-
-          const normalizedPrintCode = normalizePrintCode(print.print_code)
-          if (!normalizedPrintCode) continue
-
-          const unitPriceRaw = pricesByPrintId.get(print.id)
-          if (!Number.isFinite(unitPriceRaw)) continue
-          const unitPrice = Number(unitPriceRaw)
-
-          const set = setById.get(print.distribution_set_id)
-          const setCode = set?.code || ''
-          const card = cardById.get(print.card_id)
-          const name =
-            card?.card_translations?.find((t) => t.locale === DEFAULT_LOCALE)?.name ||
-            card?.card_translations?.[0]?.name ||
-            card?.base_code ||
-            normalizedPrintCode
-
-          const imageUrl =
-            print.image_path && print.image_path !== MISSING_IMAGE_PATH && setCode
-              ? `${STORAGE_BASE_URL}/${setCode}/${print.image_path}`
-              : CARD_PLACEHOLDER_IMAGE
-
-          const totalPrice = unitPrice * quantity
-          const source = sourceByPrintId.get(print.id) || 'us'
-          const cardmarketProductId = productIdByPrintId.get(print.id) || null
-
-          nextRows.push({
-            printId: print.id,
-            printCode: normalizedPrintCode,
-            displayCode: getDisplayPrintCode({
-              print_code: print.print_code,
-              variant_type: print.variant_type
-            }),
-            name,
-            setCode,
-            quantity,
-            unitPrice,
-            totalPrice,
-            source,
-            cardmarketProductId,
-            imageUrl
-          })
-        }
-
-        nextRows.sort((a, b) => b.totalPrice - a.totalPrice || b.unitPrice - a.unitPrice)
-        const nextTopRows = nextRows.slice(0, 10)
-        top10RowsCache.set(userId, nextTopRows)
-        setRows(nextTopRows)
+        const nextRows = (payload.rows || []).map((row) => ({
+          ...row,
+          imageUrl: row.imageUrl || CARD_PLACEHOLDER_IMAGE
+        }))
+        top10RowsCache.set(userId, {
+          expiresAt: Date.now() + TOP10_CLIENT_CACHE_MS,
+          rows: nextRows
+        })
+        if (!cancelled) setRows(nextRows)
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Erreur inconnue')
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Erreur inconnue')
       } finally {
-        setLoading(false)
+        if (!cancelled) setLoading(false)
       }
     }
 
     void run()
-  }, [userId])
+    return () => {
+      cancelled = true
+    }
+  }, [authLoading, userId])
 
-  if (loading) {
+  if (authLoading || loading) {
     return <div style={{ padding: 40 }}>Chargement TOP10...</div>
   }
 
@@ -289,11 +139,11 @@ export default function CollectionTop10Page() {
 
       {error && <div style={{ marginTop: 12, color: '#b91c1c' }}>{error}</div>}
 
-      {rows.length === 0 ? (
+      {!error && rows.length === 0 ? (
         <div style={{ marginTop: 20, color: '#475569' }}>
           Aucune carte pricee trouvee dans ta collection.
         </div>
-      ) : (
+      ) : rows.length > 0 ? (
         <div style={{ marginTop: 20, display: 'grid', gap: 10 }}>
           {rows.map((row, index) => {
             const baseCode = (row.printCode || '').split('_')[0] || ''
@@ -409,7 +259,7 @@ export default function CollectionTop10Page() {
             )
           })}
         </div>
-      )}
+      ) : null}
 
       <div style={{ marginTop: 10, fontSize: 12, color: '#64748b' }}>
         * Prix US (source externe), un ecart peut exister avec Cardmarket.

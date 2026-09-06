@@ -2,11 +2,13 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getRequestUser } from '@/lib/server/authUser'
 import { isAdminEmail, parseAdminEmails } from '@/lib/admin'
+import { getPromoCatalog, resolvePromoPrintCode } from '@/lib/server/promoCards'
 
 export const runtime = 'nodejs'
+export const maxDuration = 60
 
 const PROMO_IMPORT_CODE = 'PROMO'
-const PROMO_SET_NAME = 'Promos Speciales'
+const API_TIMEOUT_MS = 20_000
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -38,61 +40,30 @@ function asTrimmedString(value: unknown) {
   return ''
 }
 
-function normalizePromoApiCard(
-  rawCard: unknown,
-  fallbackIndex: number
-): Record<string, unknown> | null {
-  const row =
-    rawCard && typeof rawCard === 'object'
-      ? (rawCard as Record<string, unknown>)
-      : null
-  if (!row) return null
-
-  const cardSetId =
-    asTrimmedString(row.card_set_id) ||
-    asTrimmedString(row.cardSetId) ||
-    asTrimmedString(row.print_code) ||
-    asTrimmedString(row.printCode) ||
-    asTrimmedString(row.card_id) ||
-    asTrimmedString(row.cardId) ||
-    asTrimmedString(row.id)
-
-  if (!cardSetId) return null
-
-  const cardImage =
-    asTrimmedString(row.card_image) ||
-    asTrimmedString(row.cardImage) ||
-    asTrimmedString(row.image) ||
-    asTrimmedString(row.image_url) ||
-    asTrimmedString(row.imageUrl)
-
-  return {
-    set_id: PROMO_IMPORT_CODE,
-    set_name: PROMO_SET_NAME,
-    card_set_id: cardSetId.toUpperCase(),
-    card_name:
-      asTrimmedString(row.card_name) ||
-      asTrimmedString(row.cardName) ||
-      asTrimmedString(row.name_en) ||
-      asTrimmedString(row.name) ||
-      `Promo ${fallbackIndex + 1}`,
-    rarity: asTrimmedString(row.rarity) || 'Promo',
-    card_type: asTrimmedString(row.card_type) || asTrimmedString(row.type) || 'Promo',
-    card_image: cardImage,
-    card_image_id:
-      asTrimmedString(row.card_image_id) ||
-      asTrimmedString(row.cardImageId) ||
-      extractPrintCodeFromImageUrl(cardImage) ||
-      null
-  }
-}
-
 function normalizeSetCode(value: string | null | undefined) {
   return (value || '').replace('-', '').toUpperCase()
 }
 
 function normalizePrintCode(value: string | null | undefined) {
   return (value || '').trim().toUpperCase()
+}
+
+async function fetchJsonWithTimeout(url: string, label: string) {
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT_MS)
+
+  try {
+    const response = await fetch(url, { signal: controller.signal })
+    const data = await response.json()
+    return { response, data }
+  } catch (error: unknown) {
+    if (controller.signal.aborted) {
+      throw new Error(`${label}: delai depasse (${API_TIMEOUT_MS / 1000}s)`)
+    }
+    throw error
+  } finally {
+    clearTimeout(timeoutId)
+  }
 }
 
 function extractPrintCodeFromImageUrl(imageUrl: string | null | undefined): string | null {
@@ -142,27 +113,6 @@ function resolvePrintCode(params: {
   return variantSlug
     ? `${params.baseCode}_${params.setCode}_${variantSlug}`
     : `${params.baseCode}_${params.setCode}`
-}
-
-async function ensureSetScopedPrintCode(params: {
-  printCode: string
-  setId: string
-  setCode: string
-}) {
-  const normalized = normalizePrintCode(params.printCode)
-  if (!normalized) return normalized
-
-  const { data: existing } = await supabase
-    .from('card_prints')
-    .select('distribution_set_id')
-    .eq('print_code', normalized)
-    .maybeSingle()
-
-  if (!existing || existing.distribution_set_id === params.setId) {
-    return normalized
-  }
-
-  return `${normalized}_${params.setCode}`
 }
 
 export async function GET(
@@ -216,38 +166,86 @@ export async function GET(
   const isPromoImport = apiCode === PROMO_IMPORT_CODE
   let apiCards: Array<Record<string, unknown>> = []
 
-  if (isPromoImport) {
-    const promoRes = await fetch('https://www.optcgapi.com/api/allPromos/')
-    if (!promoRes.ok) {
+  try {
+    if (isPromoImport) {
+      apiCards = await getPromoCatalog()
+    } else {
+      const endpoint = isDeckCode
+        ? `https://www.optcgapi.com/api/decks/${apiCode}/`
+        : `https://www.optcgapi.com/api/sets/${apiCode}/`
+      const { response, data: setCards } = await fetchJsonWithTimeout(
+        endpoint,
+        'API cartes'
+      )
+      if (!response.ok) {
+        return NextResponse.json(
+          { error: `Erreur API ${response.status}` },
+          { status: 502 }
+        )
+      }
+
+      if (!Array.isArray(setCards)) {
+        return NextResponse.json({ error: 'Reponse API invalide' }, { status: 502 })
+      }
+
+      apiCards = setCards as Array<Record<string, unknown>>
+    }
+  } catch (error: unknown) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'API cartes indisponible' },
+      { status: 504 }
+    )
+  }
+
+  const candidates = apiCards
+    .map((card) => {
+      const apiSetCode = normalizeSetCode(asTrimmedString(card.set_id))
+      if (!isPromoImport && apiSetCode && apiSetCode !== normalizedCode) return null
+
+      const cardSetId = asTrimmedString(card.card_set_id)
+      if (!cardSetId) return null
+
+      const imageUrl = asTrimmedString(card.card_image)
+      const basePrintCode = normalizePrintCode(
+        isPromoImport
+          ? resolvePromoPrintCode({
+              card_set_id: cardSetId,
+              card_name: asTrimmedString(card.card_name)
+            })
+          : resolvePrintCode({
+              providedPrintCode: asTrimmedString(card.card_image_id),
+              imageUrl,
+              baseCode: cardSetId,
+              setCode: normalizedCode,
+              variantTag: extractVariantTag(asTrimmedString(card.card_name))
+            })
+      )
+      if (!basePrintCode) return null
+
+      return { card, cardSetId, basePrintCode }
+    })
+    .filter((candidate): candidate is NonNullable<typeof candidate> => Boolean(candidate))
+
+  const printOwnerByCode = new Map<string, string>()
+  const uniqueCandidateCodes = [...new Set(candidates.map((item) => item.basePrintCode))]
+  const LOOKUP_BATCH_SIZE = 200
+  for (let index = 0; index < uniqueCandidateCodes.length; index += LOOKUP_BATCH_SIZE) {
+    const batch = uniqueCandidateCodes.slice(index, index + LOOKUP_BATCH_SIZE)
+    const { data: ownerRows, error: ownerError } = await supabase
+      .from('card_prints')
+      .select('print_code, distribution_set_id')
+      .in('print_code', batch)
+
+    if (ownerError) {
       return NextResponse.json(
-        { error: `Erreur API promos ${promoRes.status}` },
-        { status: 502 }
+        { error: `Erreur verification des prints: ${ownerError.message}` },
+        { status: 500 }
       )
     }
 
-    const promoRaw = await promoRes.json()
-    if (!Array.isArray(promoRaw)) {
-      return NextResponse.json({ error: 'Reponse API invalide' }, { status: 502 })
+    for (const row of ownerRows || []) {
+      printOwnerByCode.set(normalizePrintCode(row.print_code), row.distribution_set_id)
     }
-
-    apiCards = promoRaw
-      .map((card, index) => normalizePromoApiCard(card, index))
-      .filter((card): card is Record<string, unknown> => Boolean(card))
-  } else {
-    const endpoint = isDeckCode
-      ? `https://www.optcgapi.com/api/decks/${apiCode}/`
-      : `https://www.optcgapi.com/api/sets/${apiCode}/`
-    const res = await fetch(endpoint)
-    if (!res.ok) {
-      return NextResponse.json({ error: `Erreur API ${res.status}` }, { status: 502 })
-    }
-
-    const setCards = await res.json()
-    if (!Array.isArray(setCards)) {
-      return NextResponse.json({ error: 'Reponse API invalide' }, { status: 502 })
-    }
-
-    apiCards = setCards as Array<Record<string, unknown>>
   }
 
   const seen = new Set<string>()
@@ -259,25 +257,12 @@ export async function GET(
     type: string
   }> = []
 
-  for (const card of apiCards) {
-    const apiSetCode = normalizeSetCode(asTrimmedString(card.set_id))
-    if (!isPromoImport && apiSetCode && apiSetCode !== normalizedCode) continue
-    const cardSetId = asTrimmedString(card.card_set_id)
-    if (!cardSetId) continue
-
-    const imageUrl = asTrimmedString(card.card_image)
-    const basePrintCode = resolvePrintCode({
-      providedPrintCode: asTrimmedString(card.card_image_id),
-      imageUrl,
-      baseCode: cardSetId,
-      setCode: normalizedCode,
-      variantTag: extractVariantTag(asTrimmedString(card.card_name))
-    })
-    const printCode = await ensureSetScopedPrintCode({
-      printCode: basePrintCode,
-      setId: setData.id,
-      setCode: normalizedCode
-    })
+  for (const { card, cardSetId, basePrintCode } of candidates) {
+    const ownerSetId = printOwnerByCode.get(basePrintCode)
+    const printCode =
+      ownerSetId && ownerSetId !== setData.id
+        ? `${basePrintCode}_${normalizedCode}`
+        : basePrintCode
 
     const normalizedPrint = normalizePrintCode(printCode)
     if (!normalizedPrint || seen.has(normalizedPrint)) continue

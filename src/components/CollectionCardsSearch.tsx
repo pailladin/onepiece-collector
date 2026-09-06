@@ -122,6 +122,7 @@ export function CollectionCardsSearch() {
 
   useEffect(() => {
     let cancelled = false
+    const controller = new AbortController()
 
     const fetchCollectionCards = async () => {
       setLoading(true)
@@ -140,7 +141,8 @@ export function CollectionCardsSearch() {
 
         const res = await fetch(`/api/collection/search?${params.toString()}`, {
           cache: 'no-store',
-          headers: token ? { Authorization: `Bearer ${token}` } : {}
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          signal: controller.signal
         })
         const payload = await res.json().catch(() => ({}))
 
@@ -183,6 +185,7 @@ export function CollectionCardsSearch() {
 
     return () => {
       cancelled = true
+      controller.abort()
     }
   }, [altFilter, altTypeFilter, cardTypeFilter, debouncedQuery, page, rarityFilter])
 
@@ -498,6 +501,8 @@ export function CollectionCardsSearch() {
                 <img
                   src={imageUrl}
                   alt={translation || getDisplayPrintCode(item)}
+                  loading="lazy"
+                  decoding="async"
                   style={{
                     width: '100%',
                     marginBottom: isMobileView ? 6 : 10,

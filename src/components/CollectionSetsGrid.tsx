@@ -117,6 +117,8 @@ export function CollectionSetsGrid({
                   <img
                     src={imageUrl}
                     alt={set.code}
+                    loading="lazy"
+                    decoding="async"
                     style={{
                       maxWidth: '100%',
                       maxHeight: '100%',

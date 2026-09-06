@@ -32,11 +32,13 @@ import {
 } from '@/lib/collections/languages'
 import { WishlistHeartButton } from '@/components/WishlistHeartButton'
 import { useWishlist } from '@/lib/useWishlist'
+import { changeCollectionQuantity } from '@/lib/collections/changeQuantity'
 
 const STORAGE_BASE_URL = (process.env.NEXT_PUBLIC_IMAGES_BASE_URL || `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/cards-images`).replace(/\/$/, '')
 const MISSING_IMAGE_PATH = '__missing__'
 const CARD_PLACEHOLDER_IMAGE =
   "data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 360 500'%3E%3Crect width='360' height='500' fill='%23e2e8f0'/%3E%3Crect x='16' y='16' width='328' height='468' rx='16' fill='%23f8fafc' stroke='%23cbd5e1' stroke-width='2'/%3E%3Ctext x='180' y='235' text-anchor='middle' font-family='Arial' font-size='24' fill='%23475569'%3EPhoto a venir%3C/text%3E%3C/svg%3E"
+const CARD_RENDER_BATCH_SIZE = 100
 
 type SortKey = 'number' | 'name' | 'rarity' | 'type'
 type SortDirection = 'asc' | 'desc'
@@ -132,6 +134,7 @@ export function CatalogueSetPageClient() {
   const [typeFilter, setTypeFilter] = useState('all')
   const [altFilter, setAltFilter] = useState<AltFilter>('all')
   const [altTypeFilter, setAltTypeFilter] = useState('all')
+  const [visibleCount, setVisibleCount] = useState(CARD_RENDER_BATCH_SIZE)
   const normalizedSetCode = normalizedCode
 
   useEffect(() => {
@@ -288,6 +291,15 @@ export function CatalogueSetPageClient() {
     })
   }, [filteredItems, sortKey, sortDirection, normalizedSetCode])
 
+  useEffect(() => {
+    setVisibleCount(CARD_RENDER_BATCH_SIZE)
+  }, [searchQuery, rarityFilter, typeFilter, altFilter, altTypeFilter, sortKey, sortDirection])
+
+  const displayedItems = useMemo(
+    () => sortedItems.slice(0, visibleCount),
+    [sortedItems, visibleCount]
+  )
+
   const updateQuantity = async (printId: string, languageCode: string, delta: number) => {
     if (!user) return
 
@@ -297,36 +309,20 @@ export function CatalogueSetPageClient() {
     const currentLanguageQty = Number(
       current.languageBreakdown?.get(normalizedLanguageCode) || 0
     )
-    const nextLanguageQty = currentLanguageQty + delta
+    let nextLanguageQty = currentLanguageQty + delta
     let mutationError: string | null = null
 
-    if (nextLanguageQty <= 0) {
-      const { error } = await supabase
-        .from('collections')
-        .delete()
-        .eq('user_id', user.id)
-        .eq('card_print_id', printId)
-        .eq('language_code', normalizedLanguageCode)
-      mutationError = error?.message || null
-    } else if (currentLanguageQty === 0) {
-      const { error } = await supabase.from('collections').upsert(
-        {
-          user_id: user.id,
-          card_print_id: printId,
-          language_code: normalizedLanguageCode,
-          quantity: nextLanguageQty
-        },
-        { onConflict: 'user_id,card_print_id,language_code' }
-      )
-      mutationError = error?.message || null
-    } else {
-      const { error } = await supabase
-        .from('collections')
-        .update({ quantity: nextLanguageQty })
-        .eq('user_id', user.id)
-        .eq('card_print_id', printId)
-        .eq('language_code', normalizedLanguageCode)
-      mutationError = error?.message || null
+    try {
+      nextLanguageQty = await changeCollectionQuantity({
+        supabase,
+        userId: user.id,
+        printId,
+        languageCode: normalizedLanguageCode,
+        delta,
+        currentQuantity: currentLanguageQty
+      })
+    } catch (error) {
+      mutationError = error instanceof Error ? error.message : 'Modification impossible'
     }
 
     if (mutationError) {
@@ -601,7 +597,7 @@ export function CatalogueSetPageClient() {
           gap: isCompactView ? 10 : 20
         }}
       >
-        {sortedItems.map((item) => {
+        {displayedItems.map((item) => {
           const translation = item.card?.card_translations?.find(
             (t) => t.locale === DEFAULT_LOCALE
           )
@@ -678,6 +674,8 @@ export function CatalogueSetPageClient() {
               <img
                 src={imageUrl}
                 alt={translation?.name}
+                loading="lazy"
+                decoding="async"
                 style={{
                   width: '100%',
                   marginBottom: isCompactView ? 6 : 10,
@@ -763,6 +761,26 @@ export function CatalogueSetPageClient() {
           )
         })}
       </div>
+
+      {displayedItems.length < sortedItems.length && (
+        <div style={{ display: 'flex', justifyContent: 'center', marginTop: 20 }}>
+          <button
+            type="button"
+            onClick={() => setVisibleCount((count) => count + CARD_RENDER_BATCH_SIZE)}
+            style={{
+              padding: '10px 18px',
+              borderRadius: 999,
+              border: '1px solid #1d4ed8',
+              background: '#dbeafe',
+              color: '#1d4ed8',
+              fontWeight: 700,
+              cursor: 'pointer'
+            }}
+          >
+            Afficher 100 cartes de plus ({displayedItems.length}/{sortedItems.length})
+          </button>
+        </div>
+      )}
 
       {selectedImage && (
         <div

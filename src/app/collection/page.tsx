@@ -83,12 +83,13 @@ function truncateLabel(value: string, maxLength: number) {
 }
 
 export default function CollectionPage() {
-  const { user } = useAuth()
+  const { user, loading: authLoading } = useAuth()
   const userId = user?.id ?? null
   const [useCompactActions, setUseCompactActions] = useState(false)
   const [sets, setSets] = useState<SetRow[]>([])
   const [stats, setStats] = useState<Record<string, SetStats>>({})
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [priceLoading, setPriceLoading] = useState(false)
   const [priceError, setPriceError] = useState<string | null>(null)
   const [showPriceModal, setShowPriceModal] = useState(false)
@@ -114,7 +115,10 @@ export default function CollectionPage() {
   }, [])
 
   useEffect(() => {
+    let cancelled = false
+
     const fetchData = async () => {
+      if (authLoading) return
       if (!userId) {
         setLoading(false)
         setSets([])
@@ -123,21 +127,38 @@ export default function CollectionPage() {
       }
 
       setLoading(true)
-      const data = await fetchUserSetStats(userId)
-      setSets(data.sets)
-      setStats(data.stats)
-      setLoading(false)
+      setLoadError(null)
+      try {
+        const data = await fetchUserSetStats(userId)
+        if (cancelled) return
+        setSets(data.sets)
+        setStats(data.stats)
+      } catch (error) {
+        if (cancelled) return
+        setSets([])
+        setStats({})
+        setLoadError(error instanceof Error ? error.message : 'Erreur chargement collection')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
     }
 
-    fetchData()
-  }, [userId])
+    void fetchData()
+    return () => {
+      cancelled = true
+    }
+  }, [authLoading, userId])
 
-  if (loading) {
+  if (authLoading || loading) {
     return <div style={{ padding: 40 }}>Chargement...</div>
   }
 
   if (!user) {
     return <div style={{ padding: 40 }}>Connecte-toi pour voir ta collection.</div>
+  }
+
+  if (loadError) {
+    return <div style={{ padding: 40, color: '#b91c1c' }}>{loadError}</div>
   }
 
   const visibleSets = sets.filter((set) => (stats[set.code]?.owned || 0) > 0)
@@ -191,7 +212,7 @@ export default function CollectionPage() {
     }
   }
 
-  const calculateCollectionPrice = async () => {
+  const calculateCollectionPriceLegacy = async () => {
     if (!user) return
 
     setPriceLoading(true)
@@ -321,6 +342,40 @@ export default function CollectionPage() {
       setPriceError('Erreur serveur pendant le calcul')
       setPriceTotal(null)
       setPriceSetRows([])
+    } finally {
+      setPriceLoading(false)
+    }
+  }
+
+  const calculateCollectionPrice = async () => {
+    if (!user) return
+
+    setPriceLoading(true)
+    setPriceError(null)
+    setShowPriceModal(false)
+
+    try {
+      const { data } = await supabase.auth.getSession()
+      const token = data.session?.access_token
+      if (!token) throw new Error('Session invalide. Reconnecte-toi.')
+
+      const response = await fetch('/api/collection/current-value', {
+        cache: 'no-store',
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(payload?.error || 'Erreur calcul collection')
+
+      setPriceTotal(Number(payload?.total) || 0)
+      setPriceSetRows(Array.isArray(payload?.rows) ? payload.rows : [])
+      setPricePricedCount(Number(payload?.pricedCount) || 0)
+      setPriceExpectedCount(Number(payload?.expectedCount) || 0)
+      setShowPriceModal(true)
+    } catch {
+      // Secours compatible si le nouvel endpoint n'est pas encore disponible.
+      setPriceLoading(false)
+      await calculateCollectionPriceLegacy()
+      return
     } finally {
       setPriceLoading(false)
     }

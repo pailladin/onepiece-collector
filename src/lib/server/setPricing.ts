@@ -126,7 +126,10 @@ function buildResult(params: {
   return params
 }
 
-async function computeSetPricing(setCode: string): Promise<SetPricingResult> {
+async function computeSetPricing(
+  setCode: string,
+  includeTrends: boolean
+): Promise<SetPricingResult> {
   const normalizedSetCode = normalizeSetCode(setCode)
   const apiSetCode = formatApiSetCode(setCode)
 
@@ -324,7 +327,7 @@ async function computeSetPricing(setCode: string): Promise<SetPricingResult> {
       avg: number | null
     }> = []
     const snapshotLookback = new Date(Date.now() - 45 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
-    for (const idsChunk of chunkArray(productIds, IN_CHUNK_SIZE)) {
+    for (const idsChunk of includeTrends ? chunkArray(productIds, IN_CHUNK_SIZE) : []) {
       const { data: historyData } = await supabaseServiceServer
         .from('cardmarket_price_guide_snapshots')
         .select('product_id, snapshot_date, low, avg')
@@ -377,6 +380,8 @@ async function computeSetPricing(setCode: string): Promise<SetPricingResult> {
         cardmarketRanges[printCode] = range
         cardmarketRangesByPrintId[printId] = range
       }
+
+      if (!includeTrends) continue
 
       const currentPrice = pickCardmarketPrice(range)
       const historyRows = snapshotsByProductId.get(link.cardmarket_product_id) || []
@@ -482,34 +487,39 @@ async function computeSetPricing(setCode: string): Promise<SetPricingResult> {
   })
 }
 
-export async function getSetPricing(setCode: string): Promise<SetPricingResult> {
+export async function getSetPricing(
+  setCode: string,
+  options: { includeTrends?: boolean } = {}
+): Promise<SetPricingResult> {
   const normalizedSetCode = normalizeSetCode(setCode)
+  const includeTrends = options.includeTrends !== false
+  const cacheKey = `${normalizedSetCode}:${includeTrends ? 'full' : 'prices'}`
   const now = Date.now()
-  const cached = pricingCache.get(normalizedSetCode)
+  const cached = pricingCache.get(cacheKey)
 
   if (cached && cached.expiresAt > now) {
     return cached.value
   }
 
-  const inFlight = pricingInFlight.get(normalizedSetCode)
+  const inFlight = pricingInFlight.get(cacheKey)
   if (inFlight) {
     return inFlight
   }
 
-  const pending = computeSetPricing(normalizedSetCode)
+  const pending = computeSetPricing(normalizedSetCode, includeTrends)
     .then((value) => {
-      pricingCache.set(normalizedSetCode, {
+      pricingCache.set(cacheKey, {
         value,
         expiresAt: Date.now() + PRICING_CACHE_TTL_MS
       })
-      pricingInFlight.delete(normalizedSetCode)
+      pricingInFlight.delete(cacheKey)
       return value
     })
     .catch((error) => {
-      pricingInFlight.delete(normalizedSetCode)
+      pricingInFlight.delete(cacheKey)
       throw error
     })
 
-  pricingInFlight.set(normalizedSetCode, pending)
+  pricingInFlight.set(cacheKey, pending)
   return pending
 }

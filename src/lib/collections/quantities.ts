@@ -104,7 +104,9 @@ export async function fetchUserCollectionRowsForPrintIds(params: {
 
   const rows: CollectionQuantityRow[] = []
 
-  for (const idsChunk of chunkArray(normalizedPrintIds, 500)) {
+  // Les UUID sont places dans l'URL PostgREST par `.in()`.
+  // Des lots plus grands peuvent depasser la taille acceptee par certains proxies.
+  for (const idsChunk of chunkArray(normalizedPrintIds, 100)) {
     const { data, error } = await params.supabase
       .from('collections')
       .select('card_print_id, quantity, language_code')

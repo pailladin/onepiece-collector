@@ -28,6 +28,7 @@ import {
 } from '@/lib/collections/languages'
 import { WishlistHeartButton } from '@/components/WishlistHeartButton'
 import { useWishlist } from '@/lib/useWishlist'
+import { changeCollectionQuantity } from '@/lib/collections/changeQuantity'
 
 const STORAGE_BASE_URL = (process.env.NEXT_PUBLIC_IMAGES_BASE_URL ||
   `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/cards-images`).replace(/\/$/, '')
@@ -215,6 +216,7 @@ export default function CatalogueSetsBrowser({ sets }: { sets: CatalogueSetRow[]
     if (mode !== 'cards') return
 
     let cancelled = false
+    const controller = new AbortController()
 
     const fetchGlobalCards = async () => {
       setGlobalLoading(true)
@@ -229,7 +231,9 @@ export default function CatalogueSetsBrowser({ sets }: { sets: CatalogueSetRow[]
         if (altTypeFilter !== 'all') params.set('altType', altTypeFilter)
         params.set('page', String(page))
 
-        const res = await fetch(`/api/catalogue/search?${params.toString()}`)
+        const res = await fetch(`/api/catalogue/search?${params.toString()}`, {
+          signal: controller.signal
+        })
         const payload = await res.json().catch(() => ({}))
 
           if (!res.ok) {
@@ -290,6 +294,7 @@ export default function CatalogueSetsBrowser({ sets }: { sets: CatalogueSetRow[]
 
     return () => {
       cancelled = true
+      controller.abort()
     }
   }, [altFilter, altTypeFilter, cardTypeFilter, debouncedQuery, mode, page, rarityFilter, userId])
 
@@ -313,36 +318,20 @@ export default function CatalogueSetsBrowser({ sets }: { sets: CatalogueSetRow[]
     const currentLanguageQty = Number(
       current.languageBreakdown?.get(normalizedLanguageCode) || 0
     )
-    const nextLanguageQty = currentLanguageQty + delta
+    let nextLanguageQty = currentLanguageQty + delta
     let mutationError: string | null = null
 
-    if (nextLanguageQty <= 0) {
-      const { error } = await supabase
-        .from('collections')
-        .delete()
-        .eq('user_id', user.id)
-        .eq('card_print_id', printId)
-        .eq('language_code', normalizedLanguageCode)
-      mutationError = error?.message || null
-    } else if (currentLanguageQty === 0) {
-      const { error } = await supabase.from('collections').upsert(
-        {
-          user_id: user.id,
-          card_print_id: printId,
-          language_code: normalizedLanguageCode,
-          quantity: nextLanguageQty
-        },
-        { onConflict: 'user_id,card_print_id,language_code' }
-      )
-      mutationError = error?.message || null
-    } else {
-      const { error } = await supabase
-        .from('collections')
-        .update({ quantity: nextLanguageQty })
-        .eq('user_id', user.id)
-        .eq('card_print_id', printId)
-        .eq('language_code', normalizedLanguageCode)
-      mutationError = error?.message || null
+    try {
+      nextLanguageQty = await changeCollectionQuantity({
+        supabase,
+        userId: user.id,
+        printId,
+        languageCode: normalizedLanguageCode,
+        delta,
+        currentQuantity: currentLanguageQty
+      })
+    } catch (error) {
+      mutationError = error instanceof Error ? error.message : 'Modification impossible'
     }
 
     if (mutationError) {
@@ -549,6 +538,8 @@ export default function CatalogueSetsBrowser({ sets }: { sets: CatalogueSetRow[]
                       <img
                         src={imageUrl}
                         alt={set.code}
+                        loading="lazy"
+                        decoding="async"
                         style={{
                           maxWidth: '100%',
                           maxHeight: '100%',
@@ -985,6 +976,8 @@ export default function CatalogueSetsBrowser({ sets }: { sets: CatalogueSetRow[]
                       <img
                         src={imageUrl}
                         alt={translation || getDisplayPrintCode(item)}
+                        loading="lazy"
+                        decoding="async"
                         style={{
                           width: '100%',
                           marginBottom: isMobileView ? 6 : 10,

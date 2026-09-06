@@ -33,11 +33,13 @@ import {
 import { WishlistHeartButton } from '@/components/WishlistHeartButton'
 import { useWishlist } from '@/lib/useWishlist'
 import { buildCardmarketProductOrSearchUrl } from '@/lib/cardmarketUrls'
+import { changeCollectionQuantity } from '@/lib/collections/changeQuantity'
 
 const STORAGE_BASE_URL = (process.env.NEXT_PUBLIC_IMAGES_BASE_URL || `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/cards-images`).replace(/\/$/, '')
 const MISSING_IMAGE_PATH = '__missing__'
 const CARD_PLACEHOLDER_IMAGE =
   "data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 360 500'%3E%3Crect width='360' height='500' fill='%23e2e8f0'/%3E%3Crect x='16' y='16' width='328' height='468' rx='16' fill='%23f8fafc' stroke='%23cbd5e1' stroke-width='2'/%3E%3Ctext x='180' y='235' text-anchor='middle' font-family='Arial' font-size='24' fill='%23475569'%3EPhoto a venir%3C/text%3E%3C/svg%3E"
+const CARD_RENDER_BATCH_SIZE = 100
 
 type SortKey = 'number' | 'name' | 'rarity' | 'type' | 'value'
 type SortDirection = 'asc' | 'desc'
@@ -76,6 +78,12 @@ type DoubleDetail = {
   source: PriceSource | null
   cardmarketLow: number | null
   cardmarketAvg: number | null
+}
+
+type CollectionCatalogueItem = {
+  id: string
+  card_id: string
+  [key: string]: unknown
 }
 
 const RARITY_PRIORITY: Record<string, number> = {
@@ -231,6 +239,8 @@ export function CollectionSetView({
   const [showMissing, setShowMissing] = useState(() =>
     parseBoolFlag(searchParams.get('missing'), true)
   )
+  const [visibleOwnedCount, setVisibleOwnedCount] = useState(CARD_RENDER_BATCH_SIZE)
+  const [visibleMissingCount, setVisibleMissingCount] = useState(CARD_RENDER_BATCH_SIZE)
   const [priceLoading, setPriceLoading] = useState(false)
   const [priceError, setPriceError] = useState<string | null>(null)
   const [priceModalTotal, setPriceModalTotal] = useState<number | null>(null)
@@ -317,49 +327,31 @@ export function CollectionSetView({
         return
       }
 
-      const { data: setData } = await supabase
-        .from('sets')
-        .select('id, available_languages')
-        .eq('code', code)
-        .single()
+      const catalogueRes = await fetch(
+        `/api/catalogue/${encodeURIComponent(normalizeSetCode(code))}`,
+        { cache: 'no-store' }
+      )
+      const catalogueData = await catalogueRes.json().catch(() => ({}))
 
-      if (!setData) {
+      if (!catalogueRes.ok) {
         setItems([])
         setSetLanguages([])
         setLoading(false)
         return
       }
 
-      setSetLanguages(resolveSetLanguages((setData as any).available_languages))
+      setSetLanguages(resolveSetLanguages(catalogueData?.set?.availableLanguages))
+      const printsData: CollectionCatalogueItem[] = Array.isArray(
+        catalogueData?.items
+      )
+        ? (catalogueData.items as CollectionCatalogueItem[])
+        : []
 
-      const { data: printsData } = await supabase
-        .from('card_prints')
-        .select('*')
-        .eq('distribution_set_id', setData.id)
-
-      if (!printsData || printsData.length === 0) {
+      if (printsData.length === 0) {
         setItems([])
         setLoading(false)
         return
       }
-
-      const cardIds = printsData.map((p) => p.card_id)
-
-      const { data: cardsData } = await supabase
-        .from('cards')
-        .select(
-          `
-          id,
-          number,
-          rarity,
-          type,
-          card_translations (
-            name,
-            locale
-          )
-        `
-        )
-        .in('id', cardIds)
 
       let ownedMap = new Map<string, number>()
       let languageBreakdownByPrintId = new Map<string, Map<string, number>>()
@@ -376,11 +368,8 @@ export function CollectionSetView({
         languageBreakdownByPrintId = aggregated.byPrintIdLanguage
       }
 
-      const cardsMap = new Map(cardsData?.map((c) => [c.id, c]))
-
       const merged = printsData.map((print) => ({
         ...print,
-        card: cardsMap.get(print.card_id),
         quantity: ownedMap.get(print.id) || 0,
         languageBreakdown: languageBreakdownByPrintId.get(print.id) || new Map<string, number>()
       }))
@@ -542,6 +531,20 @@ export function CollectionSetView({
   const missingItems = useMemo(
     () => sortedItems.filter((item) => (item.quantity || 0) === 0),
     [sortedItems]
+  )
+
+  useEffect(() => {
+    setVisibleOwnedCount(CARD_RENDER_BATCH_SIZE)
+    setVisibleMissingCount(CARD_RENDER_BATCH_SIZE)
+  }, [searchQuery, rarityFilter, typeFilter, altFilter, altTypeFilter, doublesOnly, sortKey, sortDirection])
+
+  const visibleOwnedItems = useMemo(
+    () => ownedItems.slice(0, visibleOwnedCount),
+    [ownedItems, visibleOwnedCount]
+  )
+  const visibleMissingItems = useMemo(
+    () => missingItems.slice(0, visibleMissingCount),
+    [missingItems, visibleMissingCount]
   )
 
   const ownedItemsAll = useMemo(
@@ -902,36 +905,20 @@ export function CollectionSetView({
     const currentLanguageQty = Number(
       current.languageBreakdown?.get(normalizedLanguageCode) || 0
     )
-    const nextLanguageQty = currentLanguageQty + delta
+    let nextLanguageQty = currentLanguageQty + delta
     let mutationError: string | null = null
 
-    if (nextLanguageQty <= 0) {
-      const { error } = await supabase
-        .from('collections')
-        .delete()
-        .eq('user_id', user.id)
-        .eq('card_print_id', printId)
-        .eq('language_code', normalizedLanguageCode)
-      mutationError = error?.message || null
-    } else if (currentLanguageQty === 0) {
-      const { error } = await supabase.from('collections').upsert(
-        {
-          user_id: user.id,
-          card_print_id: printId,
-          language_code: normalizedLanguageCode,
-          quantity: nextLanguageQty
-        },
-        { onConflict: 'user_id,card_print_id,language_code' }
-      )
-      mutationError = error?.message || null
-    } else {
-      const { error } = await supabase
-        .from('collections')
-        .update({ quantity: nextLanguageQty })
-        .eq('user_id', user.id)
-        .eq('card_print_id', printId)
-        .eq('language_code', normalizedLanguageCode)
-      mutationError = error?.message || null
+    try {
+      nextLanguageQty = await changeCollectionQuantity({
+        supabase,
+        userId: user.id,
+        printId,
+        languageCode: normalizedLanguageCode,
+        delta,
+        currentQuantity: currentLanguageQty
+      })
+    } catch (error) {
+      mutationError = error instanceof Error ? error.message : 'Modification impossible'
     }
 
     if (mutationError) {
@@ -1078,6 +1065,8 @@ export function CollectionSetView({
             <img
               src={imageUrl}
               alt={translation?.name}
+              loading="lazy"
+              decoding="async"
               style={{
                 width: '100%',
                 marginBottom: isMobileView ? 8 : 10,
@@ -1598,7 +1587,30 @@ export function CollectionSetView({
         >
           {showOwned ? 'v' : '>'} Cartes possedees ({ownedItems.length})
         </button>
-        {showOwned && <div style={{ marginTop: 12 }}>{renderGrid(ownedItems)}</div>}
+        {showOwned && (
+          <div style={{ marginTop: 12 }}>
+            {renderGrid(visibleOwnedItems)}
+            {visibleOwnedItems.length < ownedItems.length && (
+              <div style={{ display: 'flex', justifyContent: 'center', marginTop: 16 }}>
+                <button
+                  type="button"
+                  onClick={() => setVisibleOwnedCount((count) => count + CARD_RENDER_BATCH_SIZE)}
+                  style={{
+                    padding: '10px 18px',
+                    borderRadius: 999,
+                    border: '1px solid #1d4ed8',
+                    background: '#dbeafe',
+                    color: '#1d4ed8',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Afficher 100 cartes de plus ({visibleOwnedItems.length}/{ownedItems.length})
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <div>
@@ -1618,7 +1630,28 @@ export function CollectionSetView({
           {showMissing ? 'v' : '>'} Cartes non possedees ({missingItems.length})
         </button>
         {showMissing && (
-          <div style={{ marginTop: 12 }}>{renderGrid(missingItems)}</div>
+          <div style={{ marginTop: 12 }}>
+            {renderGrid(visibleMissingItems)}
+            {visibleMissingItems.length < missingItems.length && (
+              <div style={{ display: 'flex', justifyContent: 'center', marginTop: 16 }}>
+                <button
+                  type="button"
+                  onClick={() => setVisibleMissingCount((count) => count + CARD_RENDER_BATCH_SIZE)}
+                  style={{
+                    padding: '10px 18px',
+                    borderRadius: 999,
+                    border: '1px solid #1d4ed8',
+                    background: '#dbeafe',
+                    color: '#1d4ed8',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Afficher 100 cartes de plus ({visibleMissingItems.length}/{missingItems.length})
+                </button>
+              </div>
+            )}
+          </div>
         )}
       </div>
 

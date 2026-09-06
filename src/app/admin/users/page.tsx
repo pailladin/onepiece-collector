@@ -12,6 +12,7 @@ type AdminUser = {
   username: string
   startedSetsCount: number
   cardsCount: number
+  lastCardAddedAt: string | null
   createdAt: string | null
   lastSignInAt: string | null
   emailConfirmedAt: string | null
@@ -21,6 +22,7 @@ type SortKey =
   | 'email'
   | 'startedSetsCount'
   | 'cardsCount'
+  | 'lastCardAddedAt'
   | 'createdAt'
   | 'lastSignInAt'
   | 'emailConfirmedAt'
@@ -288,6 +290,7 @@ export default function AdminUsersPage() {
               {renderSortHeader('createdAt', 'Creation')}
               {renderSortHeader('startedSetsCount', 'Sets')}
               {renderSortHeader('cardsCount', 'Cartes')}
+              {renderSortHeader('lastCardAddedAt', 'Dernier ajout')}
             </div>
             {sortedUsers.map((row) => (
               <div
@@ -352,6 +355,10 @@ export default function AdminUsersPage() {
                     <span>{formatDate(row.createdAt)}</span>
                   </div>
                   <div>
+                    <div style={{ color: '#64748b' }}>Dernier ajout de carte</div>
+                    <span>{formatDate(row.lastCardAddedAt)}</span>
+                  </div>
+                  <div>
                     <div style={{ color: '#64748b' }}>Connexion</div>
                     <span>{formatDate(row.lastSignInAt)}</span>
                   </div>
@@ -386,7 +393,7 @@ export default function AdminUsersPage() {
               style={{
                 display: 'grid',
                 gridTemplateColumns:
-                  '30px minmax(220px,1.3fr) 110px 110px minmax(150px,1fr) minmax(150px,1fr) minmax(150px,1fr) 110px',
+                  '30px minmax(220px,1.3fr) 90px 90px minmax(145px,1fr) minmax(145px,1fr) minmax(145px,1fr) minmax(145px,1fr) 100px',
                 gap: 10,
                 padding: '8px 10px',
                 background: '#f8fafc',
@@ -398,6 +405,7 @@ export default function AdminUsersPage() {
               <div>{renderSortHeader('email', 'Email / Pseudo')}</div>
               <div>{renderSortHeader('startedSetsCount', 'Sets')}</div>
               <div>{renderSortHeader('cardsCount', 'Cartes')}</div>
+              <div>{renderSortHeader('lastCardAddedAt', 'Dernier ajout')}</div>
               <div>{renderSortHeader('createdAt', 'Cree le')}</div>
               <div>{renderSortHeader('lastSignInAt', 'Derniere connexion')}</div>
               <div>{renderSortHeader('emailConfirmedAt', 'Email confirme')}</div>
@@ -410,7 +418,7 @@ export default function AdminUsersPage() {
                 style={{
                   display: 'grid',
                   gridTemplateColumns:
-                    '30px minmax(220px,1.3fr) 110px 110px minmax(150px,1fr) minmax(150px,1fr) minmax(150px,1fr) 110px',
+                    '30px minmax(220px,1.3fr) 90px 90px minmax(145px,1fr) minmax(145px,1fr) minmax(145px,1fr) minmax(145px,1fr) 100px',
                   gap: 10,
                   padding: '10px',
                   borderBottom: '1px solid #eee',
@@ -437,6 +445,7 @@ export default function AdminUsersPage() {
                 </div>
                 <div>{row.startedSetsCount}</div>
                 <div>{row.cardsCount}</div>
+                <div>{formatDate(row.lastCardAddedAt)}</div>
                 <div>{formatDate(row.createdAt)}</div>
                 <div>{formatDate(row.lastSignInAt)}</div>
                 <div>{formatDate(row.emailConfirmedAt)}</div>

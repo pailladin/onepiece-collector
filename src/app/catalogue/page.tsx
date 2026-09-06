@@ -4,7 +4,7 @@ import CatalogueSetsBrowser, {
 } from '@/components/CatalogueSetsBrowser'
 import type { Metadata } from 'next'
 
-export const dynamic = 'force-dynamic'
+export const revalidate = 60
 
 export const metadata: Metadata = {
   title: 'Catalogue des sets One Piece TCG',

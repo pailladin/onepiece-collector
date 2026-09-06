@@ -7,8 +7,10 @@ import {
   resolveDonTargetSetCode
 } from '@/lib/server/donCards'
 import { putCardImage } from '@/lib/server/imageStorage'
+import { getPromoCatalog, resolvePromoPrintCode } from '@/lib/server/promoCards'
 
 export const runtime = 'nodejs'
+export const maxDuration = 300
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -18,6 +20,9 @@ const supabase = createClient(
 const MISSING_IMAGE_PATH = '__missing__'
 const PROMO_IMPORT_CODE = 'PROMO'
 const PROMO_SET_NAME = 'Promos Speciales'
+const API_TIMEOUT_MS = 20_000
+const IMAGE_TIMEOUT_MS = 20_000
+const STORAGE_TIMEOUT_MS = 25_000
 
 function isDeckImportCode(value: string | null | undefined) {
   return /^ST\d{2}$/i.test(normalizeSetCode(value))
@@ -47,52 +52,6 @@ function asTrimmedString(value: unknown) {
   if (typeof value === 'string') return value.trim()
   if (typeof value === 'number' && Number.isFinite(value)) return String(value)
   return ''
-}
-
-function normalizePromoApiCard(rawCard: unknown, fallbackIndex: number) {
-  const row =
-    rawCard && typeof rawCard === 'object'
-      ? (rawCard as Record<string, unknown>)
-      : null
-  if (!row) return null
-
-  const cardSetId =
-    asTrimmedString(row.card_set_id) ||
-    asTrimmedString(row.cardSetId) ||
-    asTrimmedString(row.print_code) ||
-    asTrimmedString(row.printCode) ||
-    asTrimmedString(row.card_id) ||
-    asTrimmedString(row.cardId) ||
-    asTrimmedString(row.id)
-
-  if (!cardSetId) return null
-
-  const cardImage =
-    asTrimmedString(row.card_image) ||
-    asTrimmedString(row.cardImage) ||
-    asTrimmedString(row.image) ||
-    asTrimmedString(row.image_url) ||
-    asTrimmedString(row.imageUrl)
-
-  return {
-    set_id: PROMO_IMPORT_CODE,
-    set_name: PROMO_SET_NAME,
-    card_set_id: cardSetId.toUpperCase(),
-    card_name:
-      asTrimmedString(row.card_name) ||
-      asTrimmedString(row.cardName) ||
-      asTrimmedString(row.name_en) ||
-      asTrimmedString(row.name) ||
-      `Promo ${fallbackIndex + 1}`,
-    rarity: asTrimmedString(row.rarity) || 'Promo',
-    card_type: asTrimmedString(row.card_type) || asTrimmedString(row.type) || 'Promo',
-    card_image: cardImage,
-    card_image_id:
-      asTrimmedString(row.card_image_id) ||
-      asTrimmedString(row.cardImageId) ||
-      extractPrintCodeFromImageUrl(cardImage) ||
-      null
-  }
 }
 
 function extractNumber(cardSetId: string) {
@@ -159,26 +118,73 @@ function parseCardName(cardName: string) {
   return { variant, cleanName, variantTag }
 }
 
-async function uploadImageToSupabase(imageUrl: string, fileName: string) {
-  const imageResponse = await fetch(imageUrl)
-  if (!imageResponse.ok) {
-    throw new Error('Erreur telechargement image')
+async function fetchWithTimeout(input: string, timeoutMs: number, label: string) {
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+
+  try {
+    return await fetch(input, { signal: controller.signal })
+  } catch (error: unknown) {
+    if (controller.signal.aborted) {
+      throw new Error(`${label}: delai depasse (${Math.round(timeoutMs / 1000)}s)`)
+    }
+    throw error
+  } finally {
+    clearTimeout(timeoutId)
   }
-
-  const arrayBuffer = await imageResponse.arrayBuffer()
-  const buffer = Buffer.from(arrayBuffer)
-
-  await putCardImage(fileName, buffer, 'image/jpeg')
 }
 
-async function getImageSha1(imageUrl: string) {
-  const imageResponse = await fetch(imageUrl)
-  if (!imageResponse.ok) {
-    throw new Error('Erreur telechargement image')
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string) {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(
+      () => reject(new Error(`${label}: delai depasse (${Math.round(timeoutMs / 1000)}s)`)),
+      timeoutMs
+    )
+  })
+
+  try {
+    return await Promise.race([promise, timeout])
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId)
   }
-  const arrayBuffer = await imageResponse.arrayBuffer()
+}
+
+type DownloadedImage = {
+  buffer: Buffer
+  contentType: string
+  sha1: string
+}
+
+async function downloadImage(imageUrl: string): Promise<DownloadedImage> {
+  const imageResponse = await fetchWithTimeout(
+    imageUrl,
+    IMAGE_TIMEOUT_MS,
+    'Telechargement image'
+  )
+  if (!imageResponse.ok) {
+    throw new Error(`Erreur telechargement image (${imageResponse.status})`)
+  }
+
+  const arrayBuffer = await withTimeout(
+    imageResponse.arrayBuffer(),
+    IMAGE_TIMEOUT_MS,
+    'Lecture image'
+  )
   const buffer = Buffer.from(arrayBuffer)
-  return crypto.createHash('sha1').update(buffer).digest('hex')
+  return {
+    buffer,
+    contentType: imageResponse.headers.get('content-type') || 'image/jpeg',
+    sha1: crypto.createHash('sha1').update(buffer).digest('hex')
+  }
+}
+
+async function uploadDownloadedImage(image: DownloadedImage, fileName: string) {
+  await withTimeout(
+    putCardImage(fileName, image.buffer, image.contentType),
+    STORAGE_TIMEOUT_MS,
+    'Upload image'
+  )
 }
 
 function extractPrintCodeFromImageUrl(imageUrl: string | null | undefined): string | null {
@@ -254,6 +260,16 @@ function cardMatchesSelectedPrintCodes(
   setCode: string
 ) {
   if (!card?.card_set_id) return false
+  if (normalizeSetCode(setCode) === PROMO_IMPORT_CODE) {
+    return selectedPrintCodes.has(
+      normalizePrintCode(
+        resolvePromoPrintCode({
+          card_set_id: String(card.card_set_id),
+          card_name: String(card.card_name || '')
+        })
+      )
+    )
+  }
   const { variantTag } = parseCardName(card.card_name || '')
   const candidates = getPotentialPrintCodes({
     providedPrintCode: card.card_image_id?.toString().trim(),
@@ -374,33 +390,25 @@ export async function POST(
         let apiCards: any[] = []
 
         if (isPromoImport) {
-          const promoRes = await fetch('https://www.optcgapi.com/api/allPromos/')
-          if (!promoRes.ok) {
-            push(`Erreur API promos ${promoRes.status}`)
-            return
-          }
-
-          const promoRaw = await promoRes.json()
-          if (!Array.isArray(promoRaw)) {
-            push('Format API promos invalide')
-            return
-          }
-
-          apiCards = promoRaw
-            .map((card, index) => normalizePromoApiCard(card, index))
-            .filter(Boolean) as any[]
+          push('Chargement du catalogue promos...')
+          apiCards = await getPromoCatalog()
+          push('Catalogue promos OPTCGAPI charge')
         } else {
           const endpoint = isDeckImport
             ? `https://www.optcgapi.com/api/decks/${apiCode}/`
             : `https://www.optcgapi.com/api/sets/${apiCode}/`
-          const res = await fetch(endpoint)
+          const res = await fetchWithTimeout(endpoint, API_TIMEOUT_MS, 'API cartes')
 
           if (!res.ok) {
             push(`Erreur API ${res.status}`)
             return
           }
 
-          const setCards = await res.json()
+          const setCards = await withTimeout(
+            res.json(),
+            API_TIMEOUT_MS,
+            'Lecture API cartes'
+          )
           if (!Array.isArray(setCards)) {
             push('Format API set invalide')
             return
@@ -408,11 +416,27 @@ export async function POST(
           apiCards = setCards as any[]
         }
 
-        const donRes = await fetch('https://www.optcgapi.com/api/allDonCards/')
-        if (!donRes.ok) {
-          push(`Warning API DON ${donRes.status}: import DON ignore`)
-        } else {
-          const donRaw = await donRes.json().catch(() => [])
+        // Les cartes DON ne sont jamais rattachees au set PROMO. Ne pas charger ce
+        // catalogue rend les imports promos cibles plus rapides et plus fiables.
+        if (!isPromoImport) {
+          const donRes = await fetchWithTimeout(
+            'https://www.optcgapi.com/api/allDonCards/',
+            API_TIMEOUT_MS,
+            'API DON'
+          ).catch((error: unknown) => {
+            push(`Warning API DON indisponible: ${toErrorMessage(error)}`)
+            return null
+          })
+          if (!donRes) {
+            // L'import principal continue sans les cartes DON.
+          } else if (!donRes.ok) {
+            push(`Warning API DON ${donRes.status}: import DON ignore`)
+          } else {
+          const donRaw = await withTimeout(
+            donRes.json(),
+            API_TIMEOUT_MS,
+            'Lecture API DON'
+          ).catch(() => [])
           if (!Array.isArray(donRaw)) {
             push('Warning format API DON invalide: import DON ignore')
           } else {
@@ -497,6 +521,7 @@ export async function POST(
               )
             }
           }
+        }
         }
 
         if (apiCards.length === 0) {
@@ -675,7 +700,8 @@ export async function POST(
 
             try {
               push(`Upload image ${fileName}`)
-              await uploadImageToSupabase(imageUrl, fileName)
+              const image = await downloadImage(imageUrl)
+              await uploadDownloadedImage(image, fileName)
 
               const { error: updateError } = await supabase
                 .from('card_prints')
@@ -724,7 +750,15 @@ export async function POST(
         const existingFallbackBySemanticKey = new Map<string, Set<string>>()
         const seenSemanticImageKeys = new Set<string>()
         const seenSemanticImageHashes = new Set<string>()
-        const imageHashCache = new Map<string, string>()
+        const imageCache = new Map<string, Promise<DownloadedImage>>()
+        const getDownloadedImage = (imageUrl: string) => {
+          let image = imageCache.get(imageUrl)
+          if (!image) {
+            image = downloadImage(imageUrl)
+            imageCache.set(imageUrl, image)
+          }
+          return image
+        }
 
         const { data: existingPrintRows } = await supabase
           .from('card_prints')
@@ -773,13 +807,21 @@ export async function POST(
           const rawCardName = (card.card_name || '').toString().trim()
           const translationName =
             isPromoImport && rawCardName ? rawCardName : cleanName
-          const resolved = resolvePrintCode({
-            providedPrintCode: card.card_image_id?.toString().trim(),
-            imageUrl,
-            baseCode,
-            setCode: normalizedImportCode,
-            variantTag
-          })
+          const resolved = isPromoImport
+            ? {
+                printCode: resolvePromoPrintCode({
+                  card_set_id: String(baseCode),
+                  card_name: rawCardName
+                }),
+                source: 'api_print_code' as const
+              }
+            : resolvePrintCode({
+                providedPrintCode: card.card_image_id?.toString().trim(),
+                imageUrl,
+                baseCode,
+                setCode: normalizedImportCode,
+                variantTag
+              })
           const printCode = await ensureSetScopedPrintCode({
             printCode: resolved.printCode,
             setId,
@@ -867,12 +909,8 @@ export async function POST(
           let semanticImageHashKey: string | null = null
           if (!skipImages && imageUrl) {
             try {
-              let hash = imageHashCache.get(imageUrl)
-              if (!hash) {
-                hash = await getImageSha1(imageUrl)
-                imageHashCache.set(imageUrl, hash)
-              }
-              semanticImageHashKey = `${semanticKey}::${hash}`
+              const image = await getDownloadedImage(imageUrl)
+              semanticImageHashKey = `${semanticKey}::${image.sha1}`
             } catch (hashError: unknown) {
               push(
                 `[${progress}] Warning hash image indisponible ${normalizedPrintCode}: ${toErrorMessage(hashError)}`
@@ -957,7 +995,8 @@ export async function POST(
             push(`[${progress}] Upload image ${fileName}`)
 
             try {
-              await uploadImageToSupabase(imageUrl, fileName)
+              const image = await getDownloadedImage(imageUrl)
+              await uploadDownloadedImage(image, fileName)
             } catch (imgError: unknown) {
               push(
                 `[${progress}] Erreur image ${printCode}: ${toErrorMessage(imgError)}`
