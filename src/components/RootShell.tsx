@@ -2,6 +2,9 @@
 
 import Image from 'next/image'
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
+import styles from './RootShell.module.css'
+import { NavigationIcon } from './NavigationIcon'
 import { useEffect, useState } from 'react'
 import { isAdminEmail, parseAdminEmails } from '@/lib/admin'
 import { useAuth } from '@/lib/auth'
@@ -17,20 +20,7 @@ function DiscordInviteLink() {
       rel="noreferrer"
       aria-label="Rejoindre le Discord"
       title="Rejoindre le Discord"
-      className="root-shell-discord-link"
-      style={{
-        width: 30,
-        height: 30,
-        borderRadius: 999,
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        flex: '0 0 auto',
-        background: '#5865f2',
-        border: '1px solid rgba(255,255,255,0.45)',
-        color: '#fff',
-        boxShadow: '0 8px 18px rgba(15, 23, 42, 0.24)'
-      }}
+      className={styles.discord}
     >
       <svg
         aria-hidden="true"
@@ -59,7 +49,7 @@ export function RootShell({
   const [hasOverdueAdminSubmissions, setHasOverdueAdminSubmissions] = useState(false)
   const [supportTarget, setSupportTarget] = useState<{ id: string; email: string; username: string } | null>(null)
   const [profileUsername, setProfileUsername] = useState<string>('')
-  const [useCompactNav, setUseCompactNav] = useState(false)
+  const pathname = usePathname()
 
   const getAuthHeader = async () => {
     const { data } = await supabase.auth.getSession()
@@ -144,17 +134,6 @@ export function RootShell({
   }, [user])
 
   useEffect(() => {
-    const syncCompactNav = () => {
-      if (typeof window === 'undefined') return
-      setUseCompactNav(window.innerWidth <= 1100)
-    }
-
-    syncCompactNav()
-    window.addEventListener('resize', syncCompactNav)
-    return () => window.removeEventListener('resize', syncCompactNav)
-  }, [])
-
-  useEffect(() => {
     const loadSupportTarget = async () => {
       if (!user || !canAccessAdmin) {
         setSupportTarget(null)
@@ -207,7 +186,7 @@ export function RootShell({
       <DiscordInviteLink />
       <Link
         href="/account"
-        className="root-shell-account-link"
+        className={styles.accountLink}
         style={{
           display: 'inline-flex',
           alignItems: 'center',
@@ -239,17 +218,10 @@ export function RootShell({
       </Link>
       <button
         onClick={handleLogout}
-        className="root-shell-logout"
-        style={{
-          border: '1px solid rgba(255,255,255,0.35)',
-          background: 'rgba(255,255,255,0.15)',
-          color: '#fff',
-          borderRadius: 999,
-          padding: '6px 12px',
-          cursor: 'pointer'
-        }}
+        className={styles.logout}
+
       >
-        Deconnexion
+        Déconnexion
       </button>
     </>
   ) : (
@@ -257,6 +229,7 @@ export function RootShell({
       <DiscordInviteLink />
       <Link
         href="/auth"
+        className={styles.login}
         style={{
           color: 'white',
           textDecoration: 'none',
@@ -271,421 +244,42 @@ export function RootShell({
   return (
     <html lang="fr">
       <body className="root-shell-body" style={{ margin: 0, fontFamily: 'Arial, sans-serif' }}>
-        <header
-          className="root-shell-header"
-          style={{
-            color: 'white',
-            padding: '10px 18px 10px',
-            background:
-              'linear-gradient(120deg, #0f172a 0%, #1e3a8a 38%, #0ea5e9 68%, #f59e0b 100%)',
-            borderBottom: '1px solid rgba(255,255,255,0.28)',
-            position: 'sticky',
-            top: 0,
-            zIndex: 50,
-            overflow: 'hidden'
-          }}
-        >
-          <div
-            style={{
-              position: 'absolute',
-              inset: 0,
-              background:
-                'radial-gradient(circle at 10% 30%, rgba(255,255,255,0.22) 0%, transparent 40%), radial-gradient(circle at 85% 70%, rgba(255,255,255,0.18) 0%, transparent 38%)',
-              pointerEvents: 'none'
-            }}
-          />
-
-          <div
-            className="root-shell-header-inner"
-            style={{
-              position: 'relative',
-              display: 'flex',
-              justifyContent: 'space-between',
-              gap: 14,
-              alignItems: 'center',
-              flexWrap: 'wrap'
-            }}
-          >
-            <div className="root-shell-brand-nav" style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-              <Link
-                href="/"
-                className="root-shell-home-link"
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  textDecoration: 'none',
-                  marginRight: 14,
-                  lineHeight: 0
-                }}
-              >
-                <Image
-                  src="/maison_pirate.png?v=1"
-                  alt="Accueil"
-                  className="root-shell-nav-image root-shell-home-image"
-                  width={96}
-                  height={64}
-                  unoptimized
-                />
-              </Link>
-
-              {useCompactNav && (
-                <div
-                  className="root-shell-account root-shell-account-mobile"
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 10,
-                    background: 'rgba(15, 23, 42, 0.42)',
-                    border: '1px solid rgba(255,255,255,0.25)',
-                    borderRadius: 999,
-                    padding: '6px 10px'
-                  }}
+        <header className={styles.header}>
+          <div className={styles.inner}>
+            <Link href="/" className={styles.brand} aria-label="One Piece Collector — Accueil">
+              <Image src="/maison_pirate.png?v=1" alt="" width={84} height={56} unoptimized />
+              <span>ONE PIECE<small>COLLECTOR</small></span>
+            </Link>
+            <nav className={styles.nav} aria-label="Navigation principale">
+              {([
+                { href: '/catalogue', label: 'Catalogue', icon: 'catalogue', visible: true },
+                { href: '/collection', label: 'Ma Collection', icon: 'collection', visible: !!user },
+                { href: '/friends', label: 'Amis', icon: 'friends', visible: !!user },
+                { href: '/community', label: 'Contributions', icon: 'community', visible: !!user },
+                { href: '/lieux', label: 'Lieux', icon: 'places', visible: true },
+                { href: '/admin', label: 'Admin', icon: 'admin', visible: !!user && canAccessAdmin }
+              ] as const).filter(item => item.visible).map(item => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={styles.navLink}
+                  aria-current={pathname === item.href || pathname.startsWith(item.href + '/') ? 'page' : undefined}
+                  title={item.icon === 'admin' ? adminSubmissionsAlertTitle : undefined}
                 >
-                  {accountBadgeContent}
-                </div>
-              )}
-
-              {useCompactNav ? (
-                <nav className="root-shell-nav root-shell-mobile-nav" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'nowrap' }}>
-                  <Link
-                    href="/catalogue"
-                    className="root-shell-mobile-link"
-                    style={{ color: '#fff', textDecoration: 'none' }}
-                  >
-                    Catalogue
-                  </Link>
-                  {user && (
-                    <Link
-                      href="/collection"
-                      className="root-shell-mobile-link"
-                      style={{ color: '#fff', textDecoration: 'none' }}
-                    >
-                      Collection
-                    </Link>
+                  <NavigationIcon name={item.icon} />
+                  <span>{item.label}</span>
+                  {item.icon === 'friends' && hasPendingFriendRequests && (
+                    <span className={styles.notification} role="status" aria-label="Demandes d’amis en attente" />
                   )}
-                  {user && (
-                    <Link
-                      href="/friends"
-                      className="root-shell-mobile-link"
-                      style={{ color: '#fff', textDecoration: 'none' }}
-                    >
-                      Amis
-                    </Link>
-                  )}
-                  {user && (
-                    <Link
-                      href="/community"
-                      className="root-shell-mobile-link"
-                      style={{ color: '#fff', textDecoration: 'none' }}
-                    >
-                      Contrib
-                    </Link>
-                  )}
-                  <Link
-                    href="/lieux"
-                    className="root-shell-mobile-link"
-                    style={{ color: '#fff', textDecoration: 'none' }}
-                  >
-                    Lieux
-                  </Link>
-                  {user && canAccessAdmin && (
-                    <Link
-                      href="/admin"
-                      className="root-shell-mobile-link root-shell-mobile-link-admin"
-                      title={adminSubmissionsAlertTitle}
-                      style={{
-                        color: '#fff7ed',
-                        textDecoration: 'none',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 6
-                      }}
-                    >
-                      Admin
-                      {hasPendingAdminSubmissions && (
-                        <span
-                          aria-label={adminSubmissionsAlertTitle}
-                          style={{
-                            minWidth: 18,
-                            height: 18,
-                            padding: '0 5px',
-                            borderRadius: 999,
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            background: adminSubmissionsAlertColor,
-                            color: '#fff',
-                            fontSize: 11,
-                            fontWeight: 800,
-                            lineHeight: 1
-                          }}
-                        >
-                          {pendingAdminSubmissionsCount > 99 ? '99+' : pendingAdminSubmissionsCount}
-                        </span>
-                      )}
-                    </Link>
-                  )}
-                </nav>
-              ) : (
-                <nav className="root-shell-nav root-shell-desktop-nav" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <Link
-                    href="/catalogue"
-                    className="root-shell-nav-link"
-                    style={{
-                      textDecoration: 'none',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      padding: 0,
-                      lineHeight: 0
-                    }}
-                  >
-                    <Image
-                      src="/bouton_catalogue.png?v=3"
-                      alt="Catalogue"
-                      className="root-shell-nav-image"
-                      width={96}
-                      height={64}
-                      unoptimized
-                    />
-                  </Link>
-
-                  {user && (
-                    <Link
-                      href="/collection"
-                      className="root-shell-nav-link"
-                      style={{
-                        textDecoration: 'none',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        padding: 0,
-                        lineHeight: 0
-                      }}
-                    >
-                      <Image
-                        src="/bouton_collection.png?v=3"
-                        alt="Ma Collection"
-                        className="root-shell-nav-image"
-                        width={96}
-                        height={64}
-                        unoptimized
-                      />
-                    </Link>
-                  )}
-
-                  {user && (
-                    <Link
-                      href="/friends"
-                      className="root-shell-nav-link"
-                      style={{
-                        textDecoration: 'none',
-                        padding: 0,
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        lineHeight: 0,
-                        borderRadius: 18,
-                        boxShadow: hasPendingFriendRequests
-                          ? '0 0 0 3px rgba(250, 204, 21, 0.98), 0 0 22px rgba(245, 158, 11, 0.75)'
-                          : 'none'
-                      }}
-                    >
-                      <Image
-                        src="/bouton_amis.png?v=3"
-                        alt="Amis"
-                        className="root-shell-nav-image"
-                        width={96}
-                        height={64}
-                        unoptimized
-                      />
-                    </Link>
-                  )}
-
-                  {user && (
-                    <Link
-                      href="/community"
-                      className="root-shell-nav-link root-shell-community-link"
-                      style={{
-                        textDecoration: 'none',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        padding: 0,
-                        lineHeight: 0,
-                        width: 96,
-                        height: 64,
-                        position: 'relative',
-                        overflow: 'hidden',
-                        borderRadius: 18
-                      }}
-                    >
-                      <Image
-                        src="/bouton_contributions.png?v=1"
-                        alt="Contributions"
-                        className="root-shell-nav-image"
-                        fill
-                        style={{ objectFit: 'cover', objectPosition: 'center 62%' }}
-                        unoptimized
-                      />
-                    </Link>
-                  )}
-
-                  <Link
-                    href="/lieux"
-                    className="root-shell-nav-link"
-                    style={{
-                      textDecoration: 'none',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      padding: 0,
-                      lineHeight: 0
-                    }}
-                  >
-                    <Image
-                      src="/bouton_lieu.png?v=1"
-                      alt="Lieux"
-                      className="root-shell-nav-image"
-                      width={96}
-                      height={64}
-                      unoptimized
-                    />
-                  </Link>
-
-                  {user && canAccessAdmin && (
-                    <Link
-                      href="/admin"
-                      className="root-shell-admin-link"
-                      title={adminSubmissionsAlertTitle}
-                      style={{
-                        color: '#fffbeb',
-                        textDecoration: 'none',
-                        padding: '18px 14px',
-                        borderRadius: 999,
-                        background: 'rgba(220, 38, 38, 0.74)',
-                        border: '1px solid rgba(255,255,255,0.28)',
-                        fontWeight: 700,
-                        fontSize: 16,
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        position: 'relative',
-                        gap: 7,
-                        boxShadow: hasPendingAdminSubmissions
-                          ? `0 0 0 3px ${hasOverdueAdminSubmissions ? 'rgba(220, 38, 38, 0.9)' : 'rgba(250, 204, 21, 0.98)'}, 0 0 22px ${
-                              hasOverdueAdminSubmissions
-                                ? 'rgba(220, 38, 38, 0.65)'
-                                : 'rgba(245, 158, 11, 0.75)'
-                            }`
-                          : 'none'
-                      }}
-                    >
-                      <Image src="/op-jolly.svg" alt="" width={13} height={13} />
-                      Admin
-                      {hasPendingAdminSubmissions && (
-                        <span
-                          aria-label={adminSubmissionsAlertTitle}
-                          style={{
-                            minWidth: 22,
-                            height: 22,
-                            padding: '0 7px',
-                            borderRadius: 999,
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            background: adminSubmissionsAlertColor,
-                            color: '#fff',
-                            border: '1px solid rgba(255,255,255,0.7)',
-                            fontSize: 12,
-                            fontWeight: 900,
-                            lineHeight: 1,
-                            boxShadow: '0 6px 16px rgba(15, 23, 42, 0.28)'
-                          }}
-                        >
-                          {pendingAdminSubmissionsCount > 99 ? '99+' : pendingAdminSubmissionsCount}
-                        </span>
-                      )}
-                    </Link>
-                  )}
-                </nav>
-              )}
-            </div>
-
-            {!useCompactNav && (
-            <div
-              className="root-shell-account"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 10,
-                background: 'rgba(15, 23, 42, 0.42)',
-                border: '1px solid rgba(255,255,255,0.25)',
-                borderRadius: 999,
-                padding: '6px 10px'
-              }}
-            >
-              {user ? (
-                <>
-                  <DiscordInviteLink />
-                  <Link
-                    href="/account"
-                    className="root-shell-account-link"
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 8,
-                      color: '#fff',
-                      textDecoration: 'none',
-                      fontSize: 13,
-                      fontWeight: 700
-                    }}
-                  >
-                    <span
-                      aria-hidden="true"
-                      style={{
-                        width: 24,
-                        height: 24,
-                        borderRadius: 999,
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        background: 'rgba(255,255,255,0.16)',
-                        border: '1px solid rgba(255,255,255,0.22)',
-                        fontSize: 13,
-                        lineHeight: 1
-                      }}
-                    >
-                      👤
+                  {item.icon === 'admin' && hasPendingAdminSubmissions && (
+                    <span className={styles.count} style={{ background: adminSubmissionsAlertColor }} aria-label={adminSubmissionsAlertTitle}>
+                      {pendingAdminSubmissionsCount > 99 ? '99+' : pendingAdminSubmissionsCount}
                     </span>
-                    {displayIdentity}
-                  </Link>
-                  <button
-                    onClick={handleLogout}
-                    className="root-shell-logout"
-                    style={{
-                      border: '1px solid rgba(255,255,255,0.35)',
-                      background: 'rgba(255,255,255,0.15)',
-                      color: '#fff',
-                      borderRadius: 999,
-                      padding: '6px 12px',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    Deconnexion
-                  </button>
-                </>
-              ) : (
-                <>
-                  <DiscordInviteLink />
-                  <Link
-                    href="/auth"
-                    style={{
-                      color: 'white',
-                      textDecoration: 'none',
-                      fontWeight: 700
-                    }}
-                  >
-                    Connexion
-                  </Link>
-                </>
-              )}
-            </div>
-            )}
+                  )}
+                </Link>
+              ))}
+            </nav>
+            <div className={styles.account}>{accountBadgeContent}</div>
           </div>
         </header>
 
