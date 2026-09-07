@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import styles from './RootShell.module.css'
 import { NavigationIcon } from './NavigationIcon'
+import { GoogleAnalytics } from './GoogleAnalytics'
 import { useEffect, useState } from 'react'
 import { isAdminEmail, parseAdminEmails } from '@/lib/admin'
 import { useAuth } from '@/lib/auth'
@@ -37,9 +38,11 @@ function DiscordInviteLink() {
 }
 
 export function RootShell({
-  children
+  children,
+  analyticsMeasurementId = ''
 }: {
   children: React.ReactNode
+  analyticsMeasurementId?: string
 }) {
   const { user } = useAuth()
   const adminEmails = parseAdminEmails(process.env.NEXT_PUBLIC_ADMIN_EMAILS)
@@ -324,6 +327,7 @@ export function RootShell({
         )}
 
         <main>{children}</main>
+        <GoogleAnalytics measurementId={analyticsMeasurementId} />
       </body>
     </html>
   )

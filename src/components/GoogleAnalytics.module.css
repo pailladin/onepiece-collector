@@ -1,0 +1,11 @@
+.preferences { padding: 16px; text-align: center; }
+.preferences button { border: 0; background: transparent; color: #475569; text-decoration: underline; font: inherit; font-size: 12px; cursor: pointer; }
+.banner { position: fixed; z-index: 100; bottom: 16px; left: 16px; right: 16px; max-width: 900px; margin: auto; box-sizing: border-box; padding: 22px; border: 1px solid #cba65a; border-radius: 16px; background: #132943; color: #f4f7fc; box-shadow: 0 8px 40px #0b17254d; display: flex; align-items: center; gap: 24px; }
+.banner h2 { margin: 0 0 8px; font-size: 17px; }
+.banner p { margin: 0 0 8px; font-size: 13px; line-height: 1.6; }
+.banner a { color: #ffe0a0; font-size: 12px; }
+.actions { display: flex; gap: 8px; flex-shrink: 0; flex-wrap: wrap; }
+.actions button { min-height: 44px; padding: 0 16px; border: 1px solid #cba65a; border-radius: 10px; background: #233d5d; color: #ffe0a0; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+.actions button:hover { background: #304e72; }
+.banner :focus-visible, .preferences button:focus-visible { outline: 3px solid #d5a746; outline-offset: 3px; }
+@media (max-width: 700px) { .banner { flex-direction: column; align-items: stretch; gap: 14px; padding: 18px; max-height: 80vh; overflow-y: auto; } .actions button { flex: 1; } }

@@ -52,6 +52,9 @@ export default function RootLayout({
 }: {
   children: React.ReactNode
 }) {
-  return <RootShell>{children}</RootShell>
+  const analyticsMeasurementId = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID
+    ?? (process.env.VERCEL_ENV === 'production' ? 'G-D4M5F8DFJ4' : '')
+
+  return <RootShell analyticsMeasurementId={analyticsMeasurementId}>{children}</RootShell>
 }
 
