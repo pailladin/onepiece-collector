@@ -9,6 +9,7 @@ export type CollectionQuantityRow = {
   card_print_id: string
   quantity: number | null
   language_code?: string | null
+  trade_quantity?: number
 }
 
 function chunkArray<T>(items: T[], size: number): T[][] {
@@ -65,6 +66,7 @@ export function getLanguageBreakdownEntries(
 export async function fetchAllUserCollectionRows(params: {
   supabase: any
   userId: string
+  includeTradeQuantity?: boolean
 }) {
   const pageSize = 1000
   let from = 0
@@ -74,7 +76,7 @@ export async function fetchAllUserCollectionRows(params: {
     const to = from + pageSize - 1
     const { data, error } = await params.supabase
       .from('collections')
-      .select('card_print_id, quantity, language_code')
+      .select(params.includeTradeQuantity ? 'card_print_id, quantity, language_code, trade_quantity' : 'card_print_id, quantity, language_code')
       .eq('user_id', params.userId)
       .gt('quantity', 0)
       .order('card_print_id', { ascending: true })

@@ -1,0 +1,19 @@
+.toggle { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 36px; margin: 8px 0; padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 10px; color: #334155; background: #fff; font-size: 12px; font-weight: 700; cursor: pointer; }
+.toggle[data-active='true'] { background: #e0f2f1; border-color: #0f766e; color: #115e59; }
+.toggle:hover { border-color: #0f766e; }
+.dialog { position: fixed; inset: 0; margin: auto; width: min(440px, calc(100vw - 32px)); max-height: 85vh; overflow: auto; padding: 0; border: 1px solid #cba65a; border-radius: 18px; background: #fff; color: #172b43; box-shadow: 0 20px 70px #0004; }
+.dialog::backdrop { background: #0b1725a6; }
+.content { padding: 22px; text-align: left; font-size: 14px; }
+.heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.heading h2 { margin: 0; font-size: 20px; }
+.heading button { border: 0; background: transparent; min-width: 40px; min-height: 40px; cursor: pointer; }
+.name { font-weight: 700; color: #0f766e; }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid #e2e8f0; padding: 14px 0; }
+.row small { display: block; margin-top: 4px; color: #64748b; }
+.stepper { display: flex; align-items: center; gap: 12px; }
+.stepper button { width: 40px; height: 40px; border: 1px solid #cbd5e1; border-radius: 10px; background: #f0fdfa; color: #115e59; cursor: pointer; font-size: 20px; }
+.stepper button:disabled { opacity: .4; cursor: default; }
+.stepper output { min-width: 20px; text-align: center; font-weight: 700; }
+.hint { color: #64748b; font-size: 12px; line-height: 1.5; }
+.done { width: 100%; min-height: 44px; background: #132943; color: #fff; border: 0; border-radius: 10px; font-weight: 700; cursor: pointer; }
+.toggle:focus-visible, .dialog button:focus-visible { outline: 3px solid #d5a746; outline-offset: 3px; }

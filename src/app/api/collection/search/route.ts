@@ -8,6 +8,7 @@ import { getRequestUserId } from '@/lib/server/authUser'
 import { getCatalogueIndex, type CatalogueIndexItem } from '@/lib/server/catalogueIndex'
 import { getSetPricing } from '@/lib/server/setPricing'
 import { supabaseServiceServer } from '@/lib/server/supabaseServer'
+import { offeredCollectionRows } from '@/lib/collections/trades'
 
 const PAGE_SIZE = 50
 
@@ -44,21 +45,27 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const page = parsePage(searchParams.get('page'))
   const startIndex = (page - 1) * PAGE_SIZE
+  const tradeOnly = searchParams.get('tradeOnly') === '1'
 
   try {
     const [collectionRows, catalogueIndex] = await Promise.all([
       fetchAllUserCollectionRows({
         supabase: supabaseServiceServer,
-        userId: userResult.userId
+        userId: userResult.userId,
+        includeTradeQuantity: tradeOnly
       }),
       getCatalogueIndex()
     ])
-    const { totalByPrintId, byPrintIdLanguage } = aggregateCollectionRows(collectionRows)
+    const language = searchParams.get('language') || 'all'
+    const selectedRows = (tradeOnly ? offeredCollectionRows(collectionRows) : collectionRows)
+      .filter(row => language === 'all' || (row.language_code || 'unknown') === language)
+    const { totalByPrintId, byPrintIdLanguage } = aggregateCollectionRows(selectedRows)
 
     const ownedItems: CollectionSearchItem[] = []
     for (const [printId, quantity] of totalByPrintId.entries()) {
       const item = catalogueIndex.itemByPrintId.get(printId)
       if (!item || quantity <= 0) continue
+      if (searchParams.get('set') && !item.set.code.toUpperCase().includes(searchParams.get('set')!.trim().toUpperCase())) continue
       ownedItems.push({
         ...item,
         quantity,

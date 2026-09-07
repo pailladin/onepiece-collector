@@ -55,8 +55,10 @@ export default function FriendTradePage() {
   const [friendCanGive, setFriendCanGive] = useState<TradeItem[]>([])
   const [iCanGive, setICanGive] = useState<TradeItem[]>([])
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({})
+  const [offeredOnly, setOfferedOnly] = useState(false)
 
   useEffect(() => {
+    let cancelled = false
     const loadTrade = async () => {
       if (!userId || !friendId) return
       setLoading(true)
@@ -64,10 +66,11 @@ export default function FriendTradePage() {
 
       const { data: sessionData } = await supabase.auth.getSession()
       const accessToken = sessionData.session?.access_token
-      const res = await fetch(`/api/friends/${encodeURIComponent(friendId)}/trade`, {
+      const res = await fetch(`/api/friends/${encodeURIComponent(friendId)}/trade?offeredOnly=${offeredOnly ? '1' : '0'}`, {
         headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {}
       })
       const data = await res.json().catch(() => ({}))
+      if (cancelled) return
 
       if (!res.ok) {
         setError(data?.error || 'Erreur chargement echanges')
@@ -84,15 +87,18 @@ export default function FriendTradePage() {
       setLoading(false)
     }
 
-    void loadTrade()
-  }, [friendId, userId])
+    void loadTrade().catch(() => {
+      if (!cancelled) { setError('Impossible de charger les échanges. Réessaie.'); setLoading(false) }
+    })
+    return () => { cancelled = true }
+  }, [friendId, userId, offeredOnly])
 
   const totalPotential = useMemo(
     () => friendCanGive.length + iCanGive.length,
     [friendCanGive.length, iCanGive.length]
   )
 
-  if (authLoading || loading) {
+  if (authLoading) {
     return <div style={{ padding: 40 }}>Chargement...</div>
   }
 
@@ -241,6 +247,12 @@ export default function FriendTradePage() {
           <h1 style={{ margin: 0, fontSize: 30, color: '#0f172a' }}>
             Echanges avec {friendUsername}
           </h1>
+          <label style={{ display: 'flex', gap: 8, alignItems: 'center', minHeight: 44, color: '#115e59' }}>
+            <input type="checkbox" checked={offeredOnly} onChange={event => setOfferedOnly(event.target.checked)} />
+            Cartes proposées à l’échange uniquement
+          </label>
+          <Link href="/collection/trades">Gérer mes cartes à échanger</Link>
+          {loading && <p role="status">Chargement des échanges…</p>}
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <div
               style={{
@@ -297,7 +309,7 @@ export default function FriendTradePage() {
             {friendUsername} peut me donner
           </h2>
           <div style={{ marginBottom: 10, fontSize: 13, color: '#475569' }}>
-            Ses doubles que je n&apos;ai pas encore.
+            {offeredOnly ? 'Les exemplaires proposés que je ne possède pas encore, par langue.' : "Ses doubles que je n’ai pas encore."}
           </div>
           {renderList(friendCanGive, 'Aucune carte trouvee dans ce sens.', 'friendToMe')}
         </section>
@@ -307,7 +319,7 @@ export default function FriendTradePage() {
             Je peux donner a {friendUsername}
           </h2>
           <div style={{ marginBottom: 10, fontSize: 13, color: '#475569' }}>
-            Mes doubles qu&apos;il n&apos;a pas encore.
+            {offeredOnly ? 'Mes exemplaires proposés que cet ami ne possède pas encore, par langue.' : "Mes doubles qu’il n’a pas encore."}
           </div>
           {renderList(iCanGive, 'Aucune carte trouvee dans ce sens.', 'meToFriend')}
         </section>

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { normalizeCollectionLanguage } from '@/lib/collections/languages'
+import { COLLECTION_CHANGED_EVENT } from './trades'
 
 type ChangeQuantityParams = {
   supabase: SupabaseClient
@@ -66,6 +67,10 @@ export function changeCollectionQuantity(params: ChangeQuantityParams): Promise<
   const pending = previous
     .catch(() => params.currentQuantity)
     .then((currentQuantity) => changeQuantityNow(params, currentQuantity))
+    .then(quantity => {
+      if (typeof window !== 'undefined') window.dispatchEvent(new Event(COLLECTION_CHANGED_EVENT))
+      return quantity
+    })
 
   queues.set(key, pending)
   void pending.finally(() => {

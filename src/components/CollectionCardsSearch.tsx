@@ -17,6 +17,11 @@ import {
 import { getCollectionLanguageShortLabel } from '@/lib/collections/languages'
 import { supabase } from '@/lib/supabaseClient'
 import { buildCardmarketProductOrSearchUrl } from '@/lib/cardmarketUrls'
+import { useAuth } from '@/lib/auth'
+import { useTradeOffers } from '@/lib/collections/useTradeOffers'
+import { COLLECTION_CHANGED_EVENT } from '@/lib/collections/trades'
+import { COLLECTION_LANGUAGE_OPTIONS } from '@/lib/collections/languages'
+import { TradeOfferButton } from '@/components/TradeOfferButton'
 
 const STORAGE_BASE_URL = (process.env.NEXT_PUBLIC_IMAGES_BASE_URL ||
   `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/cards-images`).replace(/\/$/, '')
@@ -79,7 +84,12 @@ function formatCurrency(value: number) {
   }).format(value)
 }
 
-export function CollectionCardsSearch() {
+export function CollectionCardsSearch({ tradeOnly = false }: { tradeOnly?: boolean }) {
+  const { user } = useAuth()
+  const tradeOffers = useTradeOffers(user?.id || null)
+  const [revision, setRevision] = useState(0)
+  const [setFilter, setSetFilter] = useState('')
+  const [languageFilter, setLanguageFilter] = useState('all')
   const [isMobileView, setIsMobileView] = useState(false)
   const [query, setQuery] = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
@@ -100,6 +110,12 @@ export function CollectionCardsSearch() {
   const [totalItems, setTotalItems] = useState(0)
   const [totalPages, setTotalPages] = useState(1)
   const [selectedImage, setSelectedImage] = useState<string | null>(null)
+
+  useEffect(() => {
+    const refresh = () => { setPage(1); setRevision(value => value + 1) }
+    window.addEventListener(COLLECTION_CHANGED_EVENT, refresh)
+    return () => window.removeEventListener(COLLECTION_CHANGED_EVENT, refresh)
+  }, [])
 
   useEffect(() => {
     const syncMobileView = () => {
@@ -138,6 +154,9 @@ export function CollectionCardsSearch() {
         if (altFilter !== 'all') params.set('alt', altFilter)
         if (altTypeFilter !== 'all') params.set('altType', altTypeFilter)
         params.set('page', String(page))
+        if (tradeOnly) params.set('tradeOnly', '1')
+        if (setFilter.trim()) params.set('set', setFilter.trim())
+        if (languageFilter !== 'all') params.set('language', languageFilter)
 
         const res = await fetch(`/api/collection/search?${params.toString()}`, {
           cache: 'no-store',
@@ -187,7 +206,7 @@ export function CollectionCardsSearch() {
       cancelled = true
       controller.abort()
     }
-  }, [altFilter, altTypeFilter, cardTypeFilter, debouncedQuery, page, rarityFilter])
+  }, [altFilter, altTypeFilter, cardTypeFilter, debouncedQuery, page, rarityFilter, tradeOnly, revision, setFilter, languageFilter, user?.id])
 
   const resetFilters = () => {
     setQuery('')
@@ -197,10 +216,19 @@ export function CollectionCardsSearch() {
     setAltFilter('all')
     setAltTypeFilter('all')
     setPage(1)
+    setSetFilter('')
+    setLanguageFilter('all')
   }
 
   return (
     <div style={{ padding: isMobileView ? '0 0 12px' : '0 40px 40px' }}>
+      {tradeOnly && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, padding: '12px 4px' }}>
+        <label>Extension <input aria-label="Filtrer par extension" placeholder="OP01, EB01…" value={setFilter} onChange={event => { setSetFilter(event.target.value); setPage(1) }} style={{ border: '1px solid #cbd5e1', borderRadius: 8, padding: 10, maxWidth: 140 }} /></label>
+        <label>Langue <select aria-label="Filtrer par langue" value={languageFilter} onChange={event => { setLanguageFilter(event.target.value); setPage(1) }} style={{ border: '1px solid #cbd5e1', borderRadius: 8, padding: 10 }}>
+          <option value="all">Toutes les langues</option>
+          {COLLECTION_LANGUAGE_OPTIONS.map(language => <option key={language.code} value={language.code}>{language.label}</option>)}
+        </select></label>
+      </div>}
       <div
         style={{
           display: 'grid',
@@ -429,10 +457,10 @@ export function CollectionCardsSearch() {
       {loading && <div style={{ color: '#475569', marginBottom: 20 }}>Chargement des cartes...</div>}
       {!loading && error && <div style={{ color: '#475569', marginBottom: 20 }}>{error}</div>}
       {!loading && !error && items.length === 0 && (
-        <div style={{ color: '#475569', marginBottom: 20 }}>Aucune carte trouvee dans ta collection.</div>
+        <div style={{ color: '#475569', marginBottom: 20 }}>{tradeOnly ? 'Aucune carte à échanger pour ces filtres. Propose des exemplaires depuis ta collection avec le bouton « À l’échange ».' : 'Aucune carte trouvee dans ta collection.'}</div>
       )}
 
-      {!loading && !error && items.length > 0 && (
+      {!error && items.length > 0 && (
         <div
           style={{
             display: 'grid',
@@ -584,8 +612,9 @@ export function CollectionCardsSearch() {
                   }}
                 >
                   <span>
-                    Total: <strong>{item.quantity}</strong>
+                    {tradeOnly ? 'À échanger' : 'Total'}: <strong>{item.quantity}</strong>
                   </span>
+                  <TradeOfferButton printId={item.id} name={translation || getDisplayPrintCode(item)} offers={tradeOffers} />
                   {item.languageBreakdown.length > 0 && (
                     <span style={{ color: '#64748b' }}>
                       {item.languageBreakdown

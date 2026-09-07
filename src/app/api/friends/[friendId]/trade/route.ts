@@ -10,6 +10,7 @@ import {
 import { aggregateCollectionRows, fetchAllUserCollectionRows } from '@/lib/collections/quantities'
 import { getRequestUser } from '@/lib/server/authUser'
 import { supabaseServiceServer } from '@/lib/server/supabaseServer'
+import { offeredCollectionRows } from '@/lib/collections/trades'
 
 type SetRow = {
   id: string
@@ -108,6 +109,7 @@ export async function GET(
   }
 
   const friendId = String((await context.params).friendId || '').trim()
+  const offeredOnly = new URL(request.url).searchParams.get('offeredOnly') === '1'
   if (!friendId) {
     return NextResponse.json({ error: 'Ami introuvable' }, { status: 400 })
   }
@@ -128,13 +130,13 @@ export async function GET(
   const [{ data: setsData, error: setsError }, myCollectionResult, friendCollectionResult] =
     await Promise.all([
       supabaseServiceServer.from('sets').select('id, code'),
-      fetchAllUserCollectionRows({ supabase: supabaseServiceServer, userId: userResult.user.id })
+      fetchAllUserCollectionRows({ supabase: supabaseServiceServer, userId: userResult.user.id, includeTradeQuantity: offeredOnly })
         .then((data) => ({ data, error: null as string | null }))
         .catch((error) => ({
           data: null,
           error: error instanceof Error ? error.message : 'Erreur ma collection'
         })),
-      fetchAllUserCollectionRows({ supabase: supabaseServiceServer, userId: friendId })
+      fetchAllUserCollectionRows({ supabase: supabaseServiceServer, userId: friendId, includeTradeQuantity: offeredOnly })
         .then((data) => ({ data, error: null as string | null }))
         .catch((error) => ({
           data: null,
@@ -157,6 +159,8 @@ export async function GET(
 
   const myAggregate = aggregateCollectionRows(myCollectionResult.data || [])
   const friendAggregate = aggregateCollectionRows(friendCollectionResult.data || [])
+  const myOffers = aggregateCollectionRows(offeredCollectionRows(myCollectionResult.data || [])).byPrintIdLanguage
+  const friendOffers = aggregateCollectionRows(offeredCollectionRows(friendCollectionResult.data || [])).byPrintIdLanguage
   const mineByPrint = myAggregate.totalByPrintId
   const friendByPrint = friendAggregate.totalByPrintId
 
@@ -246,8 +250,8 @@ export async function GET(
       const languageCode = normalizeCollectionLanguage(rawLanguageCode)
       const friendLanguageQty = friendLanguages.get(languageCode) || 0
       const myLanguageQty = myLanguages.get(languageCode) || 0
-      const friendExtra = Math.max(friendLanguageQty - 1, 0)
-      const myExtra = Math.max(myLanguageQty - 1, 0)
+      const friendExtra = offeredOnly ? friendOffers.get(print.id)?.get(languageCode) || 0 : Math.max(friendLanguageQty - 1, 0)
+      const myExtra = offeredOnly ? myOffers.get(print.id)?.get(languageCode) || 0 : Math.max(myLanguageQty - 1, 0)
       const iNeed = myLanguageQty === 0 ? 1 : 0
       const friendNeeds = friendLanguageQty === 0 ? 1 : 0
 

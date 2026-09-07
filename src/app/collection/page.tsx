@@ -612,7 +612,7 @@ export default function CollectionPage() {
                 className="collection-page-actions collection-page-actions-compact"
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: 'repeat(5, minmax(0, 1fr))',
+                  gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
                   gap: 4,
                   width: '100%',
                   margin: '0 auto'
@@ -632,6 +632,13 @@ export default function CollectionPage() {
                   }}
                 >
                   Wishlist
+                </Link>
+                <Link
+                  href="/collection/trades"
+                  className="collection-page-action collection-page-action-green"
+                  style={{ ...collectionActionBaseStyle, border: 'none', background: '#0f766e', minHeight: 32, minWidth: 0, padding: '4px 2px', fontSize: 10 }}
+                >
+                  ⇄ Échanges
                 </Link>
                 <Link
                   href="/collection/history"
@@ -701,7 +708,7 @@ export default function CollectionPage() {
                 </button>
               </div>
             ) : (
-              <div className="collection-page-actions" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <div className="collection-page-actions" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                 <Link
                   href="/collection/wishlist"
                   className="collection-page-action collection-page-action-pink"
@@ -712,6 +719,13 @@ export default function CollectionPage() {
                   }}
                 >
                   Wishlist
+                </Link>
+                <Link
+                  href="/collection/trades"
+                  className="collection-page-action collection-page-action-green"
+                  style={{ ...collectionActionBaseStyle, border: '1px solid #0f766e', background: '#0f766e' }}
+                >
+                  ⇄ Mes cartes à échanger
                 </Link>
                 <Link
                   href="/collection/history"

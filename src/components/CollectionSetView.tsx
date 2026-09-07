@@ -34,6 +34,8 @@ import { WishlistHeartButton } from '@/components/WishlistHeartButton'
 import { useWishlist } from '@/lib/useWishlist'
 import { buildCardmarketProductOrSearchUrl } from '@/lib/cardmarketUrls'
 import { changeCollectionQuantity } from '@/lib/collections/changeQuantity'
+import { useTradeOffers } from '@/lib/collections/useTradeOffers'
+import { TradeOfferButton } from '@/components/TradeOfferButton'
 
 const STORAGE_BASE_URL = (process.env.NEXT_PUBLIC_IMAGES_BASE_URL || `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/cards-images`).replace(/\/$/, '')
 const MISSING_IMAGE_PATH = '__missing__'
@@ -202,6 +204,7 @@ export function CollectionSetView({
   const initialQuery = searchParams.toString()
   const resolvedOwnerId = ownerUserId || userId || null
   const canEdit = Boolean(editable && userId && userId === resolvedOwnerId)
+  const tradeOffers = useTradeOffers(canEdit ? userId : null)
   const isSharedView = Boolean(shareToken)
   const isFriendReadOnlyView = Boolean(ownerUserId && ownerUserId !== userId && !shareToken)
 
@@ -1114,6 +1117,9 @@ export function CollectionSetView({
               </a>
             )}
 
+            {canEdit && item.quantity > 0 && (
+              <TradeOfferButton printId={item.id} name={translation?.name || getDisplayPrintCode(item)} offers={tradeOffers} />
+            )}
             {item.quantity > 0 && (
               <div
                 style={{
