@@ -5,7 +5,7 @@ import {
 } from '@/lib/collections/quantities'
 import { isAltVersion } from '@/lib/filtering/filterCardPrints'
 import { getRequestUserId } from '@/lib/server/authUser'
-import { getCatalogueIndex } from '@/lib/server/catalogueIndex'
+import { getCollectionStatsCatalogue } from '@/lib/server/collectionStatsCatalogue'
 import { supabaseServiceServer } from '@/lib/server/supabaseServer'
 
 type MutableStats = {
@@ -39,8 +39,8 @@ export async function GET(request: Request) {
   }
 
   try {
-    const [catalogueIndex, collectionRows] = await Promise.all([
-      getCatalogueIndex(),
+    const [catalogue, collectionRows] = await Promise.all([
+      getCollectionStatsCatalogue(),
       fetchAllUserCollectionRows({
         supabase: supabaseServiceServer,
         userId: userResult.userId
@@ -49,7 +49,8 @@ export async function GET(request: Request) {
     const { totalByPrintId } = aggregateCollectionRows(collectionRows)
     const statsBySetCode = new Map<string, MutableStats>()
 
-    for (const set of catalogueIndex.sets) {
+    const setCodeById = new Map(catalogue.sets.map((set) => [set.id, set.code]))
+    for (const set of catalogue.sets) {
       statsBySetCode.set(set.code, {
         total: 0,
         owned: 0,
@@ -60,8 +61,10 @@ export async function GET(request: Request) {
       })
     }
 
-    for (const item of catalogueIndex.items) {
-      const stats = statsBySetCode.get(item.set.code)
+    for (const item of catalogue.prints) {
+      const setCode = setCodeById.get(item.distribution_set_id)
+      if (!setCode) continue
+      const stats = statsBySetCode.get(setCode)
       if (!stats) continue
       const owned = totalByPrintId.has(item.id)
       const alt = isAltVersion(item)
@@ -79,7 +82,7 @@ export async function GET(request: Request) {
     const stats = Object.fromEntries(
       [...statsBySetCode.entries()].map(([code, value]) => [code, withPercentages(value)])
     )
-    const sets = catalogueIndex.sets.map((set) => ({
+    const sets = catalogue.sets.map((set) => ({
       id: set.id,
       code: set.code,
       name: set.name || set.code

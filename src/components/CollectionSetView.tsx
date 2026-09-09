@@ -332,7 +332,7 @@ export function CollectionSetView({
 
       const catalogueRes = await fetch(
         `/api/catalogue/${encodeURIComponent(normalizeSetCode(code))}`,
-        { cache: 'no-store' }
+        { cache: 'default' }
       )
       const catalogueData = await catalogueRes.json().catch(() => ({}))
 
@@ -396,8 +396,8 @@ export function CollectionSetView({
 
     const fetchCardTilePricing = async () => {
       try {
-        const res = await fetch(`/api/optcg/prices/${encodeURIComponent(code)}`, {
-          cache: 'no-store'
+        const res = await fetch(`/api/optcg/prices/${encodeURIComponent(code)}?trends=0`, {
+          cache: 'default'
         })
         const data = await res.json().catch(() => ({}))
         if (!res.ok || cancelled) return

@@ -28,24 +28,49 @@ export async function GET(request: Request) {
     )
   }
 
-  const { data, error } = await supabaseServiceServer
+  const requestedYear = new URL(request.url).searchParams.get('year')
+  if (requestedYear !== null && requestedYear !== 'latest' && !/^[1-9]\d{3}$/.test(requestedYear)) {
+    return NextResponse.json({ error: 'Année invalide' }, { status: 400 })
+  }
+  let historyWindow: { year: number; firstYear: number; lastYear: number } | null = null
+  if (requestedYear !== null) {
+    const bounds = await Promise.all([true, false].map((ascending) =>
+      supabaseServiceServer.from('collection_value_history').select('period_end')
+        .eq('user_id', userResult.userId).order('period_end', { ascending }).limit(1)
+    ))
+    if (bounds.some((result) => result.error)) {
+      return NextResponse.json({ error: 'Erreur lecture des périodes' }, { status: 500 })
+    }
+    const lastYear = Number(bounds[1].data?.[0]?.period_end.slice(0, 4)) || new Date().getUTCFullYear()
+    const firstYear = Number(bounds[0].data?.[0]?.period_end.slice(0, 4)) || lastYear
+    historyWindow = { year: requestedYear === 'latest' ? lastYear : Number(requestedYear), firstYear, lastYear }
+  }
+
+  const query = () => supabaseServiceServer
     .from('collection_value_history')
     .select(
       'period_start, period_end, set_code, set_name, is_total, total_value, priced_count, expected_count, us_fallback_count, currency, created_at, updated_at'
     )
     .eq('user_id', userResult.userId)
     .order('period_start', { ascending: true })
-    .order('is_total', { ascending: true })
-    .limit(1200)
+    .order('set_code', { ascending: true })
 
-  if (error) {
-    return NextResponse.json(
-      { error: `Erreur lecture historique: ${error.message}` },
-      { status: 500 }
-    )
+  const rows: HistoryRow[] = []
+  // Keep the legacy mobile response while allowing the web to request complete years.
+  for (let from = 0; ; from += 1000) {
+    let pageQuery = query()
+    if (historyWindow) {
+      pageQuery = pageQuery.gte('period_end', `${historyWindow.year}-01-01`)
+        .lt('period_end', `${historyWindow.year + 1}-01-01`)
+    }
+    const { data, error } = await pageQuery.range(from, from + 999)
+    if (error) {
+      return NextResponse.json({ error: `Erreur lecture historique: ${error.message}` }, { status: 500 })
+    }
+    const page = (data as HistoryRow[] | null) || []
+    rows.push(...page)
+    if (page.length < 1000) break
   }
-
-  const rows = (data as HistoryRow[] | null) || []
   const byWeek = new Map<
     string,
     {
@@ -108,5 +133,7 @@ export async function GET(request: Request) {
       sets: week.sets.sort((a, b) => b.value - a.value || a.setCode.localeCompare(b.setCode))
     }))
 
-  return NextResponse.json({ weeks })
+  return NextResponse.json({ weeks, window: historyWindow }, {
+    headers: { 'Cache-Control': 'private, no-store' }
+  })
 }

@@ -4,12 +4,14 @@ import { getSetPricing } from '@/lib/server/setPricing'
 const CACHE_CONTROL = 'public, max-age=300, s-maxage=3600, stale-while-revalidate=86400'
 
 export async function GET(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ setCode: string }> }
 ) {
   try {
     const { setCode } = await context.params
-    const payload = await getSetPricing(setCode)
+    const payload = await getSetPricing(setCode, {
+      includeTrends: new URL(request.url).searchParams.get('trends') !== '0'
+    })
     return NextResponse.json(payload, {
       headers: {
         'Cache-Control': CACHE_CONTROL

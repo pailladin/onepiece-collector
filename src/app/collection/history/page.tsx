@@ -1,299 +1,129 @@
-'use client'
+﻿'use client'
 
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { useAuth } from '@/lib/auth'
 import { supabase } from '@/lib/supabaseClient'
+import { CollectionHistoryChart, historyDate, historyMoney, type HistoryPoint } from '@/components/CollectionHistoryChart'
 
+type ValueRow = { value: number; expectedCount: number; currency?: string }
 type WeekRow = {
   periodStart: string
   periodEnd: string
-  total: {
-    value: number
-    pricedCount: number
-    expectedCount: number
-    usFallbackCount: number
-    currency: string
-  } | null
-  sets: Array<{
-    setCode: string
-    setName: string
-    value: number
-    pricedCount: number
-    expectedCount: number
-    usFallbackCount: number
-  }>
+  total: ValueRow | null
+  sets: Array<ValueRow & { setCode: string; setName: string }>
 }
-
-type SetOption = {
-  code: string
-  name: string
-}
-
-function formatCurrency(value: number, currency = 'EUR') {
-  return new Intl.NumberFormat('fr-FR', {
-    style: 'currency',
-    currency
-  }).format(value)
-}
-
-function shortDate(value: string) {
-  const parsed = new Date(`${value}T00:00:00`)
-  if (Number.isNaN(parsed.getTime())) return value
-  return new Intl.DateTimeFormat('fr-FR').format(parsed)
-}
-
-function weekLabel(start: string, end: string) {
-  return `${shortDate(start)} -> ${shortDate(end)}`
-}
-
-function formatCardCount(count: number) {
-  return `${count} ${count > 1 ? 'cartes' : 'carte'}`
-}
+type HistoryWindow = { year: number; firstYear: number; lastYear: number }
+const PAGE_SIZE = 10
 
 export default function CollectionHistoryPage() {
   const { user, loading: authLoading } = useAuth()
+  const userId = user?.id
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [weeks, setWeeks] = useState<WeekRow[]>([])
   const [selectedSetCode, setSelectedSetCode] = useState('TOTAL')
-  const [activePointIndex, setActivePointIndex] = useState<number | null>(null)
-
-  const setOptions = useMemo<SetOption[]>(
-    () => {
-      const map = new Map<string, string>()
-      for (const week of weeks) {
-        for (const row of week.sets) {
-          if (!map.has(row.setCode)) {
-            map.set(row.setCode, row.setName || row.setCode)
-          }
-        }
-      }
-      return [...map.entries()]
-        .map(([code, name]) => ({ code, name }))
-        .sort((a, b) => a.code.localeCompare(b.code))
-    },
-    [weeks]
-  )
-
-  const series = useMemo(
-    () =>
-      weeks
-        .map((week) => ({
-          x: week.periodStart,
-          periodStart: week.periodStart,
-          periodEnd: week.periodEnd,
-          value:
-            selectedSetCode === 'TOTAL'
-              ? week.total?.value || 0
-              : week.sets.find((row) => row.setCode === selectedSetCode)?.value || 0,
-          cardCount:
-            selectedSetCode === 'TOTAL'
-              ? week.total?.expectedCount || 0
-              : week.sets.find((row) => row.setCode === selectedSetCode)?.expectedCount || 0,
-          currency: week.total?.currency || 'EUR'
-        })),
-    [weeks, selectedSetCode]
-  )
-
-  const maxValue = Math.max(1, ...series.map((row) => row.value))
-  const minValue = Math.min(...series.map((row) => row.value), maxValue)
-  const selectedSetLabel =
-    selectedSetCode === 'TOTAL'
-      ? 'Collection complete'
-      : setOptions.find((row) => row.code === selectedSetCode)?.name || selectedSetCode
-
-  const loadHistory = async () => {
-    if (!user) return
-    setLoading(true)
-    setError(null)
-    try {
-      const { data } = await supabase.auth.getSession()
-      const token = data.session?.access_token
-      const res = await fetch('/api/collection/value-history', {
-        headers: token ? { Authorization: `Bearer ${token}` } : {}
-      })
-      const payload = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        setError(payload?.error || 'Erreur chargement historique')
-        setWeeks([])
-        setSelectedSetCode('TOTAL')
-        return
-      }
-      const nextWeeks = Array.isArray(payload?.weeks) ? payload.weeks : []
-      setWeeks(nextWeeks)
-      setSelectedSetCode((prev) => (prev ? prev : 'TOTAL'))
-    } finally {
-      setLoading(false)
-    }
-  }
+  const [year, setYear] = useState('latest')
+  const [window, setWindow] = useState<HistoryWindow | null>(null)
+  const [page, setPage] = useState(0)
+  const [retry, setRetry] = useState(0)
 
   useEffect(() => {
-    if (!user) {
-      setLoading(false)
-      setWeeks([])
-      return
-    }
-    loadHistory()
-  }, [user])
+    const controller = new AbortController()
+    if (authLoading) return () => controller.abort()
+    if (!userId) { setWeeks([]); setLoading(false); return () => controller.abort() }
+    setLoading(true)
+    setError(null)
+    setWeeks([])
+    setPage(0)
+    void (async () => {
+      try {
+        const { data } = await supabase.auth.getSession()
+        const token = data.session?.access_token
+        if (!token) throw new Error('Session expirée. Reconnecte-toi.')
+        const response = await fetch(`/api/collection/value-history?year=${encodeURIComponent(year)}`, {
+          signal: controller.signal,
+          headers: { Authorization: `Bearer ${token}` }
+        })
+        const payload = await response.json()
+        if (!response.ok) throw new Error(payload.error || 'Erreur de chargement')
+        if (controller.signal.aborted) return
+        setWeeks(payload.weeks || [])
+        setWindow(payload.window)
+      } catch (error) {
+        if (!controller.signal.aborted) setError(error instanceof Error ? error.message : 'Historique indisponible')
+      } finally {
+        if (!controller.signal.aborted) setLoading(false)
+      }
+    })()
+    return () => controller.abort()
+  }, [authLoading, userId, year, retry])
 
-  if (authLoading || loading) {
-    return <div style={{ padding: 40 }}>Chargement suivi valeur...</div>
-  }
-  if (!user) {
-    return <div style={{ padding: 40 }}>Connecte-toi pour voir le suivi de valeur.</div>
-  }
+  const setOptions = useMemo(() => {
+    const options = new Map<string, string>()
+    weeks.forEach((week) => week.sets.forEach((set) => options.set(set.setCode, set.setName)))
+    if (selectedSetCode !== 'TOTAL' && !options.has(selectedSetCode)) options.set(selectedSetCode, selectedSetCode)
+    return [...options].sort(([a], [b]) => a.localeCompare(b))
+  }, [weeks, selectedSetCode])
+  const series = useMemo<HistoryPoint[]>(() => weeks.map((week) => {
+    const row = selectedSetCode === 'TOTAL' ? week.total : week.sets.find((set) => set.setCode === selectedSetCode)
+    return { date: week.periodEnd, value: row?.value ?? null, cardCount: row?.expectedCount ?? 0, currency: row?.currency || week.total?.currency || 'EUR' }
+  }).sort((a, b) => a.date.localeCompare(b.date)), [weeks, selectedSetCode])
+  const measured = series.filter((point) => point.value !== null)
+  const first = measured[0]
+  const last = measured[measured.length - 1]
+  const delta = first && last ? last.value! - first.value! : null
+  const pageCount = Math.ceil(series.length / PAGE_SIZE)
+  const details = [...series].reverse().slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
+  const busy = authLoading || loading
 
-  return (
-    <div style={{ padding: 40, display: 'grid', gap: 16 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
-        <div>
-          <h1 style={{ margin: 0 }}>Suivi valeur collection</h1>
-          <div style={{ marginTop: 4, color: '#475569', fontSize: 14 }}>
-            Evolution hebdomadaire par set. Chaque point correspond a un snapshot pris en fin de semaine.
-          </div>
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <Link href="/collection" style={{ color: '#1d4ed8', textDecoration: 'none', alignSelf: 'center' }}>
-            Retour collection
-          </Link>
-        </div>
+  if (!authLoading && !user) return <div style={{ padding: 24 }}>Connecte-toi pour voir le suivi de valeur.</div>
+  return <div data-history-page style={{ maxWidth: 1200, margin: '0 auto', padding: '24px clamp(12px, 3vw, 32px)', display: 'grid', gap: 20, minWidth: 0 }}>
+    <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', gap: 16, flexWrap: 'wrap' }}>
+      <div><h1 style={{ margin: 0, fontSize: 26 }}>Évolution de ma collection</h1>
+        <p style={{ color: '#64748b', marginBottom: 0 }}>Vos estimations hebdomadaires, année après année.</p></div>
+      <Link href="/collection" style={{ color: '#1d4ed8' }}>Retour collection</Link>
+    </header>
+    <section aria-label="Période et collection" style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'end' }}>
+      <label style={{ display: 'grid', gap: 6, flex: '1 1 240px', minWidth: 0 }}>Collection
+        <select value={selectedSetCode} onChange={(event) => { setSelectedSetCode(event.target.value); setPage(0) }} style={{ padding: 10, width: '100%', minWidth: 0 }}>
+          <option value="TOTAL">Collection complète</option>
+          {setOptions.map(([code, name]) => <option key={code} value={code}>{code} · {name}</option>)}
+        </select>
+      </label>
+      <label style={{ display: 'grid', gap: 6 }}>Année
+        <select aria-label="Année" value={window?.year ?? 'latest'} disabled={!window} onChange={(event) => setYear(event.target.value)} style={{ padding: 10 }}>
+          {!window && <option value="latest">La plus récente</option>}
+          {window && Array.from({ length: window.lastYear - window.firstYear + 1 }, (_, i) => window.lastYear - i).map((value) => <option key={value} value={value}>{value}</option>)}
+        </select>
+      </label>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button aria-label="Année précédente" disabled={busy || !window || window.year <= window.firstYear} onClick={() => setYear(String(window!.year - 1))} style={{ padding: 10 }}>←</button>
+        <button aria-label="Année suivante" disabled={busy || !window || window.year >= window.lastYear} onClick={() => setYear(String(window!.year + 1))} style={{ padding: 10 }}>→</button>
       </div>
-
-      {error && (
-        <div style={{ border: '1px solid #fecaca', color: '#b91c1c', background: '#fef2f2', borderRadius: 8, padding: 10 }}>
-          {error}
-        </div>
-      )}
-
-      <div style={{ border: '1px solid #cbd5e1', borderRadius: 12, padding: 14, background: '#fff' }}>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12, flexWrap: 'wrap' }}>
-          <div style={{ fontWeight: 700 }}>Set</div>
-          <select
-            value={selectedSetCode}
-            onChange={(event) => setSelectedSetCode(event.target.value)}
-            style={{ minWidth: 240, padding: '6px 8px' }}
-          >
-            <option value="TOTAL">Collection complete</option>
-            {setOptions.map((row) => (
-              <option key={row.code} value={row.code}>
-                {row.code} - {row.name}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div style={{ fontWeight: 700, marginBottom: 8 }}>Evolution: {selectedSetLabel}</div>
-        <div style={{ marginBottom: 12, color: '#64748b', fontSize: 13 }}>
-          Date affichee = date du snapshot hebdomadaire, pas date de debut de semaine.
-        </div>
-        {series.length === 0 ? (
-          <div style={{ color: '#64748b' }}>Aucune semaine sauvegardee.</div>
-        ) : (
-          <div>
-            <svg viewBox="0 0 760 260" style={{ width: '100%', height: 'auto', display: 'block' }}>
-              <rect x="0" y="0" width="760" height="260" fill="#f8fafc" rx="10" />
-              <line x1="56" y1="20" x2="56" y2="220" stroke="#cbd5e1" />
-              <line x1="56" y1="220" x2="740" y2="220" stroke="#cbd5e1" />
-              {(() => {
-                const points = series.map((row, index) => {
-                  const x = 56 + (series.length === 1 ? 0 : (index / (series.length - 1)) * 684)
-                  const span = Math.max(1, maxValue - minValue)
-                  const y = 220 - ((row.value - minValue) / span) * 180
-                  return { x, y, row, index }
-                })
-                const polyline = points.map((p) => `${p.x},${p.y}`).join(' ')
-                const activePoint =
-                  activePointIndex === null ? null : points.find((point) => point.index === activePointIndex) || null
-                const bubbleWidth = 116
-                const bubbleHeight = 48
-                const bubbleX = activePoint
-                  ? Math.min(Math.max(activePoint.x - bubbleWidth / 2, 8), 760 - bubbleWidth - 8)
-                  : 0
-                const bubbleY = activePoint
-                  ? activePoint.y < 78
-                    ? activePoint.y + 14
-                    : activePoint.y - bubbleHeight - 14
-                  : 0
-                return (
-                  <>
-                    <polyline
-                      points={polyline}
-                      fill="none"
-                      stroke="#2563eb"
-                      strokeWidth="3"
-                      strokeLinejoin="round"
-                      strokeLinecap="round"
-                    />
-                    {points.map((p) => (
-                      <g key={p.row.x}>
-                        <circle cx={p.x} cy={p.y} r="4" fill="#0ea5e9" />
-                        <circle
-                          cx={p.x}
-                          cy={p.y}
-                          r="13"
-                          fill="transparent"
-                          style={{ cursor: 'pointer' }}
-                          tabIndex={0}
-                          role="img"
-                          aria-label={`${shortDate(p.row.periodEnd)}: ${formatCurrency(
-                            p.row.value,
-                            p.row.currency
-                          )}, ${formatCardCount(p.row.cardCount)}`}
-                          onPointerEnter={() => setActivePointIndex(p.index)}
-                          onPointerLeave={() => setActivePointIndex(null)}
-                          onFocus={() => setActivePointIndex(p.index)}
-                          onBlur={() => setActivePointIndex(null)}
-                          onClick={() => setActivePointIndex((current) => (current === p.index ? null : p.index))}
-                        />
-                        <text x={p.x} y={238} textAnchor="middle" fontSize="10" fill="#475569">
-                          {shortDate(p.row.periodEnd)}
-                        </text>
-                      </g>
-                    ))}
-                    {activePoint && (
-                      <g pointerEvents="none">
-                        <rect
-                          x={bubbleX}
-                          y={bubbleY}
-                          width={bubbleWidth}
-                          height={bubbleHeight}
-                          rx="6"
-                          fill="#0f172a"
-                          opacity="0.94"
-                        />
-                        <text x={bubbleX + 8} y={bubbleY + 16} fontSize="10" fill="#e2e8f0">
-                          {shortDate(activePoint.row.periodEnd)}
-                        </text>
-                        <text x={bubbleX + 8} y={bubbleY + 31} fontSize="11" fontWeight="700" fill="#ffffff">
-                          {formatCurrency(activePoint.row.value, activePoint.row.currency)}
-                        </text>
-                        <text x={bubbleX + 8} y={bubbleY + 43} fontSize="9" fill="#cbd5e1">
-                          {formatCardCount(activePoint.row.cardCount)}
-                        </text>
-                      </g>
-                    )}
-                  </>
-                )
-              })()}
-              <text x="8" y="24" fontSize="11" fill="#334155">
-                {formatCurrency(maxValue, series[0]?.currency || 'USD')}
-              </text>
-              <text x="8" y="222" fontSize="11" fill="#334155">
-                {formatCurrency(minValue, series[0]?.currency || 'USD')}
-              </text>
-            </svg>
-            <div style={{ marginTop: 8, display: 'grid', gap: 4 }}>
-              {[...series].reverse().map((row) => (
-                <div key={`legend-${row.x}`} style={{ fontSize: 12, color: '#334155' }}>
-                  Snapshot du {shortDate(row.periodEnd)} ({weekLabel(row.periodStart, row.periodEnd)}):{' '}
-                  <strong>{formatCurrency(row.value, row.currency)}</strong> ({formatCardCount(row.cardCount)})
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  )
+    </section>
+    {error ? <div role="alert">{error} <button onClick={() => setRetry((value) => value + 1)}>Réessayer</button></div>
+      : busy ? <p role="status">Chargement de l’historique…</p>
+        : <>
+          {last && <div style={{ display: 'flex', gap: 32, flexWrap: 'wrap' }}>
+            <div><div style={{ color: '#64748b', fontSize: 13 }}>Dernière estimation de la période · {historyDate(last.date)}</div><strong style={{ fontSize: 28 }}>{historyMoney(last.value!, last.currency)}</strong></div>
+            <div><div style={{ color: '#64748b', fontSize: 13 }}>Variation entre la première et la dernière mesure</div><strong style={{ fontSize: 24 }}>{measured.length < 2 ? '—' : `${delta! > 0 ? '+' : ''}${historyMoney(delta!, last.currency)}`}</strong></div>
+          </div>}
+          <section style={{ border: '1px solid #e2e8f0', borderRadius: 14, padding: '16px clamp(8px, 2vw, 20px)', minWidth: 0, background: '#fff' }}>
+            <h2 style={{ margin: '0 0 8px', fontSize: 18 }}>{window?.year} · {selectedSetCode === 'TOTAL' ? 'Collection complète' : selectedSetCode}</h2>
+            <CollectionHistoryChart key={`${window?.year}-${selectedSetCode}`} series={series} />
+            <p style={{ fontSize: 12, color: '#64748b', marginBottom: 0 }}>La valeur évolue avec les prix et les cartes ajoutées ou retirées. Les interruptions de la courbe signalent des mesures manquantes.</p>
+          </section>
+          {series.length > 0 && <section aria-label="Détail des mesures">
+            <h2 style={{ fontSize: 18 }}>Détail des mesures · {series.length}</h2>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+              <thead><tr><th style={{ textAlign: 'left', padding: 8 }}>Date</th><th style={{ textAlign: 'right', padding: 8 }}>Valeur</th><th style={{ textAlign: 'right', padding: 8 }}>Cartes</th></tr></thead>
+              <tbody>{details.map((point) => <tr key={point.date} style={{ borderTop: '1px solid #e2e8f0' }}><td style={{ padding: 8 }}>{historyDate(point.date)}</td><td style={{ padding: 8, textAlign: 'right' }}>{point.value === null ? 'Non disponible' : historyMoney(point.value, point.currency)}</td><td style={{ padding: 8, textAlign: 'right' }}>{point.value === null ? '—' : point.cardCount}</td></tr>)}</tbody>
+            </table>
+            {pageCount > 1 && <nav aria-label="Pages des mesures" style={{ display: 'flex', alignItems: 'center', justifyContent: 'end', gap: 12, marginTop: 12 }}>
+              <button disabled={page === 0} onClick={() => setPage(page - 1)}>Précédent</button><span>{page + 1} / {pageCount}</span><button disabled={page + 1 >= pageCount} onClick={() => setPage(page + 1)}>Suivant</button>
+            </nav>}
+          </section>}
+        </>}
+  </div>
 }
