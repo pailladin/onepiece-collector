@@ -35,20 +35,33 @@ begin
     return next_quantity;
   end if;
 
-  update public.collections
-  set quantity = greatest(quantity + p_delta, 0)
+  -- Lock before deciding between UPDATE and DELETE so concurrent changes
+  -- use the latest quantity. Never write zero: some schemas require quantity > 0.
+  select quantity into next_quantity
+  from public.collections
   where user_id = auth.uid()
     and card_print_id = p_card_print_id
     and language_code = normalized_language
-  returning quantity into next_quantity;
+  for update;
 
-  if coalesce(next_quantity, 0) = 0 then
+  if not found then
+    return 0;
+  end if;
+
+  next_quantity := greatest(next_quantity + p_delta, 0);
+  if next_quantity = 0 then
     delete from public.collections
     where user_id = auth.uid()
       and card_print_id = p_card_print_id
       and language_code = normalized_language;
     return 0;
   end if;
+
+  update public.collections
+  set quantity = next_quantity
+  where user_id = auth.uid()
+    and card_print_id = p_card_print_id
+    and language_code = normalized_language;
 
   return next_quantity;
 end;

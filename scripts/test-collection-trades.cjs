@@ -19,7 +19,7 @@ async function main() {
         $$select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid$$;
       grant usage on schema auth to authenticated;
       create table public.collections (user_id uuid not null, card_print_id uuid not null,
-        language_code text not null, quantity integer not null check(quantity >= 0),
+        language_code text not null, quantity integer not null constraint collections_new_quantity_check check(quantity > 0),
         primary key(user_id,card_print_id,language_code));
       create table public.friends(user_id uuid, friend_id uuid);
       grant select,insert,update,delete on public.collections to authenticated;
@@ -30,13 +30,14 @@ async function main() {
     `)
     await db.exec(sql('collections-rls.sql'))
     await db.exec(sql('collection-quantity-rpc.sql'))
+    await db.exec(sql('collection-quantity-rpc.sql')) // Safe to reapply the fix.
     await db.exec(sql('collection-trades.sql'))
     await db.exec(sql('collection-trades.sql'))
     assert.ok((await db.query('select trade_quantity from collections')).rows.every(row => row.trade_quantity === 0))
     await db.exec(`set role authenticated; set request.jwt.claim.sub = '${alice}';`)
     const offer = (quantity, language = 'fr', print = card) => db.query(
       'select set_collection_trade_quantity($1,$2,$3) as quantity', [print, language, quantity])
-    const change = delta => db.query('select change_collection_quantity($1,$2,$3)', [card, 'fr', delta])
+    const change = async delta => (await db.query('select change_collection_quantity($1,$2,$3) as quantity', [card, 'fr', delta])).rows[0].quantity
     const owned = async () => (await db.query('select quantity,trade_quantity from collections where card_print_id=$1 and language_code=$2', [card, 'fr'])).rows[0]
 
     await offer(2, ' FR ')
@@ -56,14 +57,20 @@ async function main() {
     await offer(0)
     assert.deepEqual(await owned(), { quantity: 1, trade_quantity: 0 })
     await offer(1)
-    await change(-1)
+    assert.equal(await change(-1), 0)
     assert.equal(await owned(), undefined)
+    assert.equal(await change(-1), 0) // Removing an absent card is harmless.
+    assert.equal(await change(0), 0)
+    assert.equal((await db.query('select quantity from collections where card_print_id=$1 and language_code=$2', [card, 'en'])).rows[0].quantity, 1)
     await offer(0) // Idempotent removal after the collection row was deleted.
     await change(2)
     assert.deepEqual(await owned(), { quantity: 2, trade_quantity: 0 })
     await offer(2)
     await db.query('update collections set quantity=1 where card_print_id=$1 and language_code=$2', [card, 'fr'])
     assert.deepEqual(await owned(), { quantity: 1, trade_quantity: 1 })
+    assert.equal(await change(0), 1)
+    assert.equal(await change(-5), 0) // Oversized removals also delete without writing zero.
+    assert.equal(await owned(), undefined)
     await db.exec("set request.jwt.claim.sub = ''")
     await assert.rejects(offer(1), /Authentication required/)
     console.log('PASS: migration rerun, default zero, language isolation, ownership/RLS, invalid quantities, clamping, deletion, re-addition and direct updates.')
