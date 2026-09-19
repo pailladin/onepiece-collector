@@ -542,9 +542,6 @@ export default function CollectionPage() {
   return (
     <>
       <div style={{ padding: useCompactActions ? '0 0 12px' : '40px 40px 0' }}>
-        <Link href="/collection/scan" style={{ ...collectionActionBaseStyle, background: '#1d4ed8', marginBottom: 14 }}>
-          Scanner une carte
-        </Link>
         {!useCompactActions && (
           <h1 style={{ fontSize: 24, fontWeight: 'bold', margin: '0 0 18px' }}>Ma Collection</h1>
         )}

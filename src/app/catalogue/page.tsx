@@ -46,7 +46,6 @@ export default async function CataloguePage() {
       <JsonLd data={breadcrumbData([{ name: 'Accueil', path: '/' }, { name: 'Catalogue One Piece TCG', path: '/catalogue' }])} />
       <nav aria-label="Fil d’Ariane"><Link href="/">Accueil</Link> / <span aria-current="page">Catalogue</span></nav>
       <h1 style={{ color: '#0f172a', fontSize: 30 }}>Catalogue des cartes One Piece TCG</h1>
-      <Link href="/collection/scan" style={{ display: 'inline-block', padding: '10px 16px', borderRadius: 12, background: '#1d4ed8', color: '#fff', textDecoration: 'none', fontWeight: 700 }}>Scanner une carte</Link>
       <p style={{ color: '#475569', lineHeight: 1.6 }}>Retrouve les extensions One Piece Card Game : boosters OP, Extra Boosters EB et Starter Decks ST. Ouvre un set pour explorer ses cartes et leurs variantes, ou recherche une carte dans le catalogue.</p>
       {sets.length === 0 && (
         <div style={{ color: '#475569', marginBottom: 24 }}>
