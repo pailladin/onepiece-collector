@@ -13,14 +13,19 @@
     "cardmarket:extract-local": "node scripts/cardmarket-extract-local.mjs",
     "cardmarket:extract-list-local": "node scripts/cardmarket-extract-list-local.mjs",
     "backup:images:supabase": "node scripts/backup-supabase-images-local.mjs",
-    "migrate:images:r2": "node scripts/migrate-images-to-r2.mjs"
+    "migrate:images:r2": "node scripts/migrate-images-to-r2.mjs",
+    "ocr:prepare": "node scripts/prepare-ocr-assets.mjs",
+    "predev": "npm run ocr:prepare",
+    "prebuild": "npm run ocr:prepare"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1123.0",
     "@supabase/supabase-js": "^2.97.0",
+    "@tesseract.js-data/eng": "^1.0.0",
     "next": "16.1.6",
     "react": "19.2.3",
     "react-dom": "19.2.3",
+    "tesseract.js": "^7.0.0",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {

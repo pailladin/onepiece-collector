@@ -20,6 +20,7 @@
 # production
 /build
 /local-backups/
+/public/ocr/
 
 # misc
 .DS_Store
