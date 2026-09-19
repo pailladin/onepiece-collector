@@ -8,16 +8,9 @@ export default function robots(): MetadataRoute.Robots {
     rules: [
       {
         userAgent: '*',
-        allow: ['/', '/catalogue', '/catalogue/'],
-        disallow: [
-          '/admin',
-          '/auth',
-          '/collection',
-          '/community',
-          '/friends',
-          '/share',
-          '/api'
-        ]
+        allow: '/',
+        // Let crawlers read the noindex metadata on account and private pages.
+        disallow: ['/api/']
       }
     ],
     sitemap: `${siteUrl}/sitemap.xml`,

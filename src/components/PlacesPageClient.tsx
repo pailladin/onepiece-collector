@@ -2,76 +2,55 @@
 
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
-import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { usePathname, useSearchParams } from 'next/navigation'
 import {
   getPlaceActivityLabel,
-  PLACE_ACTIVITY_OPTIONS,
-  type PlaceRow
+  PLACE_ACTIVITY_OPTIONS
 } from '@/lib/places'
 
-type PublicPlaceRow = Pick<
-  PlaceRow,
-  | 'id'
-  | 'slug'
-  | 'name'
-  | 'description'
-  | 'image_url'
-  | 'city'
-  | 'postal_code'
-  | 'department_code'
-  | 'country'
-  | 'discord_url'
-  | 'website_url'
-  | 'google_maps_url'
-  | 'activities'
->
+import type { PublicPlaceRow } from '@/lib/server/publicPlaces'
 
-export function PlacesPageClient() {
-  const router = useRouter()
+export function PlacesPageClient({ initialRows, initialQuery, initialActivity }: {
+  initialRows: PublicPlaceRow[]
+  initialQuery: string
+  initialActivity: string
+}) {
   const pathname = usePathname()
   const searchParams = useSearchParams()
-  const [rows, setRows] = useState<PublicPlaceRow[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [query, setQuery] = useState(searchParams.get('q') || '')
-  const [activity, setActivity] = useState(searchParams.get('activity') || 'all')
+  const query = searchParams.get('q') || ''
+  const activity = searchParams.get('activity') || 'all'
+  const filterKey = JSON.stringify([query, activity])
+  const usesInitialRows = query === initialQuery && activity === initialActivity
+  const [result, setResult] = useState<{ key: string; rows: PublicPlaceRow[]; error: string | null } | null>(null)
+  const currentResult = result?.key === filterKey ? result : null
+  const rows = usesInitialRows ? initialRows : currentResult?.rows || []
+  const error = usesInitialRows ? null : currentResult?.error
+  const loading = !usesInitialRows && !currentResult
 
   useEffect(() => {
-    setQuery(searchParams.get('q') || '')
-    setActivity(searchParams.get('activity') || 'all')
-  }, [searchParams])
-
-  useEffect(() => {
+    if (usesInitialRows) return
+    let cancelled = false
     const load = async () => {
-      setLoading(true)
-      setError(null)
-
       const params = new URLSearchParams()
       if (query.trim()) params.set('q', query.trim())
       if (activity !== 'all') params.set('activity', activity)
-
-      const res = await fetch(`/api/places?${params.toString()}`)
-      const data = await res.json().catch(() => ({}))
-
-      if (!res.ok) {
-        setRows([])
-        setError(data?.error || 'Erreur chargement lieux')
-        setLoading(false)
-        return
-      }
-
-      setRows(Array.isArray(data?.rows) ? (data.rows as PublicPlaceRow[]) : [])
-      setLoading(false)
+      const res = await fetch('/api/places?' + params.toString())
+      const data = await res.json()
+      if (!res.ok) throw new Error(data?.error || 'Erreur chargement lieux')
+      if (!cancelled) setResult({ key: filterKey, rows: Array.isArray(data?.rows) ? data.rows : [], error: null })
     }
-
-    void load()
-  }, [activity, query])
+    void load().catch(() => {
+      if (!cancelled) setResult({ key: filterKey, rows: [], error: 'Impossible de charger les lieux.' })
+    })
+    return () => { cancelled = true }
+  }, [activity, query, filterKey, usesInitialRows])
 
   const syncUrl = (nextQuery: string, nextActivity: string) => {
     const params = new URLSearchParams()
-    if (nextQuery.trim()) params.set('q', nextQuery.trim())
+    if (nextQuery.trim()) params.set('q', nextQuery)
     if (nextActivity !== 'all') params.set('activity', nextActivity)
-    router.replace(`${pathname}${params.toString() ? `?${params.toString()}` : ''}`)
+    // Keep client filtering responsive; Next synchronizes useSearchParams with history.
+    window.history.replaceState(null, '', pathname + (params.size ? '?' + params.toString() : ''))
   }
 
   const subtitle = useMemo(() => {
@@ -89,6 +68,7 @@ export function PlacesPageClient() {
       }}
     >
       <div style={{ maxWidth: 1180, margin: '0 auto' }}>
+        <nav aria-label="Fil d’Ariane" style={{ marginBottom: 12 }}><Link href="/">Accueil</Link> / <span aria-current="page">Lieux</span></nav>
         <div style={{ marginBottom: 20 }}>
           <h1 style={{ margin: 0, fontSize: 34, color: '#0f172a' }}>Lieux One Piece TCG</h1>
           <p style={{ margin: '8px 0 0', color: '#475569', maxWidth: 800 }}>
@@ -135,7 +115,6 @@ export function PlacesPageClient() {
             value={query}
             onChange={(event) => {
               const next = event.target.value
-              setQuery(next)
               syncUrl(next, activity)
             }}
             placeholder="Rechercher par nom, ville, code postal, departement..."
@@ -150,7 +129,6 @@ export function PlacesPageClient() {
             value={activity}
             onChange={(event) => {
               const next = event.target.value
-              setActivity(next)
               syncUrl(query, next)
             }}
             style={{

@@ -63,7 +63,7 @@ export function HomePageClient() {
                 color: '#0f172a'
               }}
             >
-              Suis chaque carte, chaque set, et chaque progression au meme endroit.
+              Gère ta collection de cartes One Piece TCG.
             </h1>
             <p
               className="home-hero-copy"

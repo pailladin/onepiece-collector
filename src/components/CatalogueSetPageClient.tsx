@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { useParams, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
+import Link from 'next/link'
 import { supabase } from '@/lib/supabaseClient'
 import { useAuth } from '@/lib/auth'
 import { DEFAULT_LOCALE } from '@/lib/locale'
@@ -14,7 +15,6 @@ import { compareCardPrintNumberSort } from '@/lib/sorting/compareCardPrints'
 import {
   filterCardPrints,
   getFilterOptions,
-  getAltTypeKey,
   getAltTypeLabel,
   isAltVersion,
   type AltFilter
@@ -109,20 +109,63 @@ function isSetScopedFallbackPrint(printCode: string | null | undefined, setCode:
   return raw.includes(`_${setCode}`)
 }
 
-export function CatalogueSetPageClient() {
+type InitialCatalogue = {
+  set: { code: string; name: string | null; availableLanguages: string[] }
+  items: Array<Omit<CatalogueItem, 'quantity' | 'languageBreakdown'>>
+}
+
+function deduplicateItems(merged: CatalogueItem[], normalizedSetCode: string) {
+  const dedupedByVisualKey = new Map<string, CatalogueItem>()
+  for (const item of merged) {
+    const baseCode = String(item.print_code || '')
+      .trim()
+      .toUpperCase()
+      .split('_')[0]
+    const variant = String(item.variant_type || 'normal').trim().toUpperCase()
+    const imageKey = String(item.image_path || MISSING_IMAGE_PATH)
+      .trim()
+      .toUpperCase()
+    const visualKey = `${baseCode}::${variant}::${imageKey}`
+    const existing = dedupedByVisualKey.get(visualKey)
+
+    if (!existing) {
+      dedupedByVisualKey.set(visualKey, item)
+      continue
+    }
+
+    const existingFallback = isSetScopedFallbackPrint(existing.print_code, normalizedSetCode)
+    const currentFallback = isSetScopedFallbackPrint(item.print_code, normalizedSetCode)
+    const existingMissingImage =
+      !existing.image_path || existing.image_path === MISSING_IMAGE_PATH
+    const currentMissingImage = !item.image_path || item.image_path === MISSING_IMAGE_PATH
+    const shouldReplace =
+      (existingFallback && !currentFallback) ||
+      (existingMissingImage && !currentMissingImage) ||
+      Number(item.quantity || 0) > Number(existing.quantity || 0)
+
+    if (shouldReplace) {
+      dedupedByVisualKey.set(visualKey, item)
+    }
+  }
+
+  return [...dedupedByVisualKey.values()]
+}
+
+export function CatalogueSetPageClient({ initialCatalogue }: { initialCatalogue: InitialCatalogue }) {
   const { user } = useAuth()
   const userId = user?.id ?? null
   const { isWishlisted, toggleWishlist, busyPrintId } = useWishlist(userId)
-  const params = useParams()
   const searchParams = useSearchParams()
-  const code = Array.isArray(params.code) ? params.code[0] : params.code
-  const normalizedCode = (code || '').toString().replace('-', '').toUpperCase()
+  const normalizedCode = initialCatalogue.set.code
   const initialQuery = searchParams.get('q') || ''
 
-  const [items, setItems] = useState<CatalogueItem[]>([])
-  const [setLanguages, setSetLanguages] = useState<string[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [items, setItems] = useState<CatalogueItem[]>(() => deduplicateItems(
+    initialCatalogue.items.map((item) => ({ ...item, quantity: 0, languageBreakdown: new Map<string, number>() })),
+    normalizedCode
+  ))
+  const setLanguages = resolveSetLanguages(initialCatalogue.set.availableLanguages)
+  const [loadedCollectionUserId, setLoadedCollectionUserId] = useState<string | null>(null)
+  const collectionReady = !!userId && loadedCollectionUserId === userId
   const [collectionMutationError, setCollectionMutationError] = useState<string | null>(null)
   const [selectedImage, setSelectedImage] = useState<string | null>(null)
   const [isCompactView, setIsCompactView] = useState(false)
@@ -153,32 +196,9 @@ export function CatalogueSetPageClient() {
   }, [])
 
   useEffect(() => {
+    let cancelled = false
     const fetchData = async () => {
-      setLoading(true)
-      setError(null)
-
-      const res = await fetch(`/api/catalogue/${normalizedCode}`)
-      const payload = await res.json().catch(() => ({}))
-
-      if (!res.ok) {
-        setItems([])
-        setSetLanguages([])
-        setError(payload?.error || 'Erreur chargement catalogue')
-        setLoading(false)
-        return
-      }
-
-      setSetLanguages(resolveSetLanguages(payload?.set?.availableLanguages))
-
-      const baseItems = (Array.isArray(payload?.items) ? payload.items : []) as Array<
-        Omit<CatalogueItem, 'quantity' | 'languageBreakdown'>
-      >
-      if (baseItems.length === 0) {
-        setItems([])
-        setLoading(false)
-        return
-      }
-
+      const baseItems = initialCatalogue.items
       let ownedMap = new Map<string, number>()
       let languageBreakdownByPrintId = new Map<string, Map<string, number>>()
 
@@ -200,45 +220,17 @@ export function CatalogueSetPageClient() {
         languageBreakdown: languageBreakdownByPrintId.get(print.id) || new Map<string, number>()
       }))
 
-      const dedupedByVisualKey = new Map<string, CatalogueItem>()
-      for (const item of merged) {
-        const baseCode = String(item.print_code || '')
-          .trim()
-          .toUpperCase()
-          .split('_')[0]
-        const variant = String(item.variant_type || 'normal').trim().toUpperCase()
-        const imageKey = String(item.image_path || MISSING_IMAGE_PATH)
-          .trim()
-          .toUpperCase()
-        const visualKey = `${baseCode}::${variant}::${imageKey}`
-        const existing = dedupedByVisualKey.get(visualKey)
-
-        if (!existing) {
-          dedupedByVisualKey.set(visualKey, item)
-          continue
-        }
-
-        const existingFallback = isSetScopedFallbackPrint(existing.print_code, normalizedSetCode)
-        const currentFallback = isSetScopedFallbackPrint(item.print_code, normalizedSetCode)
-        const existingMissingImage =
-          !existing.image_path || existing.image_path === MISSING_IMAGE_PATH
-        const currentMissingImage = !item.image_path || item.image_path === MISSING_IMAGE_PATH
-        const shouldReplace =
-          (existingFallback && !currentFallback) ||
-          (existingMissingImage && !currentMissingImage) ||
-          Number(item.quantity || 0) > Number(existing.quantity || 0)
-
-        if (shouldReplace) {
-          dedupedByVisualKey.set(visualKey, item)
-        }
+      if (!cancelled) {
+        setItems(deduplicateItems(merged, normalizedCode))
+        setLoadedCollectionUserId(userId)
       }
-
-      setItems([...dedupedByVisualKey.values()])
-      setLoading(false)
     }
 
-    void fetchData()
-  }, [normalizedCode, normalizedSetCode, userId])
+    void fetchData().catch(() => {
+      if (!cancelled) setCollectionMutationError('Impossible de charger les quantités de ta collection.')
+    })
+    return () => { cancelled = true }
+  }, [initialCatalogue, normalizedCode, userId])
 
   const filterOptions = useMemo(() => getFilterOptions(items), [items])
 
@@ -301,7 +293,7 @@ export function CatalogueSetPageClient() {
   )
 
   const updateQuantity = async (printId: string, languageCode: string, delta: number) => {
-    if (!user) return
+    if (!user || !collectionReady) return
 
     const current = items.find((i) => i.id === printId)
     if (!current) return
@@ -371,14 +363,6 @@ export function CatalogueSetPageClient() {
     setSortDirection('asc')
   }
 
-  if (loading) {
-    return <div style={{ padding: 40 }}>Chargement...</div>
-  }
-
-  if (error) {
-    return <div style={{ padding: 40 }}>Erreur: {error}</div>
-  }
-
   const totalCount = items.length
 
   return (
@@ -390,6 +374,9 @@ export function CatalogueSetPageClient() {
         minHeight: '100vh'
       }}
     >
+      <nav aria-label="Fil d’Ariane" style={{ marginBottom: 12 }}>
+        <Link href="/">Accueil</Link> / <Link href="/catalogue">Catalogue</Link> / <span aria-current="page">{normalizedCode}</span>
+      </nav>
       <h1
         style={{
           fontSize: isCompactView ? 24 : 30,
@@ -398,8 +385,9 @@ export function CatalogueSetPageClient() {
           color: '#111827'
         }}
       >
-        Catalogue - {normalizedCode}
+        Cartes {normalizedCode}{initialCatalogue.set.name ? ' - ' + initialCatalogue.set.name : ''}
       </h1>
+      <p style={{ color: '#475569', lineHeight: 1.6 }}>Explore les cartes One Piece TCG de cette extension, leurs raretés et leurs variantes. Utilise les filtres pour retrouver une carte et compléter ta collection.</p>
 
       <div
         style={{
@@ -673,7 +661,7 @@ export function CatalogueSetPageClient() {
               )}
               <img
                 src={imageUrl}
-                alt={translation?.name}
+                alt={[translation?.name || 'Carte One Piece TCG', getDisplayPrintCode(item), variantBadgeLabel].filter(Boolean).join(' - ')}
                 loading="lazy"
                 decoding="async"
                 style={{
@@ -750,9 +738,9 @@ export function CatalogueSetPageClient() {
                       }}
                     >
                       <span style={{ minWidth: 20, textAlign: 'left' }}>{entry.shortLabel}</span>
-                      <button onClick={() => updateQuantity(item.id, entry.code, -1)}>-</button>
+                      <button disabled={!collectionReady} onClick={() => updateQuantity(item.id, entry.code, -1)}>-</button>
                       <span style={{ minWidth: 16, textAlign: 'center' }}>{entry.quantity}</span>
-                      <button onClick={() => updateQuantity(item.id, entry.code, 1)}>+</button>
+                      <button disabled={!collectionReady} onClick={() => updateQuantity(item.id, entry.code, 1)}>+</button>
                     </div>
                   ))}
                 </div>

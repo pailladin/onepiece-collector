@@ -1,3 +1,6 @@
+import { cache } from 'react'
+import { JsonLd } from '@/components/JsonLd'
+import { publicPageMetadata, breadcrumbData } from '@/lib/seo'
 import Link from 'next/link'
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
@@ -8,7 +11,7 @@ type Props = {
   params: Promise<{ slug: string }>
 }
 
-async function fetchPlace(slug: string) {
+const fetchPlace = cache(async (slug: string) => {
   const { data, error } = await supabaseServiceServer
     .from('places')
     .select('*')
@@ -16,7 +19,7 @@ async function fetchPlace(slug: string) {
     .eq('is_active', true)
     .maybeSingle()
 
-  if (error) return null
+  if (error) throw new Error('Impossible de charger ce lieu : ' + error.message)
   if (!data) return null
 
   const row = data as PlaceRow
@@ -24,26 +27,17 @@ async function fetchPlace(slug: string) {
     ...row,
     activities: normalizePlaceActivities(row.activities)
   }
-}
+})
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params
   const place = await fetchPlace(slug)
-  if (!place) {
-    return {
-      title: 'Lieu introuvable'
-    }
-  }
-
-  return {
-    title: `${place.name} - Lieux One Piece TCG`,
-    description:
-      place.description ||
-      `Infos pratiques pour ${place.name} a ${place.city || 'localisation inconnue'}.`,
-    alternates: {
-      canonical: `/lieux/${place.slug}`
-    }
-  }
+  if (!place) notFound()
+  return publicPageMetadata(
+    place.name + (place.city ? ' à ' + place.city : '') + ' - One Piece TCG',
+    place.description?.slice(0, 160) || 'Découvre ' + place.name + (place.city ? ' à ' + place.city : '') + ' : activités One Piece TCG, adresse et liens pratiques.',
+    '/lieux/' + encodeURIComponent(place.slug)
+  )
 }
 
 export default async function PlaceDetailPage({ params }: Props) {
@@ -59,6 +53,7 @@ export default async function PlaceDetailPage({ params }: Props) {
         padding: '20px 12px 32px'
       }}
     >
+      <JsonLd data={breadcrumbData([{ name: 'Accueil', path: '/' }, { name: 'Lieux One Piece TCG', path: '/lieux' }, { name: place.name, path: '/lieux/' + encodeURIComponent(place.slug) }])} />
       <div style={{ maxWidth: 1000, margin: '0 auto' }}>
         <Link href="/lieux" style={{ color: '#1d4ed8', textDecoration: 'none' }}>
           Retour aux lieux

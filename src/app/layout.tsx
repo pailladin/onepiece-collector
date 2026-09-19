@@ -23,9 +23,6 @@ export const metadata: Metadata = {
   ],
   authors: [{ name: 'One Piece Collector' }],
   creator: 'One Piece Collector',
-  alternates: {
-    canonical: '/'
-  },
   openGraph: {
     type: 'website',
     locale: 'fr_FR',
@@ -33,10 +30,12 @@ export const metadata: Metadata = {
     title: 'One Piece Collector',
     description:
       'Catalogue et gestion de collection de cartes One Piece TCG avec progression par set et partage.',
-    siteName: 'One Piece Collector'
+    siteName: 'One Piece Collector',
+    images: [{ url: '/opengraph-image', width: 1200, height: 630, alt: 'One Piece Collector' }]
   },
   twitter: {
     card: 'summary_large_image',
+    images: ['/opengraph-image'],
     title: 'One Piece Collector',
     description:
       'Catalogue et gestion de collection de cartes One Piece TCG avec progression par set et partage.'
