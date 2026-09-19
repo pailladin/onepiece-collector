@@ -1,10 +1,12 @@
 import type { Worker } from 'tesseract.js'
 import { extractCardCodes } from './cardCode'
+import { DEFAULT_NUMBER_REGION, prepareRegion, type ImageRegion } from './imageRegion'
 
 export async function recognizeCard(
   file: File,
   signal: AbortSignal,
-  onProgress: (message: string) => void
+  onProgress: (message: string) => void,
+  region?: ImageRegion
 ): Promise<string[]> {
   if (!file.type.startsWith('image/')) throw new Error('Choisis une photo de carte.')
   if (file.size > 20 * 1024 * 1024) throw new Error('Cette photo dépasse 20 Mo. Choisis une image plus petite.')
@@ -29,15 +31,6 @@ export async function recognizeCard(
       throw new Error('Photo illisible. Essaie une image JPEG, PNG ou WebP, ou reprends une photo.')
     }
     if (finished) return []
-    const canvas = document.createElement('canvas')
-    const scale = Math.min(2, 1800 / Math.max(photo.naturalWidth, photo.naturalHeight))
-    canvas.width = Math.max(1, Math.round(photo.naturalWidth * scale))
-    canvas.height = Math.max(1, Math.round(photo.naturalHeight * scale))
-    const context = canvas.getContext('2d')
-    if (!context) throw new Error('Ce navigateur ne permet pas la lecture des photos. Saisis le numéro ci-dessous.')
-    context.fillStyle = '#fff'
-    context.fillRect(0, 0, canvas.width, canvas.height)
-    context.drawImage(photo, 0, 0, canvas.width, canvas.height)
     onProgress('Chargement du lecteur sur ton appareil…')
     const { createWorker, OEM, PSM } = await import('tesseract.js')
     if (finished) return []
@@ -50,15 +43,32 @@ export async function recognizeCard(
     })
     worker = created
     if (finished) { await created.terminate(); return [] }
-    await created.setParameters({ tessedit_pageseg_mode: PSM.SPARSE_TEXT })
-    // Numbers are usually printed near the bottom. Retry the full photo for cropped images.
-    const top = Math.floor(canvas.height * 0.55)
-    const footer = await created.recognize(canvas, { rectangle: { left: 0, top, width: canvas.width, height: canvas.height - top } })
-    const codes = extractCardCodes(footer.data.text)
-    if (codes.length || finished) return codes
-    onProgress('Recherche du numéro sur toute la photo…')
-    const full = await created.recognize(canvas)
-    return extractCardCodes(full.data.text)
+    const full = { x: 0, y: 0, width: 1, height: 1 }
+    const footer = { x: 0, y: 0.75, width: 1, height: 0.25 }
+    const passes = region ? [
+      { region, contrast: false, invert: false },
+      { region, contrast: true, invert: false },
+      { region, contrast: true, invert: true }
+    ] : [
+      { region: DEFAULT_NUMBER_REGION, contrast: false, invert: false },
+      { region: footer, contrast: false, invert: false },
+      { region: DEFAULT_NUMBER_REGION, contrast: true, invert: true },
+      { region: footer, contrast: true, invert: false },
+      { region: full, contrast: false, invert: false }
+    ]
+    for (const [index, pass] of passes.entries()) {
+      if (finished) return []
+      onProgress(`Lecture de la zone du numéro (${index + 1}/${passes.length})…`)
+      const canvas = prepareRegion(photo, pass.region, pass.contrast, pass.invert)
+      // A user-selected, very narrow strip is better treated as a line of text.
+      await created.setParameters({ tessedit_pageseg_mode: region && canvas.width / canvas.height > 4 ? PSM.SINGLE_LINE : PSM.SPARSE_TEXT })
+      if (finished) return []
+      const result = await created.recognize(canvas)
+      canvas.width = canvas.height = 1
+      const codes = extractCardCodes(result.data.text)
+      if (codes.length) return codes
+    }
+    return []
   }
   try {
     return await Promise.race([run(), interrupted, workerError])

@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '@/lib/auth'
 import { supabase } from '@/lib/supabaseClient'
 import { normalizeCardCode } from '@/lib/scanner/cardCode'
+import { DEFAULT_NUMBER_REGION, regionBetween, type ImageRegion } from '@/lib/scanner/imageRegion'
 import { changeCollectionQuantity } from '@/lib/collections/changeQuantity'
 import { COLLECTION_LANGUAGE_OPTIONS, resolveAvailableLanguages } from '@/lib/collections/languages'
 import { getDisplayPrintCode } from '@/lib/cards/printDisplay'
@@ -23,6 +24,9 @@ export function CardScanner() {
   const [phase, setPhase] = useState<'idle' | 'reading' | 'searching' | 'saving'>('idle')
   const [progress, setProgress] = useState('')
   const [preview, setPreview] = useState('')
+  const [photo, setPhoto] = useState<File | null>(null)
+  const [region, setRegion] = useState<ImageRegion>(DEFAULT_NUMBER_REGION)
+  const dragStart = useRef<{ x: number; y: number } | null>(null)
   const [code, setCode] = useState('')
   const [detected, setDetected] = useState<string[]>([])
   const [items, setItems] = useState<CatalogueIndexItem[]>([])
@@ -83,7 +87,7 @@ export function CardScanner() {
     } finally { if (!signal.aborted) setPhase('idle') }
   }
 
-  async function scan(file?: File) {
+  async function scan(file?: File, selectedRegion?: ImageRegion) {
     if (!file || saving.current) return
     const signal = begin()
     setDetected([])
@@ -97,17 +101,19 @@ export function CardScanner() {
       return
     }
     photoUrl.current = URL.createObjectURL(file)
+    setPhoto(file)
+    if (!selectedRegion) setRegion(DEFAULT_NUMBER_REGION)
     setPreview(photoUrl.current)
     setPhase('reading')
     setProgress('Préparation de la photo…')
     try {
       const { recognizeCard } = await import('@/lib/scanner/recognizeCard')
       if (signal.aborted) return
-      const codes = await recognizeCard(file, signal, (message) => { if (!signal.aborted) setProgress(message) })
+      const codes = await recognizeCard(file, signal, (message) => { if (!signal.aborted) setProgress(message) }, selectedRegion)
       if (signal.aborted) return
       setDetected(codes)
       if (codes.length === 1) await findCards(codes[0], signal)
-      else if (!codes.length) setError('Numéro non reconnu. Reprends la photo de plus près, recadre le bas de la carte, ou saisis son numéro ci-dessous.')
+      else if (!codes.length) setError('Numéro non reconnu. Sur la photo, encadre uniquement le numéro avec ton doigt, puis appuie sur « Lire la zone sélectionnée ». Tu peux aussi saisir le numéro ci-dessous.')
     } catch (cause) {
       if (!signal.aborted) setError(cause instanceof Error ? cause.message : 'Lecture impossible. Tu peux saisir le numéro ci-dessous.')
     } finally { if (!signal.aborted) setPhase('idle') }
@@ -123,6 +129,7 @@ export function CardScanner() {
     if (photoUrl.current) URL.revokeObjectURL(photoUrl.current)
     photoUrl.current = ''
     setPreview('')
+    setPhoto(null)
   }
 
   async function addToCollection() {
@@ -178,9 +185,33 @@ export function CardScanner() {
         </div>
         <p className={styles.hint}>Ta photo reste sur cet appareil. Le lecteur se télécharge au premier scan ; seule la recherche du numéro utilise le catalogue en ligne.</p>
         {preview && <div className={styles.preview}>
+          <p>Encadre uniquement le numéro avec ton doigt ou ta souris, puis relance la lecture.</p>
+          <div className={styles.cropImage} onPointerDown={(event) => {
+            if (phase === 'saving' || isWorking) return
+            event.currentTarget.setPointerCapture(event.pointerId)
+            const bounds = event.currentTarget.getBoundingClientRect()
+            dragStart.current = { x: (event.clientX - bounds.left) / bounds.width, y: (event.clientY - bounds.top) / bounds.height }
+          }} onPointerMove={(event) => {
+            if (!dragStart.current) return
+            const bounds = event.currentTarget.getBoundingClientRect()
+            setRegion(regionBetween(dragStart.current, { x: (event.clientX - bounds.left) / bounds.width, y: (event.clientY - bounds.top) / bounds.height }))
+          }} onPointerUp={() => { dragStart.current = null }} onPointerCancel={() => { dragStart.current = null }}>
           {/* A local object URL never passes through the image optimization server. */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={preview} alt="Photo de la carte à identifier" />
+          <img src={preview} alt="Photo de la carte à identifier" draggable={false} />
+          <span aria-hidden="true" className={styles.cropRegion} style={{ left: `${region.x * 100}%`, top: `${region.y * 100}%`, width: `${region.width * 100}%`, height: `${region.height * 100}%` }} />
+          </div>
+          <div className={styles.actions}>
+            <button type="button" disabled={isWorking || phase === 'saving' || !photo} onClick={() => { if (photo) void scan(photo, region) }}>Lire la zone sélectionnée</button>
+            <button type="button" disabled={isWorking || phase === 'saving'} onClick={() => setRegion(DEFAULT_NUMBER_REGION)}>Zone en bas à droite</button>
+          </div>
+          <details className={styles.cropAdjustments}>
+            <summary>Ajuster la zone sans faire glisser</summary>
+            <label>Position horizontale<input type="range" min="0" max="95" value={Math.round(region.x * 100)} disabled={isWorking || phase === 'saving'} onChange={(event) => { const x = Number(event.target.value) / 100; setRegion((value) => ({ ...value, x, width: Math.min(value.width, 1 - x) })) }} /></label>
+            <label>Position verticale<input type="range" min="0" max="95" value={Math.round(region.y * 100)} disabled={isWorking || phase === 'saving'} onChange={(event) => { const y = Number(event.target.value) / 100; setRegion((value) => ({ ...value, y, height: Math.min(value.height, 1 - y) })) }} /></label>
+            <label>Largeur de la zone<input type="range" min="1" max={Math.round((1 - region.x) * 100)} value={Math.round(region.width * 100)} disabled={isWorking || phase === 'saving'} onChange={(event) => setRegion((value) => ({ ...value, width: Number(event.target.value) / 100 }))} /></label>
+            <label>Hauteur de la zone<input type="range" min="1" max={Math.round((1 - region.y) * 100)} value={Math.round(region.height * 100)} disabled={isWorking || phase === 'saving'} onChange={(event) => setRegion((value) => ({ ...value, height: Number(event.target.value) / 100 }))} /></label>
+          </details>
         </div>}
         {isWorking && <div role="status" className={styles.status}>
           {phase === 'reading' ? progress : 'Recherche des variantes…'}

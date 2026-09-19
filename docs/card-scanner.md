@@ -7,7 +7,10 @@ nécessaire pour confirmer un ajout.
 ## Fonctionnement
 
 1. Photo avec l’appareil du téléphone ou choix d’une image existante.
-2. Lecture locale du bas de l’image, puis de l’image entière si nécessaire.
+2. Lecture locale de zones agrandies depuis les pixels originaux : bas à droite,
+   bas de la carte, essais de contraste/inversion et image entière en dernier recours.
+   Si nécessaire, tracer un cadre autour du numéro sur la photo et utiliser
+   « Lire la zone sélectionnée ». Des curseurs permettent aussi de régler le cadre.
 3. Recherche exacte du numéro dans le catalogue existant, réimpressions incluses.
 4. Choix explicite de l’illustration, de la langue et de la quantité.
 5. Ajout par le service de quantité existant, avec blocage des doubles clics.
